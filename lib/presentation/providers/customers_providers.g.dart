@@ -147,7 +147,7 @@ final class CustomersListProvider
   CustomersList create() => CustomersList();
 }
 
-String _$customersListHash() => r'9cd72cda315d724fef8e8bb98075e8dbc7db3fb8';
+String _$customersListHash() => r'6ab0e24e3df91d7e9a1736607d8fc62004172db1';
 
 /// Reactive list of customers, filtered by [CustomerSearch].
 
