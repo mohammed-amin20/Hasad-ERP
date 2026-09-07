@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
@@ -7,40 +6,42 @@ import 'app_colors.dart';
 abstract final class AppTheme {
   static ThemeData get light => _theme;
 
+  // Cairo variable font is bundled and registered in pubspec under the
+  // "Cairo" family; it covers all weights from 200-1000.
+  static const TextStyle _baseText = TextStyle(fontFamily: 'Cairo');
+
   static final ThemeData _theme = ThemeData(
     useMaterial3: true,
     colorScheme: _colorScheme,
-    textTheme: GoogleFonts.cairoTextTheme(
-      const TextTheme(
-        displayLarge: TextStyle(
-          fontSize: 26,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textPrimary,
-        ),
-        headlineMedium: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textPrimary,
-        ),
-        titleMedium: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-        ),
-        bodyLarge: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-          color: AppColors.textPrimary,
-        ),
-        bodySmall: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          color: AppColors.textSecondary,
-        ),
-        labelSmall: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
+    textTheme: TextTheme(
+      displayLarge: _baseText.copyWith(
+        fontSize: 26,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
+      ),
+      headlineMedium: _baseText.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
+      ),
+      titleMedium: _baseText.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
+      ),
+      bodyLarge: _baseText.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: AppColors.textPrimary,
+      ),
+      bodySmall: _baseText.copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+        color: AppColors.textSecondary,
+      ),
+      labelSmall: _baseText.copyWith(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
       ),
     ),
     scaffoldBackgroundColor: AppColors.background,
@@ -57,7 +58,7 @@ abstract final class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
-      labelStyle: GoogleFonts.cairo(
+      labelStyle: _baseText.copyWith(
         fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AppColors.textSecondary,
@@ -89,20 +90,20 @@ abstract final class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        textStyle: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w700),
+        textStyle: _baseText.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primary,
         minimumSize: const Size(48, 48),
-        textStyle: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600),
+        textStyle: _baseText.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.textPrimary,
-      contentTextStyle: GoogleFonts.cairo(fontSize: 13, color: AppColors.surface),
+      contentTextStyle: _baseText.copyWith(fontSize: 13, color: AppColors.surface),
     ),
   );
 
