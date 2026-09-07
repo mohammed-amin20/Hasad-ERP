@@ -22,6 +22,11 @@ class ProductSearch extends _$ProductSearch {
   void update(String term) => state = term;
 }
 
+/// Full unfiltered product list (for pickers/dropdowns), never search-filtered.
+@riverpod
+Future<List<Product>> allProducts(Ref ref) async =>
+    ref.watch(productRepositoryProvider).listAll();
+
 /// Reactive list of products, filtered by [ProductSearch].
 @riverpod
 class ProductsList extends _$ProductsList {

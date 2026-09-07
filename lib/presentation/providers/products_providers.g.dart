@@ -118,6 +118,50 @@ abstract class _$ProductSearch extends $Notifier<String> {
   }
 }
 
+/// Full unfiltered product list (for pickers/dropdowns), never search-filtered.
+
+@ProviderFor(allProducts)
+final allProductsProvider = AllProductsProvider._();
+
+/// Full unfiltered product list (for pickers/dropdowns), never search-filtered.
+
+final class AllProductsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<Product>>,
+          List<Product>,
+          FutureOr<List<Product>>
+        >
+    with $FutureModifier<List<Product>>, $FutureProvider<List<Product>> {
+  /// Full unfiltered product list (for pickers/dropdowns), never search-filtered.
+  AllProductsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'allProductsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$allProductsHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<Product>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<Product>> create(Ref ref) {
+    return allProducts(ref);
+  }
+}
+
+String _$allProductsHash() => r'7674f6d7320d4535eda2630e6a33203d01478ea7';
+
 /// Reactive list of products, filtered by [ProductSearch].
 
 @ProviderFor(ProductsList)

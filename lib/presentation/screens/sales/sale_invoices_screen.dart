@@ -1,18 +1,851 @@
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/content_placeholder.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/status_badge.dart';
+import '../../../domain/invoices/invoice.dart';
+import '../../../domain/products/product.dart';
+import '../../../domain/sales/sale_invoice_draft.dart';
+import '../../providers/sales_providers.dart';
+import '../../widgets/invoice_input_fields.dart';
+import '../../widgets/product_picker_sheet.dart';
 
-class SaleInvoicesScreen extends StatelessWidget {
+class SaleInvoicesScreen extends ConsumerStatefulWidget {
   const SaleInvoicesScreen({super.key});
 
   @override
+  ConsumerState<SaleInvoicesScreen> createState() =>
+      _SaleInvoicesScreenState();
+}
+
+class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
+  final _searchCtrl = TextEditingController();
+  bool _searchOpen = false;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (!_searchOpen) {
+      _searchCtrl.clear();
+      ref.read(saleSearchProvider.notifier).update('');
+    }
+  }
+
+  Future<void> _newInvoice() async {
+    final no = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const _NewSaleInvoicePage(),
+        fullscreenDialog: true,
+      ),
+    );
+    if (!mounted || no == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    ref.read(saleInvoicesListProvider.notifier).refresh();
+    messenger.showSnackBar(
+      SnackBar(content: Text('تم إنشاء فاتورة البيع رقم $no')),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const PageScaffold(
+    final listAsync = ref.watch(saleInvoicesListProvider);
+
+    return PageScaffold(
       title: 'المبيعات',
       subtitle: 'إنشاء ومتابعة فواتير البيع',
-      child: ContentPlaceholder(icon: FontAwesomeIcons.basketShopping),
+      actions: [
+        IconButton(
+          tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
+          onPressed: _toggleSearch,
+          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+        ),
+      ],
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              if (_searchOpen)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    autofocus: true,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (v) =>
+                        ref.read(saleSearchProvider.notifier).update(v),
+                    decoration: InputDecoration(
+                      hintText: 'بحث برقم الفاتورة...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                ref.read(saleSearchProvider.notifier).update('');
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: listAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => _ErrorState(message: e.toString()),
+                  data: (invoices) {
+                    if (invoices.isEmpty) {
+                      return const _EmptyState();
+                    }
+                    return _InvoiceList(
+                      invoices: invoices,
+                      onTap: _showDetail,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: FloatingActionButton(
+              heroTag: 'sale_add',
+              onPressed: _newInvoice,
+              child: const Icon(Icons.add),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetail(Invoice invoice) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _InvoiceDetailSheet(invoice: invoice),
     );
   }
 }
+
+class _InvoiceList extends StatelessWidget {
+  const _InvoiceList({required this.invoices, required this.onTap});
+
+  final List<Invoice> invoices;
+  final ValueChanged<Invoice> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: invoices.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final invoice = invoices[index];
+        return ListTile(
+          onTap: () => onTap(invoice),
+          leading: CircleAvatar(
+            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+            child: Text(
+              _shortNo(invoice.no),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          title: Text(
+            invoice.partyName ?? '',
+            style: Theme.of(context)
+                .textTheme
+                .bodyLarge
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            'فاتورة ${invoice.no} · ${_formatDate(invoice.date)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    Money.format(invoice.total),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      StatusBadge(
+                        label: invoice.status.label,
+                        palette: badgeForStatus(invoice.status),
+                      ),
+                      if (invoice.ownership == InvoiceOwnership.consignment) ...[
+                        const SizedBox(width: 4),
+                        StatusBadge(
+                          label: invoice.ownership.label,
+                          palette: badgeForOwnership(invoice.ownership),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_left, color: AppColors.textMuted),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _shortNo(String no) => no.length > 3 ? no.substring(no.length - 3) : no;
+}
+
+class _InvoiceDetailSheet extends ConsumerWidget {
+  const _InvoiceDetailSheet({required this.invoice});
+
+  final Invoice invoice;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      child: FutureBuilder<List<InvoiceItem>>(
+        future: ref.read(invoiceRepositoryProvider).items(invoice.id),
+        builder: (context, snapshot) {
+          final items = snapshot.data ?? const <InvoiceItem>[];
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'فاتورة ${invoice.no}',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                  ),
+                  StatusBadge(
+                    label: invoice.status.label,
+                    palette: badgeForStatus(invoice.status),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${invoice.partyName ?? ''} · ${_formatDate(invoice.date)}',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              for (final item in items)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${item.productName ?? 'منتج'} × '
+                          '${formatQty(item.qty, item.productUnitType ?? ProductUnitType.count)}'
+                          '${item.productUnit != null ? ' ${item.productUnit}' : ''}',
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        Money.format(item.total),
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              const Divider(height: 32),
+              _TotalRow(label: 'الإجمالي', value: invoice.total),
+              const SizedBox(height: 8),
+              _TotalRow(label: 'المدفوع', value: invoice.paid),
+              const SizedBox(height: 8),
+              _TotalRow(
+                label: 'المتبقي',
+                value: invoice.remaining,
+                emphasized: invoice.remaining > 0,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TotalRow extends StatelessWidget {
+  const _TotalRow({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final int value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Text(label, style: theme.textTheme.bodyMedium),
+        const Spacer(),
+        Text(
+          Money.format(value),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: emphasized ? AppColors.danger : AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NewSaleInvoicePage extends ConsumerStatefulWidget {
+  const _NewSaleInvoicePage();
+
+  @override
+  ConsumerState<_NewSaleInvoicePage> createState() =>
+      _NewSaleInvoicePageState();
+}
+
+class _LineEntry {
+  _LineEntry({
+    required this.product,
+    required this.qtyCtrl,
+    required this.priceCtrl,
+  });
+
+  final Product product;
+  final TextEditingController qtyCtrl;
+  final TextEditingController priceCtrl;
+}
+
+class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
+  static const _paymentMethods = [
+    (value: 'cash', label: 'نقدي'),
+    (value: 'bank', label: 'بنك'),
+  ];
+
+  final _formKey = GlobalKey<FormState>();
+  String? _customerId;
+  DateTime _date = DateTime.now();
+  final List<_LineEntry> _lines = [];
+  final _paidCtrl = TextEditingController();
+  String? _paymentMethod;
+  final _memoCtrl = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    for (final line in _lines) {
+      line.qtyCtrl.dispose();
+      line.priceCtrl.dispose();
+    }
+    _paidCtrl.dispose();
+    _memoCtrl.dispose();
+    super.dispose();
+  }
+
+  int get _subtotal {
+    var sum = 0;
+    for (final line in _lines) {
+      final qty = double.tryParse(line.qtyCtrl.text.trim());
+      final price = priceToAgorot(line.priceCtrl.text.trim());
+      if (qty != null && price != null) {
+        sum += (qty * price).round();
+      }
+    }
+    return sum;
+  }
+
+  Future<void> _addLine() async {
+    final product = await showProductPicker(context);
+    if (product == null || !mounted) return;
+    setState(() {
+      _lines.add(
+        _LineEntry(
+          product: product,
+          qtyCtrl: TextEditingController(),
+          priceCtrl: TextEditingController(
+            text: _editableAmount(product.salePrice),
+          ),
+        ),
+      );
+    });
+  }
+
+  String _editableAmount(int agorot) {
+    final value = Money.toAmount(agorot);
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_customerId == null) {
+      _showError('اختر العميل');
+      return;
+    }
+    if (_lines.isEmpty) {
+      _showError('أضف على الأقل صنفاً واحداً');
+      return;
+    }
+    final paid = priceToAgorot(_paidCtrl.text.trim()) ?? 0;
+    if (paid > 0 && _paymentMethod == null) {
+      _showError('اختر طريقة الدفع عند الدفع');
+      return;
+    }
+    if (paid > _subtotal) {
+      _showError('المدفوع أكبر من إجمالي الفاتورة');
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final result = await ref.read(saleRepositoryProvider).create(
+            SaleInvoiceDraft(
+              customerId: _customerId!,
+              date: _date,
+              lines: [
+                for (final line in _lines)
+                  SaleLineDraft(
+                    productId: line.product.id,
+                    qty: double.parse(line.qtyCtrl.text.trim()),
+                    price: priceToAgorot(line.priceCtrl.text.trim()),
+                  ),
+              ],
+              paid: paid,
+              paymentMethod: _paymentMethod,
+              memo: _memoCtrl.text.trim().isEmpty
+                  ? null
+                  : _memoCtrl.text.trim(),
+            ),
+          );
+      if (mounted) Navigator.of(context).pop(result.no);
+    } on Object catch (error) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.danger,
+            content: Text(mapErrorToAppException(error).message),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: AppColors.danger, content: Text(message)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final customersAsync = ref.watch(allCustomersProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('فاتورة بيع جديدة'),
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close),
+          tooltip: 'إغلاق',
+        ),
+      ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              customersAsync.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (e, _) => _ErrorState(message: e.toString()),
+                data: (customers) => DropdownButtonFormField<String>(
+                  initialValue: _customerId,
+                  decoration: const InputDecoration(
+                    labelText: 'العميل',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  items: [
+                    for (final c in customers)
+                      DropdownMenuItem(
+                        value: c.id,
+                        child: Text(
+                          c.phone == null || c.phone!.isEmpty
+                              ? c.name
+                              : '${c.name} — ${c.phone}',
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _customerId = v),
+                ),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _pickDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ الفاتورة',
+                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  child: Text(_formatDate(_date)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'الأصناف',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _addLine,
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة صنف'),
+                  ),
+                ],
+              ),
+              for (var i = 0; i < _lines.length; i++) ...[
+                _LineRow(
+                  entry: _lines[i],
+                  onRemove: () => setState(() {
+                    _lines[i].qtyCtrl.dispose();
+                    _lines[i].priceCtrl.dispose();
+                    _lines.removeAt(i);
+                  }),
+                ),
+                if (i < _lines.length - 1) const SizedBox(height: 12),
+              ],
+              if (_lines.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text('الإجمالي: ', style: theme.textTheme.bodyLarge),
+                    const SizedBox(width: 8),
+                    Text(
+                      Money.format(_subtotal),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _paidCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'المدفوع',
+                        prefixIcon: Icon(Icons.payments_outlined),
+                      ),
+                      validator: (v) {
+                        final text = (v ?? '').trim();
+                        if (text.isEmpty) return null;
+                        if (double.tryParse(text) == null) {
+                          return 'قيمة غير صالحة';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _paymentMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'طريقة الدفع',
+                        prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                      ),
+                      items: [
+                        for (final m in _paymentMethods)
+                          DropdownMenuItem(
+                            value: m.value,
+                            child: Text(m.label),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _paymentMethod = v),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _memoCtrl,
+                textInputAction: TextInputAction.done,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'ملاحظات',
+                  prefixIcon: Icon(Icons.notes_outlined),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _submitting ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('حفظ الفاتورة'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single editable line: product name + adaptive qty + price + line total.
+class _LineRow extends StatefulWidget {
+  const _LineRow({required this.entry, required this.onRemove});
+
+  final _LineEntry entry;
+  final VoidCallback onRemove;
+
+  @override
+  State<_LineRow> createState() => _LineRowState();
+}
+
+class _LineRowState extends State<_LineRow> {
+  @override
+  void initState() {
+    super.initState();
+    widget.entry.qtyCtrl.addListener(_recompute);
+    widget.entry.priceCtrl.addListener(_recompute);
+  }
+
+  @override
+  void dispose() {
+    widget.entry.qtyCtrl.removeListener(_recompute);
+    widget.entry.priceCtrl.removeListener(_recompute);
+    super.dispose();
+  }
+
+  void _recompute() => setState(() {});
+
+  _LineEntry get entry => widget.entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final product = entry.product;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    product.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                IconButton(
+                  onPressed: widget.onRemove,
+                  icon: const Icon(Icons.close),
+                  color: AppColors.textMuted,
+                  tooltip: 'إزالة الصنف',
+                ),
+              ],
+            ),
+            Text(
+              '${product.unit} · المخزون: ${formatQty(product.qty, product.unitType)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ProductQuantityField(
+                    controller: entry.qtyCtrl,
+                    unitType: product.unitType,
+                    unit: product.unit,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: PriceField(
+                    controller: entry.priceCtrl,
+                    label: 'السعر',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'إجمالي السطر: ',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    Money.format(_lineTotal()),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _lineTotal() {
+    final qty = double.tryParse(entry.qtyCtrl.text.trim());
+    final price = priceToAgorot(entry.priceCtrl.text.trim());
+    if (qty == null || price == null) return 0;
+    return (qty * price).round();
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 48,
+              color: AppColors.textMuted,
+            ),
+            const SizedBox(height: 16),
+            Text('لا توجد فواتير بيع',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'اضغط على + لإنشاء أول فاتورة',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
+    '${d.day.toString().padLeft(2, '0')}';
