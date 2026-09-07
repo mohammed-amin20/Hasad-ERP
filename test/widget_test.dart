@@ -1,30 +1,83 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hasad_erp/main.dart';
+import 'package:hasad_erp/core/theme/app_theme.dart';
+import 'package:hasad_erp/domain/auth/app_role.dart';
+import 'package:hasad_erp/domain/auth/app_user.dart';
+import 'package:hasad_erp/domain/auth/auth_repository.dart';
+import 'package:hasad_erp/presentation/providers/auth_providers.dart';
+import 'package:hasad_erp/presentation/screens/auth/login_screen.dart';
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Stream<AppUser?> authStateChanges() => const Stream.empty();
+
+  @override
+  Future<AppUser?> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    return AppUser(
+      id: 'u1',
+      email: email,
+      role: AppRole.admin,
+      name: 'اختباري',
+    );
+  }
+
+  @override
+  Future<void> signOut() async {}
+}
+
+Widget _loginApp() {
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+    ],
+    child: MaterialApp(
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      theme: AppTheme.light,
+      home: const LoginScreen(),
+    ),
+  );
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('login screen renders and validates the empty form',
+      (tester) async {
+    await tester.pumpWidget(_loginApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('تسجيل الدخول'), findsOneWidget);
+    expect(find.text('حصاد'), findsWidgets);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.text('تسجيل الدخول'));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('أدخل البريد الإلكتروني'), findsOneWidget);
+    expect(find.text('أدخل كلمة المرور'), findsOneWidget);
+  });
+
+  testWidgets('login screen submits valid credentials without error',
+      (tester) async {
+    await tester.pumpWidget(_loginApp());
+
+    await tester.enterText(
+        find.byType(TextFormField).at(0), 'owner@test.local');
+    await tester.enterText(find.byType(TextFormField).at(1), 'secret');
+    await tester.tap(find.text('تسجيل الدخول'));
+    await tester.pumpAndSettle();
+
+    // No validation or server error surfaced.
+    expect(find.text('أدخل البريد الإلكتروني'), findsNothing);
+    expect(find.text('أدخل كلمة المرور'), findsNothing);
+    expect(find.byIcon(Icons.error_outline), findsNothing);
   });
 }
