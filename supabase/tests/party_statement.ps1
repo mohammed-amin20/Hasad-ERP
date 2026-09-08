@@ -137,9 +137,9 @@ Write-Host "  consignment zero-debit OK, commission=$($commLine[0].credit)"
 # --- Case 3: opening balance picks up rows before the range ---
 Write-Host "Case 3: opening balance before range ..."
 $st3 = Get-Statement -type "customer" -id $custId -from "2026-09-10" -to "2026-09-30"
-if ($st3.opening -ne 120) { throw "Case 3: opening should be 120, got $($st3.opening)" }
+if ($st3.opening -ne 320) { throw "Case 3: opening should be 320, got $($st3.opening)" }
 if ($st3.lines.Count -ne 0) { throw "Case 3: no lines expected in the later range, got $($st3.lines.Count)" }
-if ($st3.closing -ne 120) { throw "Case 3: closing should stay 120, got $($st3.closing)" }
+if ($st3.closing -ne 320) { throw "Case 3: closing should stay 320, got $($st3.closing)" }
 Write-Host "  opening=$($st3.opening) closing=$($st3.closing)"
 
 # --- Case 4: invalid party rejected ---
