@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # PARTY STATEMENT - end-to-end regression (M5 slice B)
 # Verifies: migration 0015 applied, get_party_statement returns
 # an opening balance, movement lines (invoice + payment, and
@@ -69,6 +69,7 @@ function New-Product {
 
 $pid2 = New-Product -name "منتج بيع $([guid]::NewGuid())"
 $pid3 = New-Product -name "منتج أمانة $([guid]::NewGuid())"
+$items = @( @{ product_id = $pid2; qty = 2; price = 100 } )
 $sale = Invoke-RPC -name "create_sale_invoice" -p @{
     p_request_id   = [guid]::NewGuid().ToString()
     p_customer_id  = $custId
@@ -99,7 +100,7 @@ Write-Host "  opening=$($st.opening) lines=$($st.lines.Count) closing=$($st.clos
 Write-Host "Case 2: consignment receipt (zero debit) + commission line ..."
 
 # consignment (commission) receipt forces paid=0 and ownership=consignment
-$pitems = @( @{ product_id = $pid3; qty = 10; price = 60 } ) | ConvertTo-Json -Depth 5
+$pitems = @( @{ product_id = $pid3; qty = 10; price = 60 } )
 $pur = Invoke-RPC -name "create_purchase_invoice" -p @{
     p_request_id   = [guid]::NewGuid().ToString()
     p_supplier_id  = $suppId
@@ -111,7 +112,7 @@ $pur = Invoke-RPC -name "create_purchase_invoice" -p @{
 if (-not $pur.invoice_id) { throw "Case 2: consignment purchase failed" }
 
 # selling the consignment item generates the commission due
-$sitems = @( @{ product_id = $pid3; qty = 2; price = 100 } ) | ConvertTo-Json -Depth 5
+$sitems = @( @{ product_id = $pid3; qty = 2; price = 100 } )
 $sale2 = Invoke-RPC -name "create_sale_invoice" -p @{
     p_request_id   = [guid]::NewGuid().ToString()
     p_customer_id  = $custId

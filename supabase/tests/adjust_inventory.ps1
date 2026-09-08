@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # ADJUST INVENTORY - end-to-end regression (M4 slice 3)
 # Verifies: migration 0014 applied, adjust_inventory reduces
 # the count (down-adjust) and up-adjusts, records a stock_moves

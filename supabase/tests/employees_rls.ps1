@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # EMPLOYEES RLS + SALARY RPC - end-to-end regression (M6 slice A)
 # Verifies: migration 0016 applied (employees CRUD via RLS works
 # from the app role) and the security-invoker salary RPC
