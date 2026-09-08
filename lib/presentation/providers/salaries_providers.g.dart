@@ -202,6 +202,96 @@ final class SalaryHistoryProvider
 
 String _$salaryHistoryHash() => r'e2cc9cb8fc1e59aa3ed7ecccbd865035d36c1a4d';
 
+/// Per-month salary statement for one employee over a month range.
+
+@ProviderFor(employeeStatement)
+final employeeStatementProvider = EmployeeStatementFamily._();
+
+/// Per-month salary statement for one employee over a month range.
+
+final class EmployeeStatementProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<EmployeeStatement>,
+          EmployeeStatement,
+          FutureOr<EmployeeStatement>
+        >
+    with
+        $FutureModifier<EmployeeStatement>,
+        $FutureProvider<EmployeeStatement> {
+  /// Per-month salary statement for one employee over a month range.
+  EmployeeStatementProvider._({
+    required EmployeeStatementFamily super.from,
+    required EmployeeStatementRequest super.argument,
+  }) : super(
+         retry: null,
+         name: r'employeeStatementProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$employeeStatementHash();
+
+  @override
+  String toString() {
+    return r'employeeStatementProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $FutureProviderElement<EmployeeStatement> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<EmployeeStatement> create(Ref ref) {
+    final argument = this.argument as EmployeeStatementRequest;
+    return employeeStatement(ref, argument);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is EmployeeStatementProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$employeeStatementHash() => r'd092925ca4508e3b0afdeaf41e0abd38063356aa';
+
+/// Per-month salary statement for one employee over a month range.
+
+final class EmployeeStatementFamily extends $Family
+    with
+        $FunctionalFamilyOverride<
+          FutureOr<EmployeeStatement>,
+          EmployeeStatementRequest
+        > {
+  EmployeeStatementFamily._()
+    : super(
+        retry: null,
+        name: r'employeeStatementProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// Per-month salary statement for one employee over a month range.
+
+  EmployeeStatementProvider call(EmployeeStatementRequest request) =>
+      EmployeeStatementProvider._(argument: request, from: this);
+
+  @override
+  String toString() => r'employeeStatementProvider';
+}
+
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).
 

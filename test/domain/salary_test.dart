@@ -162,4 +162,121 @@ void main() {
       expect(r.date, DateTime(2026, 9, 30));
     });
   });
+
+  group('buildEmployeeStatement', () {
+    const emp = '11111111-1111-1111-1111-111111111111';
+
+    test('computes monotonic months with arrears, movements and paid', () {
+      final st = buildEmployeeStatement(
+        employeeId: emp,
+        employeeBase: 200000,
+        from: DateTime(2026, 1, 1),
+        to: DateTime(2026, 12, 31),
+        salaryRows: [
+          EmployeeSalaryRow(
+            month: DateTime(2026, 9, 1),
+            base: 200000,
+            paid: 180000,
+          ),
+          EmployeeSalaryRow(
+            month: DateTime(2026, 10, 1),
+            base: 200000,
+            paid: 200000,
+          ),
+        ],
+        movementRows: [
+          EmployeeMovementRow(
+            month: DateTime(2026, 9, 1),
+            isIn: true,
+            amount: 5000,
+          ),
+          EmployeeMovementRow(
+            month: DateTime(2026, 9, 1),
+            isIn: false,
+            amount: 15000,
+          ),
+        ],
+      );
+
+      expect(st.lines, hasLength(2));
+      final sep = st.lines[0];
+      expect(sep.month, DateTime(2026, 9));
+      expect(sep.arrears, 0);
+      expect(sep.entitlements, 5000);
+      expect(sep.deductions, 15000);
+      expect(sep.netDue, 200000 + 5000 - 15000);
+      expect(sep.remaining, 190000 - 180000); // 10000 carried
+      final oct = st.lines[1];
+      expect(oct.arrears, 20000); // unpaid salary of September
+      expect(oct.netDue, 200000 + 20000);
+      expect(oct.remaining, 20000);
+      expect(st.opening, 0);
+      expect(st.closing, 20000);
+    });
+
+    test('uses current employee base when a month has no salary row', () {
+      final st = buildEmployeeStatement(
+        employeeId: emp,
+        employeeBase: 150000,
+        from: DateTime(2026, 1),
+        to: DateTime(2026, 12),
+        salaryRows: const [],
+        movementRows: [
+          EmployeeMovementRow(
+            month: DateTime(2026, 4, 1),
+            isIn: true,
+            amount: 10000,
+          ),
+        ],
+      );
+
+      expect(st.lines, hasLength(1));
+      expect(st.lines[0].baseSalary, 150000);
+      expect(st.lines[0].netDue, 160000);
+      expect(st.closing, 160000);
+    });
+
+    test('clips to requested range and skips months without any data', () {
+      final st = buildEmployeeStatement(
+        employeeId: emp,
+        employeeBase: 100000,
+        from: DateTime(2026, 10, 1),
+        to: DateTime(2026, 11, 30),
+        salaryRows: [
+          EmployeeSalaryRow(
+            month: DateTime(2026, 8, 1),
+            base: 100000,
+            paid: 80000,
+          ),
+          EmployeeSalaryRow(
+            month: DateTime(2026, 10, 1),
+            base: 100000,
+            paid: 100000,
+          ),
+        ],
+        movementRows: const [],
+      );
+
+      expect(st.opening, 20000); // unpaid August salary
+      expect(st.lines, hasLength(1));
+      expect(st.lines[0].month, DateTime(2026, 10));
+      expect(st.lines[0].arrears, 20000);
+      expect(st.closing, 20000);
+    });
+
+    test('empty history yields opening as closing', () {
+      final st = buildEmployeeStatement(
+        employeeId: emp,
+        employeeBase: 100000,
+        from: DateTime(2026, 1),
+        to: DateTime(2026, 12),
+        salaryRows: const [],
+        movementRows: const [],
+      );
+
+      expect(st.lines, isEmpty);
+      expect(st.opening, 0);
+      expect(st.closing, 0);
+    });
+  });
 }

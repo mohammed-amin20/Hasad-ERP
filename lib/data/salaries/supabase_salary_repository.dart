@@ -68,4 +68,55 @@ class SupabaseSalaryRepository implements SalaryRepository {
       throw mapErrorToAppException(error);
     }
   }
+
+  @override
+  Future<EmployeeStatement> employeeStatement(
+    EmployeeStatementRequest request,
+  ) async {
+    try {
+      final employee = await _client
+          .from('employees')
+          .select('base_salary')
+          .eq('id', request.employeeId)
+          .single();
+      final employeeBase = (employee['base_salary'] as num?)?.toInt() ?? 0;
+
+      final salaryRows = await _client
+          .from('salaries')
+          .select('month, base_salary, paid')
+          .eq('employee_id', request.employeeId)
+          .order('month');
+
+      final movementRows = await _client
+          .from('employee_movements')
+          .select('month, direction, amount')
+          .eq('employee_id', request.employeeId)
+          .order('month');
+
+      return buildEmployeeStatement(
+        employeeId: request.employeeId,
+        employeeBase: employeeBase,
+        from: request.from,
+        to: request.to,
+        salaryRows: [
+          for (final r in salaryRows)
+            EmployeeSalaryRow(
+              month: DateTime.parse(r['month'] as String),
+              base: (r['base_salary'] as num?)?.toInt() ?? 0,
+              paid: (r['paid'] as num?)?.toInt() ?? 0,
+            ),
+        ],
+        movementRows: [
+          for (final r in movementRows)
+            EmployeeMovementRow(
+              month: DateTime.parse(r['month'] as String),
+              isIn: r['direction'] == 'in',
+              amount: (r['amount'] as num?)?.toInt() ?? 0,
+            ),
+        ],
+      );
+    } on Object catch (error) {
+      throw mapErrorToAppException(error);
+    }
+  }
 }

@@ -29,6 +29,14 @@ class SalaryRun extends _$SalaryRun {
 Future<List<SalaryRecord>> salaryHistory(Ref ref) async =>
     ref.watch(salaryRepositoryProvider).salaryHistory();
 
+/// Per-month salary statement for one employee over a month range.
+@riverpod
+Future<EmployeeStatement> employeeStatement(
+  Ref ref,
+  EmployeeStatementRequest request,
+) =>
+    ref.watch(salaryRepositoryProvider).employeeStatement(request);
+
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).
 @riverpod

@@ -8,6 +8,7 @@ import '../../../core/widgets/page_scaffold.dart';
 import '../../../domain/employees/employee.dart';
 import '../../../domain/employees/employee_draft.dart';
 import '../../providers/employees_providers.dart';
+import 'employee_statement_screen.dart';
 
 class EmployeesScreen extends ConsumerStatefulWidget {
   const EmployeesScreen({super.key});
@@ -159,6 +160,14 @@ class _EmployeeList extends StatelessWidget {
         final e = employees[index];
         return _EmployeeTile(
           employee: e,
+          onOpen: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => EmployeeStatementScreen(
+                employeeId: e.id,
+                employeeName: e.name,
+              ),
+            ),
+          ),
           onEdit: () {
             final screen =
                 context.findAncestorStateOfType<_EmployeesScreenState>();
@@ -174,11 +183,13 @@ class _EmployeeList extends StatelessWidget {
 class _EmployeeTile extends StatelessWidget {
   const _EmployeeTile({
     required this.employee,
+    required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Employee employee;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -186,6 +197,7 @@ class _EmployeeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ListTile(
+      onTap: onOpen,
       leading: CircleAvatar(
         backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
         child: Text(

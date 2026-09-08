@@ -216,6 +216,178 @@ class SalaryRecord {
       );
 }
 
+/// One month's salary computation shown in an employee statement.
+class EmployeeMonthLine {
+  const EmployeeMonthLine({
+    required this.month,
+    required this.baseSalary,
+    required this.arrears,
+    required this.entitlements,
+    required this.deductions,
+    required this.netDue,
+    required this.paid,
+    required this.remaining,
+  });
+
+  final DateTime month;
+  final int baseSalary;
+
+  /// Unpaid salary from earlier months per the RPC rule
+  /// (`max(base - paid, 0)` per previous month).
+  final int arrears;
+  final int entitlements;
+  final int deductions;
+  final int netDue;
+  final int paid;
+
+  /// What actually stayed unpaid after this month (`netDue - paid`).
+  final int remaining;
+}
+
+/// Request for a per-month employee salary statement over [from]..[to].
+class EmployeeStatementRequest {
+  const EmployeeStatementRequest({
+    required this.employeeId,
+    required this.from,
+    required this.to,
+  });
+
+  final String employeeId;
+  final DateTime from;
+  final DateTime to;
+}
+
+/// Client-side aggregate of salary/movement history for one employee.
+class EmployeeStatement {
+  const EmployeeStatement({
+    required this.employeeId,
+    required this.monthFrom,
+    required this.monthTo,
+    required this.opening,
+    required this.lines,
+    required this.closing,
+  });
+
+  final String employeeId;
+  final DateTime monthFrom;
+  final DateTime monthTo;
+  final int opening;
+  final List<EmployeeMonthLine> lines;
+  final int closing;
+}
+
+/// One row of `employee_movements` as used by statement building.
+class EmployeeMovementRow {
+  const EmployeeMovementRow({
+    required this.month,
+    required this.isIn,
+    required this.amount,
+  });
+
+  final DateTime month;
+  final bool isIn;
+  final int amount;
+}
+
+/// One row of `salaries` as used by statement building.
+class EmployeeSalaryRow {
+  const EmployeeSalaryRow({
+    required this.month,
+    required this.base,
+    required this.paid,
+  });
+
+  final DateTime month;
+  final int base;
+  final int paid;
+}
+
+/// Builds a per-month statement from raw read-only rows.
+///
+/// Mirrors the `get_salary_entitlement` RPC (migration 0010): arrears for a
+/// month equal the sum over earlier months of `max(base - paid, 0)`; months
+/// with neither a salary nor a movement record are skipped entirely.
+EmployeeStatement buildEmployeeStatement({
+  required String employeeId,
+  required int employeeBase,
+  required DateTime from,
+  required DateTime to,
+  required List<EmployeeSalaryRow> salaryRows,
+  required List<EmployeeMovementRow> movementRows,
+}) {
+  final months = <DateTime>{};
+  final salaryByMonth = <DateTime, EmployeeSalaryRow>{};
+  final inByMonth = <DateTime, int>{};
+  final outByMonth = <DateTime, int>{};
+
+  for (final row in salaryRows) {
+    final month = firstOfMonth(row.month);
+    months.add(month);
+    salaryByMonth[month] = row;
+  }
+  for (final row in movementRows) {
+    final month = firstOfMonth(row.month);
+    months.add(month);
+    if (row.isIn) {
+      inByMonth[month] = (inByMonth[month] ?? 0) + row.amount;
+    } else {
+      outByMonth[month] = (outByMonth[month] ?? 0) + row.amount;
+    }
+  }
+
+  final monthFrom = firstOfMonth(from);
+  final monthTo = firstOfMonth(to);
+  final sorted = months.toList()..sort();
+
+  int arrearsAt(DateTime month) {
+    var total = 0;
+    for (final m in sorted) {
+      if (m.isAfter(month)) break;
+      if (m.isBefore(month)) {
+        final s = salaryByMonth[m];
+        final diff = (s?.base ?? employeeBase) - (s?.paid ?? 0);
+        if (diff > 0) total += diff;
+      }
+    }
+    return total;
+  }
+
+  final opening = arrearsAt(monthFrom);
+
+  final lines = <EmployeeMonthLine>[
+    for (final m in sorted)
+      if (m.compareTo(monthFrom) >= 0 && m.compareTo(monthTo) <= 0)
+        () {
+          final s = salaryByMonth[m];
+          final base = s?.base ?? employeeBase;
+          final paid = s?.paid ?? 0;
+          final entitlements = inByMonth[m] ?? 0;
+          final deductions = outByMonth[m] ?? 0;
+          final netDue = base + arrearsAt(m) + entitlements - deductions;
+          final remaining = (netDue - paid) < 0 ? 0 : netDue - paid;
+          return EmployeeMonthLine(
+            month: m,
+            baseSalary: base,
+            arrears: arrearsAt(m),
+            entitlements: entitlements,
+            deductions: deductions,
+            netDue: netDue,
+            paid: paid,
+            remaining: remaining,
+          );
+        }(),
+  ];
+
+  return EmployeeStatement(
+    employeeId: employeeId,
+    monthFrom: monthFrom,
+    monthTo: monthTo,
+    opening: opening,
+    lines: lines,
+    closing: lines.isEmpty ? opening : lines.last.remaining,
+  );
+}
+
 /// Writes salary movements/payments (only RPCs — the tables are SELECT-only).
 abstract interface class SalaryRepository {
   Future<EmployeeEntitlement> entitlement({
@@ -227,4 +399,8 @@ abstract interface class SalaryRepository {
 
   /// All paid-salary rows for the tenant (read-only), newest first.
   Future<List<SalaryRecord>> salaryHistory();
+
+  /// Per-month salary statement computed client-side from the read-only
+  /// `salaries` + `employee_movements` tables (no statement RPC exists).
+  Future<EmployeeStatement> employeeStatement(EmployeeStatementRequest request);
 }
