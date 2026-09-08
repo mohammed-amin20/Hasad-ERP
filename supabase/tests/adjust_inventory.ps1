@@ -23,6 +23,15 @@ $h4 = @{
     "Content-Type" = "application/json"
     "Prefer" = "return=representation"
 }
+# GET headers: no Prefer needed on reads, and no @(...) wrapper on GET calls.
+# PS 5.1 quirk: wrapping Invoke-RestMethod in @() nests a multi-row Object[]
+# into a single wrapper (.Count=1), so the Case 5 Where-Object filter collapsed.
+# Invoke-RestMethod already returns Object[] for multi-row responses.
+$hGet = @{
+    apikey = $key
+    Authorization = $h4.Authorization
+    "Content-Type" = "application/json"
+}
 Write-Host "Login successful"
 
 # PowerShell 5.1 sends -Body strings as ISO-8859-1 by default, which replaces
@@ -50,8 +59,8 @@ function Add-Product {
 
 function Get-ProductQty {
     param([string]$id)
-    $rows = @(Invoke-RestMethod -Method Get -Uri "$url/rest/v1/products?select=qty&id=eq.$id" -Headers $h4)
-    return [double]$rows[0].qty
+    $rows = Invoke-RestMethod -Method Get -Uri "$url/rest/v1/products?select=qty&id=eq.$id" -Headers $hGet
+    return [double]$rows.qty
 }
 
 # --- Case 1: down-adjust (physical count lower than stock) ---
@@ -99,7 +108,7 @@ try {
 
 # --- Case 5: stock_moves recorded with type 'adjust' ---
 Write-Host "Case 5: stock_moves recorded ..."
-$moves = @(Invoke-RestMethod -Method Get -Uri "$url/rest/v1/stock_moves?select=id,type,qty,ref,reason&product_id=eq.$pid1&order=created_at.desc" -Headers $h4)
+$moves = Invoke-RestMethod -Method Get -Uri "$url/rest/v1/stock_moves?select=id,type,qty,ref,reason&product_id=eq.$pid1&order=created_at.desc" -Headers $hGet
 $adjustMoves = @($moves | Where-Object { $_.type -eq 'adjust' })
 if ($adjustMoves.Count -lt 2) { throw "Case 5 failed: expected >=2 adjust moves, got $($adjustMoves.Count)" }
 
