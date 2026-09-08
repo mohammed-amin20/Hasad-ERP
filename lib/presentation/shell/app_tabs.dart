@@ -85,12 +85,12 @@ const List<AppTab> appTabs = [
   AppTab(
     title: 'الموظفون',
     icon: FontAwesomeIcons.userTie,
-    roles: _admin,
+    roles: _adminAccountant,
   ),
   AppTab(
     title: 'الرواتب',
     icon: FontAwesomeIcons.handHoldingDollar,
-    roles: _admin,
+    roles: _adminAccountant,
   ),
   AppTab(
     title: 'الذمم والاستحقاقات',
