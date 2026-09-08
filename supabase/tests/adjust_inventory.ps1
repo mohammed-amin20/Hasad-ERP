@@ -25,6 +25,14 @@ $h4 = @{
 }
 Write-Host "Login successful"
 
+# PowerShell 5.1 sends -Body strings as ISO-8859-1 by default, which replaces
+# Arabic with '?' on the wire. Encode as UTF-8 bytes so Arabic survives.
+function Invoke-Json {
+    param([string]$Method, [string]$Uri, [object]$Body)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 10))
+    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h4 -ContentType "application/json; charset=utf-8" -Body $bytes
+}
+
 function Add-Product {
     param([string]$name, [double]$qty)
     $body = @{
@@ -35,8 +43,8 @@ function Add-Product {
         purchase_price = 300
         qty = $qty
         reorder_level = 0
-    } | ConvertTo-Json
-    $result = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/products" -Headers $h4 -Body $body
+    }
+    $result = Invoke-Json -Method "Post" -Uri "$url/rest/v1/products" -Body $body
     return $result[0].id
 }
 
@@ -53,8 +61,8 @@ $body1 = @{
     p_product_id = $pid1
     p_counted_qty = 6
     p_reason = "جرد شهري"
-} | ConvertTo-Json
-$r1 = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/adjust_inventory" -Headers $h4 -Body $body1
+}
+$r1 = Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/adjust_inventory" -Body $body1
 if ($r1.delta -ne -4 -or $r1.changed -ne $true) { throw "Case 1 failed: delta=$($r1.delta) changed=$($r1.changed)" }
 if ((Get-ProductQty $pid1) -ne 6) { throw "Case 1 failed: qty did not reach 6" }
 
@@ -64,8 +72,8 @@ $body2 = @{
     p_product_id = $pid1
     p_counted_qty = 9
     p_reason = "بضاعة إضافية مكتشفة"
-} | ConvertTo-Json
-$r2 = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/adjust_inventory" -Headers $h4 -Body $body2
+}
+$r2 = Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/adjust_inventory" -Body $body2
 if ($r2.delta -ne 3) { throw "Case 2 failed: delta=$($r2.delta)" }
 if ((Get-ProductQty $pid1) -ne 9) { throw "Case 2 failed: qty did not reach 9" }
 
@@ -74,15 +82,15 @@ Write-Host "Case 3: same-count no-op ..."
 $body3 = @{
     p_product_id = $pid1
     p_counted_qty = 9
-} | ConvertTo-Json
-$r3 = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/adjust_inventory" -Headers $h4 -Body $body3
+}
+$r3 = Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/adjust_inventory" -Body $body3
 if ($r3.changed -ne $false -or $r3.delta -ne 0) { throw "Case 3 failed: changed=$($r3.changed) delta=$($r3.delta)" }
 
 # --- Case 4: negative counted qty rejected ---
 Write-Host "Case 4: negative counted qty rejected ..."
 try {
-    $body4 = @{ p_product_id = $pid1; p_counted_qty = -2 } | ConvertTo-Json
-    Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/adjust_inventory" -Headers $h4 -Body $body4 | Out-Null
+    $body4 = @{ p_product_id = $pid1; p_counted_qty = -2 }
+    Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/adjust_inventory" -Body $body4 | Out-Null
     throw "Case 4 failed: negative qty was accepted"
 } catch {
     if ($_.Exception.Message -match "Case 4 failed") { throw }

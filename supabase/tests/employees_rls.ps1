@@ -25,10 +25,18 @@ $h4 = @{
 }
 Write-Host "Login successful"
 
+# PowerShell 5.1 sends -Body strings as ISO-8859-1 by default, which replaces
+# Arabic with '?' on the wire. Encode as UTF-8 bytes so Arabic survives (the
+# Flutter app sends UTF-8 too; this mirrors it).
+function Invoke-Json {
+    param([string]$Method, [string]$Uri, [object]$Body)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 10))
+    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h4 -ContentType "application/json; charset=utf-8" -Body $bytes
+}
+
 function Invoke-RPC {
     param([string]$name, [hashtable]$p)
-    $body = $p | ConvertTo-Json
-    return Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/$name" -Headers $h4 -Body $body
+    return Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/$name" -Body $p
 }
 
 # --- Case 1: create employee via plain table access (RLS INSERT grant) ---
@@ -38,8 +46,8 @@ $empBody = @{
     job_title   = "محاسب"
     phone       = "0599000000"
     base_salary = 200000
-} | ConvertTo-Json
-$emp = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/employees" -Headers $h4 -Body $empBody
+}
+$emp = Invoke-Json -Method "Post" -Uri "$url/rest/v1/employees" -Body $empBody
 $empId = $emp[0].id
 if (-not $empId) { throw "Case 1: employee insert failed" }
 if ([int]$emp[0].base_salary -ne 200000) { throw "Case 1: base_salary not saved" }
@@ -63,8 +71,8 @@ Write-Host "  base=$($ent.base_salary) net_due=$($ent.net_due)"
 
 # --- Case 4: update employee (RLS UPDATE grant) ---
 Write-Host "Case 4: update phone + job_title ..."
-$updBody = @{ phone = "0599111122"; job_title = "أمين مخزن" } | ConvertTo-Json
-Invoke-RestMethod -Method Patch -Uri "$url/rest/v1/employees?id=eq.$empId" -Headers $h4 -Body $updBody | Out-Null
+$updBody = @{ phone = "0599111122"; job_title = "أمين مخزن" }
+Invoke-Json -Method "Patch" -Uri "$url/rest/v1/employees?id=eq.$empId" -Body $updBody | Out-Null
 $read2 = Invoke-RestMethod -Method Get -Uri "$url/rest/v1/employees?select=phone,job_title&id=eq.$empId" -Headers $h4
 if ($read2[0].phone -ne "0599111122" -or $read2[0].job_title -ne "أمين مخزن") { throw "Case 4: update failed" }
 Write-Host "  updated ok"

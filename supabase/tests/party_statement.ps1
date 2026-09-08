@@ -27,10 +27,17 @@ $h4 = @{
 }
 Write-Host "Login successful"
 
+# PowerShell 5.1 sends -Body strings as ISO-8859-1 by default, which replaces
+# Arabic with '?' on the wire. Encode as UTF-8 bytes so Arabic survives.
+function Invoke-Json {
+    param([string]$Method, [string]$Uri, [object]$Body)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 10))
+    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h4 -ContentType "application/json; charset=utf-8" -Body $bytes
+}
+
 function Invoke-RPC {
     param([string]$name, [hashtable]$p)
-    $body = $p | ConvertTo-Json
-    return Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/$name" -Headers $h4 -Body $body
+    return Invoke-Json -Method "Post" -Uri "$url/rest/v1/rpc/$name" -Body $p
 }
 
 function Get-Statement {
@@ -45,18 +52,18 @@ function Get-Statement {
 
 # --- Setup: a customer, a supplier, products ---
 Write-Host "Setup: create customer, supplier, products ..."
-$custBody = @{ name = "عميل كشف $([guid]::NewGuid())" } | ConvertTo-Json
-$cust = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/customers" -Headers $h4 -Body $custBody
+$custBody = @{ name = "عميل كشف $([guid]::NewGuid())" }
+$cust = Invoke-Json -Method "Post" -Uri "$url/rest/v1/customers" -Body $custBody
 $custId = $cust[0].id
 
-$suppBody = @{ name = "مورد كشف $([guid]::NewGuid())"; deal_type = "commission"; commission_rate = 10 } | ConvertTo-Json
-$supp = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/suppliers" -Headers $h4 -Body $suppBody
+$suppBody = @{ name = "مورد كشف $([guid]::NewGuid())"; deal_type = "commission"; commission_rate = 10 }
+$supp = Invoke-Json -Method "Post" -Uri "$url/rest/v1/suppliers" -Body $suppBody
 $suppId = $supp[0].id
 
 function New-Product {
     param([string]$name)
-    $body = @{ name = $name; unit = "قطعة"; unit_type = "count"; sale_price = 100; purchase_price = 60; qty = 100; reorder_level = 0 } | ConvertTo-Json
-    $r = Invoke-RestMethod -Method Post -Uri "$url/rest/v1/products" -Headers $h4 -Body $body
+    $body = @{ name = $name; unit = "قطعة"; unit_type = "count"; sale_price = 100; purchase_price = 60; qty = 100; reorder_level = 0 }
+    $r = Invoke-Json -Method "Post" -Uri "$url/rest/v1/products" -Body $body
     return $r[0].id
 }
 
