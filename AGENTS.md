@@ -41,7 +41,13 @@ flutter analyze   # must be clean before finishing any change
 flutter test
 ```
 
-If Riverpod codegen classes are touched: `dart run build_runner build --delete-conflicting-outputs`.
+Run/build/test commands that exercise the app's statement PDF **must add**
+`--dart-define=use_arabic=true` (pdf's `use_arabic` is a compile-time const; without it Arabic
+shapes as disconnected letters). Example: `flutter run -d chrome --web-port 5050 --dart-define=use_arabic=true`,
+`flutter build web --dart-define=use_arabic=true`.
+
+If Riverpod codegen classes are touched: `dart run build_runner build` (newer build_runner ignores the
+old `--delete-conflicting-outputs` flag).
 
 ## Docs Upkeep Ritual (STANDING RULE)
 
@@ -73,11 +79,14 @@ PowerShell-only environment: no `&&` chaining — use `; if ($?) { ... }`.
 - **Supabase:** initialized once in `lib/main.dart` (url + publishableKey). Access via `Supabase.instance.client` — exclusively inside the `data/` layer's repositories; UI talks to abstract repositories only. `supabase_flutter` SDK only (no `dio`, no custom REST client); it attaches the session JWT automatically to `.rpc()`, `.from()`, and Edge Function calls.
   - **gotcha (supabase_flutter 2.17.2):** `.rpc()` uses named `params:` — `_client.rpc('fn', params: {...})`. A positional map fails to compile.
   - `DropdownButtonFormField` takes `initialValue:` in this Flutter version. Avoid `Iterable.firstOrNull` (needs `package:collection`).
-- **Dev workflow:** native Android/Windows toolchains are broken on this machine — the verified run path is Chrome web: `flutter run -d chrome --web-port 5050` (app at `http://localhost:5050`). The `web/` directory is **local-only and never committed**. Validate final code with `flutter build web`.
+- **Dev workflow:** native Android/Windows toolchains are broken on this machine — the verified run path is Chrome web: `flutter run -d chrome --web-port 5050` (app at `http://localhost:5050`). The `web/` directory is **local-only and never committed**. Validate final code with `flutter build web` (both with `--dart-define=use_arabic=true`).
 - **DB operations:** the user applies SQL migrations manually in the Supabase **SQL Editor** (never run automatically here) and runs regression scripts manually with PowerShell from `supabase/tests/*.ps1`. So: write the migration into `supabase/migrations/`, write its `.ps1` test, then hand both to the user to apply/run.
 - **Never commit:** `.metadata`, `analysis_options.yaml`, `pubspec.lock`, `web/`, `build/`.
 - **Dev test account:** `owner4@test.local` / `Test@1234567` (tenant owner4) on dev project `https://sxasnunzspkuwbxiddqd.supabase.co` — used by all `supabase/tests/*.ps1`.
 - **Tab roles (as shipped):** Sales tab visible to all roles; Purchases and Inventory tabs admin+accountant only.
+- **Money actions (as shipped):** payment recording, supplier settlement, and inventory adjustment are admin+accountant only (via `authStateProvider.value`); consignment invoices never show a payment button (RPC also rejects them).
+- **`get_party_statement` RPC (migration `0015`):** `(p_party_type, p_party_id, p_from, p_to)` → one jsonb envelope `{party_type, party_id, from, to, opening, closing, lines[]}`; lines have `kind` `'invoice'|'payment'|'commission'`, `debit`, `credit` (running balance computed client-side); opening balance includes rows billed before `p_from`; commission dues are a separate `kind='commission'` line; consignment → zero debit/credit.
+- **`pdf` 3.13 API (statement_pdf.dart):** embed a font via `pw.Font.ttf(ByteData)` + `pw.ThemeData.withFont(base:…, bold:…)`; set `pw.Page(textDirection: pw.TextDirection.rtl)` (shaping + RTL layout); render with `doc.save()` (not `build()`); there is **no** `PdfColor.opacity` — use precomputed tints; RTL table cells need explicit `pw.TextAlign.end`. Arabic shaping only runs when compiled with `use_arabic=true` and textDirection is rtl.
 - **State management:** Riverpod only. Use `riverpod_annotation` codegen; delete stale `*.g.dart` via build_runner.
 - **Error handling (fixed 3-catch pattern):** `PostgrestException`/RLS/constraint/RPC exceptions → `AppException`, `SocketException` → `Network`, `Exception` → `Unknown`. Never leak raw Supabase errors to the UI.
 - **Roles:** admin / accountant / sales — screens hidden per role via the session.
