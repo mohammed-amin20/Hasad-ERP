@@ -119,6 +119,50 @@ abstract class _$EmployeeSearch extends $Notifier<String> {
   }
 }
 
+/// Full unfiltered employee list (for dropdowns/pickers), never search-filtered.
+
+@ProviderFor(allEmployees)
+final allEmployeesProvider = AllEmployeesProvider._();
+
+/// Full unfiltered employee list (for dropdowns/pickers), never search-filtered.
+
+final class AllEmployeesProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<Employee>>,
+          List<Employee>,
+          FutureOr<List<Employee>>
+        >
+    with $FutureModifier<List<Employee>>, $FutureProvider<List<Employee>> {
+  /// Full unfiltered employee list (for dropdowns/pickers), never search-filtered.
+  AllEmployeesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'allEmployeesProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$allEmployeesHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<Employee>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<Employee>> create(Ref ref) {
+    return allEmployees(ref);
+  }
+}
+
+String _$allEmployeesHash() => r'803e328705a65f0a955573d0702b469c4cb14d47';
+
 /// Reactive list of employees, filtered by [EmployeeSearch].
 
 @ProviderFor(EmployeesList)

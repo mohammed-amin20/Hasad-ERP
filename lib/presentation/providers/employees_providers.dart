@@ -22,6 +22,11 @@ class EmployeeSearch extends _$EmployeeSearch {
   void update(String term) => state = term;
 }
 
+/// Full unfiltered employee list (for dropdowns/pickers), never search-filtered.
+@riverpod
+Future<List<Employee>> allEmployees(Ref ref) async =>
+    ref.watch(employeeRepositoryProvider).listAll();
+
 /// Reactive list of employees, filtered by [EmployeeSearch].
 @riverpod
 class EmployeesList extends _$EmployeesList {
