@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
@@ -85,7 +86,7 @@ class _EmployeeStatementScreenState
                 );
               }
             },
-            icon: const Icon(Icons.print_outlined),
+            icon: const FaIcon(FontAwesomeIcons.print),
           ),
       ],
       child: Column(
@@ -101,7 +102,7 @@ class _EmployeeStatementScreenState
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'من شهر',
-                      prefixIcon: Icon(Icons.calendar_month_outlined),
+                      prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                     ),
                     child: Text(_monthLabel(_from)),
                   ),
@@ -115,7 +116,7 @@ class _EmployeeStatementScreenState
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'إلى شهر',
-                      prefixIcon: Icon(Icons.calendar_month_outlined),
+                      prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                     ),
                     child: Text(_monthLabel(_to)),
                   ),
@@ -339,7 +340,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               'حدث خطأ',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/app_exception.dart';
@@ -49,7 +50,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
         ),
       ],
       child: Column(
@@ -64,10 +65,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 onChanged: (v) => setState(() => _query = v.trim()),
                 decoration: InputDecoration(
                   hintText: 'بحث بالاسم أو الباركود...',
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear),
+                          icon: const FaIcon(FontAwesomeIcons.xmark),
                           onPressed: () {
                             _searchCtrl.clear();
                             setState(() => _query = '');
@@ -187,7 +188,7 @@ class _ProductStockTile extends StatelessWidget {
       ),
       trailing: OutlinedButton.icon(
         onPressed: onCount,
-        icon: const Icon(Icons.fact_check_outlined, size: 18),
+        icon: const FaIcon(FontAwesomeIcons.clipboardCheck, size: 18),
         label: const Text('جرد'),
         style: OutlinedButton.styleFrom(
           visualDensity: VisualDensity.compact,
@@ -294,7 +295,7 @@ class _CountSheetState extends State<_CountSheet> {
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'تاريخ الجرد',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(
                     '${_date.year.toString().padLeft(4, '0')}/'
@@ -311,7 +312,7 @@ class _CountSheetState extends State<_CountSheet> {
                 decoration: const InputDecoration(
                   labelText: 'سبب التعديل',
                   hintText: 'جرد شهري، تلف، بضاعة إضافية...',
-                  prefixIcon: Icon(Icons.notes_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
                 ),
               ),
               const SizedBox(height: 20),
@@ -344,7 +345,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.inventory_2_outlined,
+            const FaIcon(FontAwesomeIcons.boxesStacked,
                 size: 48, color: AppColors.textMuted),
             const SizedBox(height: 16),
             Text('لا توجد منتجات', style: Theme.of(context).textTheme.titleMedium),
@@ -376,7 +377,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),

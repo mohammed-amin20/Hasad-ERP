@@ -104,3 +104,10 @@ flutter:
     - family: Cairo
       fonts:
         - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 800

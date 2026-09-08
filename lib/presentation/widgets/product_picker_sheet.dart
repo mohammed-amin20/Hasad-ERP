@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -54,9 +55,9 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
               autofocus: true,
               onChanged: (v) =>
                   ref.read(productSearchProvider.notifier).update(v),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'بحث بالاسم أو الباركود...',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: FaIcon(FontAwesomeIcons.magnifyingGlass),
               ),
             ),
             const SizedBox(height: 12),

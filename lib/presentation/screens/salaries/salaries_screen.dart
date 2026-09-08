@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/app_exception.dart';
@@ -81,7 +82,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
           initialValue: _employeeId,
           decoration: const InputDecoration(
             labelText: 'الموظف',
-            prefixIcon: Icon(Icons.person_outline),
+            prefixIcon: FaIcon(FontAwesomeIcons.user),
           ),
           hint: const Text('اختر موظفاً...'),
           items: [
@@ -97,7 +98,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
           child: InputDecorator(
             decoration: const InputDecoration(
               labelText: 'الشهر',
-              prefixIcon: Icon(Icons.calendar_month_outlined),
+              prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
             ),
             child: Text(
               '${_month.year}/${_month.month.toString().padLeft(2, '0')}',
@@ -171,7 +172,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
                   employeeName: name,
                   month: _month,
                 ),
-                icon: const Icon(Icons.swap_vert),
+                icon: const FaIcon(FontAwesomeIcons.arrowsUpDown),
                 label: const Text('تسجيل حركة'),
               ),
             ),
@@ -187,7 +188,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
                           entitlement: ent,
                         )
                     : null,
-                icon: const Icon(Icons.payments_outlined),
+                icon: const FaIcon(FontAwesomeIcons.moneyBill),
                 label: const Text('صرف الراتب'),
               ),
             ),
@@ -309,8 +310,7 @@ class _HintState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.handshake_outlined,
+            FaIcon(FontAwesomeIcons.handshake,
               size: 48,
               color: AppColors.textMuted,
             ),
@@ -358,7 +358,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               'حدث خطأ',

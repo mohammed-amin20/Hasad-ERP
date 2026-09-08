@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 
 import '../../domain/products/product.dart';
@@ -87,7 +88,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'اسم المنتج',
-                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
                 ),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'أدخل اسم المنتج' : null,
@@ -113,7 +114,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                       initialValue: _unitType,
                       decoration: const InputDecoration(
                         labelText: 'نوع الكمية',
-                        prefixIcon: Icon(Icons.scale_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.scaleBalanced),
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -142,7 +143,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                 ],
                 decoration: const InputDecoration(
                   labelText: 'سعر البيع (اختياري)',
-                  prefixIcon: Icon(Icons.sell_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.tag),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();
@@ -158,7 +159,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'نسبة العمولة % (اختياري)',
-                  prefixIcon: Icon(Icons.percent),
+                  prefixIcon: FaIcon(FontAwesomeIcons.percent),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();

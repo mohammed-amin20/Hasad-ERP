@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/app_exception.dart';
@@ -44,7 +45,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
         ),
       ],
       child: Stack(
@@ -62,10 +63,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         ref.read(customerSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 ref
@@ -98,7 +99,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             child: FloatingActionButton(
               heroTag: 'customers_add',
               onPressed: () => _showCustomerForm(context),
-              child: const Icon(Icons.add),
+              child: const FaIcon(FontAwesomeIcons.plus),
             ),
           ),
         ],
@@ -293,7 +294,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
               autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'اسم العميل',
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: FaIcon(FontAwesomeIcons.user),
               ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               validator: (v) =>
@@ -306,7 +307,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'رقم الهاتف',
-                prefixIcon: Icon(Icons.phone_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.phone),
               ),
             ),
             const SizedBox(height: 12),
@@ -316,7 +317,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
               maxLines: 2,
               decoration: const InputDecoration(
                 labelText: 'ملاحظات',
-                prefixIcon: Icon(Icons.notes_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
                 alignLabelWithHint: true,
               ),
             ),
@@ -390,8 +391,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.person_add_outlined,
+            FaIcon(FontAwesomeIcons.userPlus,
               size: 48,
               color: AppColors.textMuted,
             ),
@@ -424,7 +424,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               'حدث خطأ',

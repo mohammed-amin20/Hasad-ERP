@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,7 +49,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
         ),
       ],
       child: Stack(
@@ -66,10 +67,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                         ref.read(productSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو الباركود...',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 ref
@@ -102,7 +103,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
             child: FloatingActionButton(
               heroTag: 'products_add',
               onPressed: () => _showProductForm(context),
-              child: const Icon(Icons.add),
+              child: const FaIcon(FontAwesomeIcons.plus),
             ),
           ),
         ],
@@ -492,7 +493,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'اسم المنتج',
-                  prefixIcon: Icon(Icons.widgets_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.tableCells),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -504,7 +505,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'الباركود',
-                  prefixIcon: Icon(Icons.qr_code_2_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.qrcode),
                 ),
               ),
               const SizedBox(height: 12),
@@ -516,7 +517,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'الوحدة',
-                        prefixIcon: Icon(Icons.straighten_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.ruler),
                         hintText: 'كجم، قطعة، كيس...',
                       ),
                       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -530,7 +531,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       initialValue: _unitType,
                       decoration: const InputDecoration(
                         labelText: 'نوع القياس',
-                        prefixIcon: Icon(Icons.scale_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.scaleBalanced),
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -581,7 +582,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       ),
                       decoration: const InputDecoration(
                         labelText: 'سعر البيع',
-                        prefixIcon: Icon(Icons.sell_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.tag),
                       ),
                       validator: _validatePrice,
                     ),
@@ -596,7 +597,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       ),
                       decoration: const InputDecoration(
                         labelText: 'سعر الشراء',
-                        prefixIcon: Icon(Icons.shopping_cart_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.cartShopping),
                       ),
                       validator: _validatePrice,
                     ),
@@ -610,7 +611,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                     : null,
                 decoration: const InputDecoration(
                   labelText: 'المورد',
-                  prefixIcon: Icon(Icons.warehouse_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.warehouse),
                 ),
                 items: [
                   const DropdownMenuItem<String?>(
@@ -644,7 +645,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                     labelText: 'نسبة العمولة %',
-                    prefixIcon: Icon(Icons.percent),
+                    prefixIcon: FaIcon(FontAwesomeIcons.percent),
                   ),
                   validator: (v) {
                     final text = (v ?? '').trim();
@@ -694,7 +695,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: const Icon(Icons.numbers_outlined),
+        prefixIcon: const FaIcon(FontAwesomeIcons.hashtag),
       ),
       validator: _validateQuantity,
     );
@@ -753,8 +754,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.inventory_2_outlined,
+            FaIcon(FontAwesomeIcons.boxesStacked,
               size: 48,
               color: AppColors.textMuted,
             ),
@@ -788,7 +788,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),

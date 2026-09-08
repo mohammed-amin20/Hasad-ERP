@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/app_exception.dart';
@@ -234,9 +235,9 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _direction,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'الجهة',
-                      prefixIcon: Icon(Icons.swap_vert),
+                      prefixIcon: FaIcon(FontAwesomeIcons.arrowsUpDown),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'in', child: Text('إضافة')),
@@ -249,7 +250,7 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _category,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'النوع',
                       prefixIcon: Icon(Icons.category_outlined),
                     ),
@@ -273,9 +274,9 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                 borderRadius: BorderRadius.circular(12),
                 onTap: _pickProduct,
                 child: InputDecorator(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'المنتج',
-                    prefixIcon: Icon(Icons.inventory_2_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
                   ),
                   child: Text(
                     _product == null
@@ -298,9 +299,9 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
               borderRadius: BorderRadius.circular(12),
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'تاريخ الحركة',
-                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                 ),
                 child: Text(
                   '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
@@ -312,9 +313,9 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
               controller: _noteCtrl,
               textInputAction: TextInputAction.done,
               maxLines: 2,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'وصف الحركة',
-                prefixIcon: Icon(Icons.notes_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
               ),
             ),
             const SizedBox(height: 24),
@@ -495,9 +496,9 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _method,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'طريقة الدفع',
-                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -513,9 +514,9 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
             borderRadius: BorderRadius.circular(12),
             onTap: _pickDate,
             child: InputDecorator(
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'تاريخ الصرف',
-                prefixIcon: Icon(Icons.calendar_today_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
               ),
               child: Text(
                 '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
@@ -527,9 +528,9 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
             controller: _noteCtrl,
             textInputAction: TextInputAction.done,
             maxLines: 2,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'ملاحظات',
-              prefixIcon: Icon(Icons.notes_outlined),
+              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
             ),
           ),
           const SizedBox(height: 24),

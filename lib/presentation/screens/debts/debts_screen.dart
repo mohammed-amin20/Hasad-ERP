@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -176,7 +177,7 @@ class _PartyTile extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_left, color: AppColors.textMuted),
+          const FaIcon(FontAwesomeIcons.chevronLeft, color: AppColors.textMuted),
         ],
       ),
     );

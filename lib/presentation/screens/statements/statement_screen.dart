@@ -1,3 +1,4 @@
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
@@ -5,6 +6,7 @@ import 'package:printing/printing.dart';
 import '../../../core/printing/statement_pdf.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/route_header.dart';
 import '../../../domain/statements/statement.dart';
 import '../../providers/statements_providers.dart';
 
@@ -114,29 +116,36 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
         : null;
     final statement = statementAsync?.value;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('كشف حساب — ${widget.partyName}'),
-        actions: [
-          if (statement != null)
-            IconButton(
-              onPressed: _printing ? null : () => _printPdf(statement),
-              tooltip: 'طباعة / PDF',
-              icon: _printing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.print_outlined),
-            ),
-        ],
-      ),
-      body: SafeArea(
+return Container(
+      color: AppColors.background,
+      child: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: RouteHeader(
+                title: 'كشف حساب — ${widget.partyName}',
+                subtitle: 'عرض حركة الحساب وطباعتها',
+                onClose: () => Navigator.of(context).pop(),
+                actions: [
+                  if (statement != null)
+                    IconButton(
+                      onPressed: _printing ? null : () => _printPdf(statement),
+                      tooltip: 'طباعة / PDF',
+                      icon: _printing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const FaIcon(FontAwesomeIcons.print, size: 18),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -149,7 +158,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                             decoration: const InputDecoration(
                               labelText: 'من تاريخ',
                               prefixIcon:
-                                  Icon(Icons.calendar_today_outlined),
+                                  FaIcon(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_from)),
                           ),
@@ -163,7 +172,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                             decoration: const InputDecoration(
                               labelText: 'إلى تاريخ',
                               prefixIcon:
-                                  Icon(Icons.calendar_today_outlined),
+                                  FaIcon(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_to)),
                           ),
@@ -458,7 +467,7 @@ class _PromptState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.receipt_long_outlined,
+            const FaIcon(FontAwesomeIcons.receipt,
                 size: 48, color: AppColors.textMuted),
             const SizedBox(height: 16),
             Text('اختر الفترة ثم اضغط "عرض الكشف"',
@@ -473,3 +482,4 @@ class _PromptState extends StatelessWidget {
 String formatDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
     '${d.day.toString().padLeft(2, '0')}';
+

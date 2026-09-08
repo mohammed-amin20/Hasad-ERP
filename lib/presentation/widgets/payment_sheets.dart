@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/app_exception.dart';
@@ -181,9 +182,9 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _method,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'طريقة الدفع',
-                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -199,9 +200,9 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
             borderRadius: BorderRadius.circular(12),
             onTap: _pickDate,
             child: InputDecorator(
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'تاريخ الدفعة',
-                prefixIcon: Icon(Icons.calendar_today_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
               ),
               child: Text(formatInvoiceDate(_date)),
             ),
@@ -211,9 +212,9 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
             controller: _noteCtrl,
             textInputAction: TextInputAction.done,
             maxLines: 2,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'ملاحظات',
-              prefixIcon: Icon(Icons.notes_outlined),
+              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
             ),
           ),
           const SizedBox(height: 24),
@@ -373,9 +374,9 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _method,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'طريقة الدفع',
-                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -391,9 +392,9 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
             borderRadius: BorderRadius.circular(12),
             onTap: _pickDate,
             child: InputDecorator(
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'تاريخ التسوية',
-                prefixIcon: Icon(Icons.calendar_today_outlined),
+                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
               ),
               child: Text(formatInvoiceDate(_date)),
             ),
@@ -403,9 +404,9 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
             controller: _noteCtrl,
             textInputAction: TextInputAction.done,
             maxLines: 2,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'ملاحظات',
-              prefixIcon: Icon(Icons.notes_outlined),
+              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
             ),
           ),
           const SizedBox(height: 24),

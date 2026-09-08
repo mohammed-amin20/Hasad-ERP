@@ -32,8 +32,7 @@ class ContentPlaceholder extends StatelessWidget {
                 color: AppColors.textMuted,
               )
             else
-              Icon(
-                Icons.construction_outlined,
+              FaIcon(FontAwesomeIcons.hammer,
                 size: 48,
                 color: AppColors.textMuted,
               ),

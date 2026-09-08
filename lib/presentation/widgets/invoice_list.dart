@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -85,7 +86,7 @@ class InvoiceListView extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_left, color: AppColors.textMuted),
+              const FaIcon(FontAwesomeIcons.chevronLeft, color: AppColors.textMuted),
             ],
           ),
         );
@@ -180,7 +181,7 @@ class InvoiceDetailSheet extends ConsumerWidget {
                 ElevatedButton.icon(
                   onPressed: () => showRecordPaymentSheet(context,
                       invoice: invoice),
-                  icon: const Icon(Icons.payments_outlined),
+                  icon: const FaIcon(FontAwesomeIcons.moneyBill),
                   label: const Text('تسجيل دفعة'),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
@@ -215,7 +216,7 @@ class ListErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/route_header.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/sales/sale_invoice_draft.dart';
 import '../../providers/sales_providers.dart';
@@ -62,10 +64,10 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
       title: 'المبيعات',
       subtitle: 'إنشاء ومتابعة فواتير البيع',
       actions: [
-        IconButton(
+IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
         ),
       ],
       child: Stack(
@@ -83,10 +85,10 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
                         ref.read(saleSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث برقم الفاتورة...',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 ref.read(saleSearchProvider.notifier).update('');
@@ -126,7 +128,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
             child: FloatingActionButton(
               heroTag: 'sale_add',
               onPressed: _newInvoice,
-              child: const Icon(Icons.add),
+              child: const FaIcon(FontAwesomeIcons.plus),
             ),
           ),
         ],
@@ -294,21 +296,20 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
     final theme = Theme.of(context);
     final customersAsync = ref.watch(allCustomersProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('فاتورة بيع جديدة'),
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close),
-          tooltip: 'إغلاق',
-        ),
-      ),
-      body: SafeArea(
+    return Container(
+      color: AppColors.background,
+      child: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              RouteHeader(
+                title: 'فاتورة بيع جديدة',
+                subtitle: 'إدخال فاتورة مبيعات للعميل',
+                onClose: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(height: 16),
               customersAsync.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -317,7 +318,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   initialValue: _customerId,
                   decoration: const InputDecoration(
                     labelText: 'العميل',
-                    prefixIcon: Icon(Icons.person_outline),
+                    prefixIcon: FaIcon(FontAwesomeIcons.user),
                   ),
                   items: [
                     for (final c in customers)
@@ -340,7 +341,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'تاريخ الفاتورة',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(formatInvoiceDate(_date)),
                 ),
@@ -356,7 +357,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   ),
                   TextButton.icon(
                     onPressed: _addLine,
-                    icon: const Icon(Icons.add),
+                    icon: const FaIcon(FontAwesomeIcons.plus),
                     label: const Text('إضافة صنف'),
                   ),
                 ],
@@ -400,7 +401,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'المدفوع',
-                        prefixIcon: Icon(Icons.payments_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
                       ),
                       validator: (v) {
                         final text = (v ?? '').trim();
@@ -418,7 +419,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                       initialValue: _paymentMethod,
                       decoration: const InputDecoration(
                         labelText: 'طريقة الدفع',
-                        prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                        prefixIcon: FaIcon(FontAwesomeIcons.wallet),
                       ),
                       items: [
                         for (final m in _paymentMethods)
@@ -439,7 +440,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'ملاحظات',
-                  prefixIcon: Icon(Icons.notes_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
                 ),
               ),
               const SizedBox(height: 24),
@@ -517,7 +518,7 @@ class _LineRowState extends State<_LineRow> {
                 ),
                 IconButton(
                   onPressed: widget.onRemove,
-                  icon: const Icon(Icons.close),
+                  icon: const FaIcon(FontAwesomeIcons.xmark),
                   color: AppColors.textMuted,
                   tooltip: 'إزالة الصنف',
                 ),
@@ -592,8 +593,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.receipt_long_outlined,
+            FaIcon(FontAwesomeIcons.receipt,
               size: 48,
               color: AppColors.textMuted,
             ),

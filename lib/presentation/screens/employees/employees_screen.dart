@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/app_exception.dart';
@@ -46,7 +47,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: Icon(_searchOpen ? Icons.close : Icons.search),
+          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
         ),
       ],
       child: Stack(
@@ -64,10 +65,10 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                         ref.read(employeeSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 ref
@@ -100,7 +101,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
             child: FloatingActionButton(
               heroTag: 'employees_add',
               onPressed: () => _showEmployeeForm(context),
-              child: const Icon(Icons.add),
+              child: const FaIcon(FontAwesomeIcons.plus),
             ),
           ),
         ],
@@ -341,7 +342,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'اسم الموظف',
-                  prefixIcon: Icon(Icons.person_outline),
+                  prefixIcon: FaIcon(FontAwesomeIcons.user),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -353,7 +354,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'المسمى الوظيفي',
-                  prefixIcon: Icon(Icons.work_outline),
+                  prefixIcon: FaIcon(FontAwesomeIcons.briefcase),
                 ),
               ),
               const SizedBox(height: 12),
@@ -363,7 +364,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
                   labelText: 'رقم الهاتف',
-                  prefixIcon: Icon(Icons.phone_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.phone),
                 ),
               ),
               const SizedBox(height: 12),
@@ -374,7 +375,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'الراتب الأساسي',
-                  prefixIcon: Icon(Icons.payments_outlined),
+                  prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();
@@ -455,8 +456,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.person_outline,
+            FaIcon(FontAwesomeIcons.user,
               size: 48,
               color: AppColors.textMuted,
             ),
@@ -492,7 +492,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               'حدث خطأ',
