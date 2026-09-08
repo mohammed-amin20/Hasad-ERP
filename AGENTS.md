@@ -43,12 +43,41 @@ flutter test
 
 If Riverpod codegen classes are touched: `dart run build_runner build --delete-conflicting-outputs`.
 
+## Docs Upkeep Ritual (STANDING RULE)
+
+After **every** finished milestone or slice, update the md docs in the same pass (before
+declaring the step done). This keeps the next step fast and removes the need to re-derive
+decisions. Checklist, in order:
+
+1. `../../MILESTONES.md` — flip finished outputs to `✅`; mark the phase done in the phase map;
+   add a **Handoff to next phase** note under the completed phase (what already exists the next
+   phase reuses, what it must build fresh); append a row to **Appendix A — Implementation Log**
+   with commit hash(es), DB objects added, test count, and any deviations.
+2. This file (`AGENTS.md`) — record any behavior-changing facts discovered during the work
+   (SDK API quirks, run commands, workflow rules, credentials, role splits). If only `this`
+   step of the ritual has no facts, skip it.
+3. `../../SYSTEM_DESIGN.md` §4 — sync the RPC/Edge Function table only when a contract changed
+   (new/renamed RPC, dropped params). `security invoker` + balance assertion stays the rule.
+4. `../../README_supabase_only.md` — only when the manual apply/test sequence changed (new
+   migrations to paste in the SQL Editor, new `supabase/tests/*.ps1` to run).
+5. `../../PROJECT_SPEC.md` — **never** edited by this ritual; it is the source of truth. Real
+   divergences are logged in MILESTONES Appendix A instead.
+
+PowerShell-only environment: no `&&` chaining — use `; if ($?) { ... }`.
+
 ## Stack & Conventions
 
 - **Flutter** (Material 3), Dart SDK `^3.13.2`. Targets: **Android + Desktop only — no iOS/web.**
 - **RTL + Arabic:** app is wrapped in `Directionality(TextDirection.rtl)` with `locale: Locale('ar')`. No screen is an exception. Numerals are always Western (0-9), never Arabic-Indic.
 - **Cairo font** bundled at `assets/fonts/Cairo-Variable.ttf` (variable: 200–1000 weight). `GoogleFonts.config.allowRuntimeFetching = false` — never rely on runtime font downloads.
 - **Supabase:** initialized once in `lib/main.dart` (url + publishableKey). Access via `Supabase.instance.client` — exclusively inside the `data/` layer's repositories; UI talks to abstract repositories only. `supabase_flutter` SDK only (no `dio`, no custom REST client); it attaches the session JWT automatically to `.rpc()`, `.from()`, and Edge Function calls.
+  - **gotcha (supabase_flutter 2.17.2):** `.rpc()` uses named `params:` — `_client.rpc('fn', params: {...})`. A positional map fails to compile.
+  - `DropdownButtonFormField` takes `initialValue:` in this Flutter version. Avoid `Iterable.firstOrNull` (needs `package:collection`).
+- **Dev workflow:** native Android/Windows toolchains are broken on this machine — the verified run path is Chrome web: `flutter run -d chrome --web-port 5050` (app at `http://localhost:5050`). The `web/` directory is **local-only and never committed**. Validate final code with `flutter build web`.
+- **DB operations:** the user applies SQL migrations manually in the Supabase **SQL Editor** (never run automatically here) and runs regression scripts manually with PowerShell from `supabase/tests/*.ps1`. So: write the migration into `supabase/migrations/`, write its `.ps1` test, then hand both to the user to apply/run.
+- **Never commit:** `.metadata`, `analysis_options.yaml`, `pubspec.lock`, `web/`, `build/`.
+- **Dev test account:** `owner4@test.local` / `Test@1234567` (tenant owner4) on dev project `https://sxasnunzspkuwbxiddqd.supabase.co` — used by all `supabase/tests/*.ps1`.
+- **Tab roles (as shipped):** Sales tab visible to all roles; Purchases and Inventory tabs admin+accountant only.
 - **State management:** Riverpod only. Use `riverpod_annotation` codegen; delete stale `*.g.dart` via build_runner.
 - **Error handling (fixed 3-catch pattern):** `PostgrestException`/RLS/constraint/RPC exceptions → `AppException`, `SocketException` → `Network`, `Exception` → `Unknown`. Never leak raw Supabase errors to the UI.
 - **Roles:** admin / accountant / sales — screens hidden per role via the session.

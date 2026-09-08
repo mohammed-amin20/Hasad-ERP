@@ -6,7 +6,9 @@ import '../../core/utils/money.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/products/product.dart';
+import '../providers/auth_providers.dart';
 import '../providers/sales_providers.dart';
+import 'payment_sheets.dart';
 
 /// Reusable invoice list (shared by sales and purchases screens).
 class InvoiceListView extends StatelessWidget {
@@ -171,12 +173,32 @@ class InvoiceDetailSheet extends ConsumerWidget {
                 value: invoice.remaining,
                 emphasized: invoice.remaining > 0,
               ),
+              const SizedBox(height: 20),
+              if (invoice.remaining > 0 &&
+                  invoice.ownership != InvoiceOwnership.consignment &&
+                  _canPay(ref)) ...[
+                ElevatedButton.icon(
+                  onPressed: () => showRecordPaymentSheet(context,
+                      invoice: invoice),
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('تسجيل دفعة'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+              ],
             ],
           );
         },
       ),
     );
   }
+}
+
+/// Payment actions are admin + accountant only (consignment already blocked).
+bool _canPay(WidgetRef ref) {
+  final user = ref.read(authStateProvider).value;
+  return user != null && (user.isAdmin || user.isAccountant);
 }
 
 /// Shared error state for list screens.

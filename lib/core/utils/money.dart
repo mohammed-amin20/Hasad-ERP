@@ -11,4 +11,8 @@ abstract final class Money {
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
   }
+
+  /// Inverse of [fromAmount] for editable text fields: 1250 → "12.50",
+  /// 2000 → "20".
+  static String editable(int agorot) => format(agorot);
 }

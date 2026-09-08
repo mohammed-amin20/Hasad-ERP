@@ -43,6 +43,8 @@ dependencies:
   font_awesome_flutter: ^11.0.0
   uuid: ^4.6.0
   intl: ^0.20.3
+  printing: ^5.15.0
+  pdf: 3.13.0
 
 dev_dependencies:
   flutter_test:
