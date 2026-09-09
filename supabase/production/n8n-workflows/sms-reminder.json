@@ -1,0 +1,148 @@
+{
+  "name": "Hasad SMS Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hasad-reminder",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "hasad-reminder"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate incoming payload\nconst payload = items[0].json;\n\nif (!payload.phone || !payload.message) {\n  throw new Error('Missing required fields: phone and message');\n}\n\n// Normalize phone (remove spaces, dashes, ensure country code)\nlet phone = payload.phone.replace(/[\\s\\-]/g, '');\nif (!phone.startsWith('970') && !phone.startsWith('+970') && phone.startsWith('0')) {\n  phone = '970' + phone.substring(1); // Palestine country code\n}\n\nreturn [{\n  json: {\n    phone: phone,\n    message: payload.message,\n    customer_name: payload.customer_name,\n    amount: payload.amount,\n    tenant_id: payload.tenant_id\n  }\n}];"
+      },
+      "id": "2",
+      "name": "Validate & Normalize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.your-sms-provider.com/send",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"to\": \"{{$json.phone}}\",\n  \"text\": \"{{$json.message}}\",\n  \"sender\": \"HASAD\"\n}",
+        "authentication": "headerAuth",
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer {{$credentials.smsApiKey}}\",\n  \"Content-Type\": \"application/json\"\n        }"
+      },
+      "id": "3",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [750, 300],
+      "credentials": {
+        "httpHeaderAuth": "SMS Provider API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check SMS provider response\nconst response = items[0].json;\n\nif (response.success === true || response.status === 'sent' || response.message_id) {\n  return [{\n    json: {\n      success: true,\n      message_id: response.message_id || response.id,\n      phone: $json.phone,\n      customer_name: $json.customer_name\n    }\n  }];\n}\n\nthrow new Error('SMS provider returned error: ' + JSON.stringify(response));"
+      },
+      "id": "4",
+      "name": "Check Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseData": {
+          "json": {
+            "success": true,
+            "message": "Reminder queued for delivery"
+          }
+        }
+      },
+      "id": "5",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseCode": 500,
+        "responseData": {
+          "json": {
+            "success": false,
+            "error": "={{ $json.error }}"
+          }
+        }
+      },
+      "id": "6",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Normalize": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Check Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Response": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
