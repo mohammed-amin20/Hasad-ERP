@@ -7,6 +7,7 @@ import 'package:hasad_erp/core/theme/app_theme.dart';
 import 'package:hasad_erp/domain/auth/app_role.dart';
 import 'package:hasad_erp/domain/auth/app_user.dart';
 import 'package:hasad_erp/domain/auth/auth_repository.dart';
+import 'package:hasad_erp/domain/auth/tenant_ref.dart';
 import 'package:hasad_erp/presentation/providers/auth_providers.dart';
 import 'package:hasad_erp/presentation/screens/auth/login_screen.dart';
 
@@ -29,6 +30,12 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {}
+
+  @override
+  Future<void> switchTenant(String tenantId) async {}
+
+  @override
+  Future<List<TenantRef>> getUserTenants() async => [];
 }
 
 Widget _loginApp() {

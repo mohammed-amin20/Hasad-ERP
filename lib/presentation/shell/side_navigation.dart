@@ -7,6 +7,8 @@ import '../../core/error/app_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
+import '../../domain/auth/app_role.dart';
+import '../../domain/auth/tenant_ref.dart';
 import '../providers/auth_providers.dart';
 import '../providers/navigation_providers.dart';
 import 'app_tabs.dart';
@@ -89,68 +91,212 @@ class SideNavigation extends ConsumerWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header({required this.collapsed, this.onToggleCollapse});
 
   final bool collapsed;
   final VoidCallback? onToggleCollapse;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authStateProvider).value;
+    final tenantsAsync = ref.watch(availableTenantsProvider);
     final showLabel = !collapsed;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-      child: showLabel
-          ? Row(
-              children: [
-                const BrandLogo(size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        AppConfig.appName,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Brand row
+          showLabel
+              ? Row(
+                  children: [
+                    const BrandLogo(size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            AppConfig.appName,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          Text(
+                            'نظام إدارة المؤسسات',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.sidebarText,
                             ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'نظام إدارة المؤسسات',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.sidebarText,
+                    ),
+                    if (onToggleCollapse != null)
+                      IconButton(
+                        onPressed: onToggleCollapse,
+                        tooltip: 'طي القائمة',
+                        color: AppColors.sidebarText,
+                        icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 15),
+                      ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: onToggleCollapse == null
+                          ? const SizedBox.shrink()
+                          : IconButton(
+                              onPressed: onToggleCollapse,
+                              tooltip: 'توسيع القائمة',
+                              color: AppColors.sidebarText,
+                              icon: const FaIcon(FontAwesomeIcons.chevronRight, size: 15),
+                            ),
+                    ),
+                  ],
+                ),
+          // Tenant switcher (only show if user has multiple tenants)
+          if (showLabel) ...[
+            const SizedBox(height: 12),
+            tenantsAsync.when(
+              data: (tenants) {
+                if (user == null || tenants.length <= 1) {
+                  return const SizedBox.shrink();
+                }
+                final currentTenantId = user.tenantId;
+                final current = tenants.firstWhere(
+                  (t) => t.id == currentTenantId,
+                  orElse: () => tenants.first,
+                );
+                return _TenantSwitcher(
+                  current: current,
+                  tenants: tenants,
+                  onSwitch: (tenantId) {
+                    ref.read(tenantSwitchProvider.notifier).switchTo(tenantId);
+                  },
+                );
+              },
+              loading: () => const SizedBox(
+                height: 36,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Tenant switcher widget for the sidebar header.
+class _TenantSwitcher extends StatelessWidget {
+  const _TenantSwitcher({
+    required this.current,
+    required this.tenants,
+    required this.onSwitch,
+  });
+
+  final TenantRef current;
+  final List<TenantRef> tenants;
+  final void Function(String tenantId) onSwitch;
+
+  Color _roleColor(AppRole role) {
+    switch (role) {
+      case AppRole.admin:
+        return AppColors.danger;
+      case AppRole.accountant:
+        return AppColors.primary;
+      case AppRole.sales:
+        return AppColors.success;
+      default:
+        return AppColors.textMuted;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0x14FFFFFF),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () {},
+        child: PopupMenuButton<String>(
+          tooltip: 'تبديل المنشأة',
+          onSelected: onSwitch,
+          itemBuilder: (_) => tenants.map((t) => PopupMenuItem<String>(
+            value: t.id,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: Text(
+                    t.name,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: t.id == current.id ? FontWeight.w700 : FontWeight.w500,
                         ),
-                      ),
-                    ],
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (onToggleCollapse != null)
-                  IconButton(
-                    onPressed: onToggleCollapse,
-                    tooltip: 'طي القائمة',
-                    color: AppColors.sidebarText,
-                    icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 15),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _roleColor(t.role).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
                   ),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(
-                  child: onToggleCollapse == null
-                      ? const SizedBox.shrink()
-                      : IconButton(
-                          onPressed: onToggleCollapse,
-                          tooltip: 'توسيع القائمة',
-                          color: AppColors.sidebarText,
-                          icon: const FaIcon(FontAwesomeIcons.chevronRight, size: 15),
-                        ),
+                  child: Text(
+                    _roleLabel(t.role),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _roleColor(t.role),
+                    ),
+                  ),
                 ),
               ],
             ),
+          )).toList(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const FaIcon(FontAwesomeIcons.building, size: 16, color: Colors.white),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  current.name,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const FaIcon(FontAwesomeIcons.chevronDown, size: 12, color: AppColors.sidebarText),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  String _roleLabel(AppRole role) {
+    switch (role) {
+      case AppRole.admin:
+        return 'مسؤول';
+      case AppRole.accountant:
+        return 'محاسب';
+      case AppRole.sales:
+        return 'مبيعات';
+      default:
+        return role.dbValue;
+    }
   }
 }
 

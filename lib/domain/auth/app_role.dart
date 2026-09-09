@@ -13,5 +13,7 @@ enum AppRole {
         _ => AppRole.unknown,
       };
 
+  String get dbValue => name;
+
   bool get isKnown => this != unknown;
 }

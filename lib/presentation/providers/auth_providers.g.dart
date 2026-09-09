@@ -92,3 +92,97 @@ final class AuthStateProvider
 }
 
 String _$authStateHash() => r'28289662db95e3db4c5bd3165b78ad16cb8b8f70';
+
+/// Fetch all tenants the current user has access to.
+
+@ProviderFor(availableTenants)
+final availableTenantsProvider = AvailableTenantsProvider._();
+
+/// Fetch all tenants the current user has access to.
+
+final class AvailableTenantsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<TenantRef>>,
+          List<TenantRef>,
+          FutureOr<List<TenantRef>>
+        >
+    with $FutureModifier<List<TenantRef>>, $FutureProvider<List<TenantRef>> {
+  /// Fetch all tenants the current user has access to.
+  AvailableTenantsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'availableTenantsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$availableTenantsHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<TenantRef>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<TenantRef>> create(Ref ref) {
+    return availableTenants(ref);
+  }
+}
+
+String _$availableTenantsHash() => r'462dce77f357ee1c9fe82775467615e2eb615904';
+
+/// Tenant switch action — switches the current tenant and invalidates all dependent providers.
+
+@ProviderFor(TenantSwitch)
+final tenantSwitchProvider = TenantSwitchProvider._();
+
+/// Tenant switch action — switches the current tenant and invalidates all dependent providers.
+final class TenantSwitchProvider
+    extends $AsyncNotifierProvider<TenantSwitch, void> {
+  /// Tenant switch action — switches the current tenant and invalidates all dependent providers.
+  TenantSwitchProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tenantSwitchProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tenantSwitchHash();
+
+  @$internal
+  @override
+  TenantSwitch create() => TenantSwitch();
+}
+
+String _$tenantSwitchHash() => r'511d9d840dfc7408acd9beb63f6edba2b071ed05';
+
+/// Tenant switch action — switches the current tenant and invalidates all dependent providers.
+
+abstract class _$TenantSwitch extends $AsyncNotifier<void> {
+  FutureOr<void> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<AsyncValue<void>, void>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<void>, void>,
+              AsyncValue<void>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

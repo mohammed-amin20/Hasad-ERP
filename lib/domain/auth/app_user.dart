@@ -1,4 +1,5 @@
 import 'app_role.dart';
+import 'tenant_ref.dart';
 
 /// Authenticated session user as seen by the UI (never imports Supabase).
 class AppUser {
@@ -8,6 +9,7 @@ class AppUser {
     required this.role,
     this.tenantId,
     this.name,
+    this.tenants = const [],
   });
 
   final String id;
@@ -17,9 +19,20 @@ class AppUser {
   final String? tenantId;
   final String? name;
   final AppRole role;
+  final List<TenantRef> tenants;
 
   bool get hasTenant => tenantId != null && role.isKnown;
   bool get isAdmin => role == AppRole.admin;
   bool get isAccountant => role == AppRole.accountant;
   bool get isSales => role == AppRole.sales;
+
+  /// Current tenant from the tenants list.
+  TenantRef? get currentTenant {
+    if (tenantId == null) return null;
+    try {
+      return tenants.firstWhere((t) => t.id == tenantId);
+    } catch (_) {
+      return null;
+    }
+  }
 }

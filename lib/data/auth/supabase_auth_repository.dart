@@ -6,6 +6,7 @@ import '../../core/error/app_exception.dart';
 import '../../domain/auth/app_role.dart';
 import '../../domain/auth/app_user.dart';
 import '../../domain/auth/auth_repository.dart';
+import '../../domain/auth/tenant_ref.dart';
 
 /// AuthRepository backed by Supabase Auth + the `users` table (RLS-scoped).
 class SupabaseAuthRepository implements AuthRepository {
@@ -47,11 +48,44 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
+  @override
+  Future<void> switchTenant(String tenantId) async {
+    try {
+      await _client.rpc('switch_tenant', params: {'p_tenant_id': tenantId});
+    } on Object catch (error) {
+      throw mapErrorToAppException(error);
+    }
+  }
+
+  @override
+  Future<List<TenantRef>> getUserTenants() async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return [];
+
+      final rows = await _client
+          .from('user_tenants')
+          .select('tenant_id, role, tenants!inner(name)')
+          .eq('user_id', _client.auth.currentUser!.id);
+
+      return rows.map((row) {
+        final tenant = row['tenants'] as Map<String, dynamic>;
+        return TenantRef(
+          id: row['tenant_id'] as String,
+          name: tenant['name'] as String,
+          role: AppRole.fromDb(row['role'] as String?),
+        );
+      }).toList();
+    } on Object catch (error) {
+      throw mapErrorToAppException(error);
+    }
+  }
+
   Future<AppUser?> _profileFor(User user) async {
     try {
       final row = await _client
           .from('users')
-          .select('id, tenant_id, name, role')
+          .select('id, tenant_id, current_tenant_id, name, role')
           .eq('auth_user_id', user.id)
           .maybeSingle();
 
@@ -63,12 +97,19 @@ class SupabaseAuthRepository implements AuthRepository {
         );
       }
 
+      // Use current_tenant_id as the active tenant, fall back to tenant_id
+      final currentTenantId = (row['current_tenant_id'] as String?) ?? (row['tenant_id'] as String?);
+
+      // Fetch user's tenants
+      final tenants = await getUserTenants();
+
       return AppUser(
         id: row['id'] as String,
-        tenantId: row['tenant_id'] as String?,
+        tenantId: currentTenantId,
         name: row['name'] as String?,
         email: user.email ?? '',
         role: AppRole.fromDb(row['role'] as String?),
+        tenants: tenants,
       );
     } on Object catch (error) {
       throw mapErrorToAppException(error);
