@@ -8,10 +8,16 @@ import 'package:hasad_erp/domain/accounts/account_draft.dart';
 import 'package:hasad_erp/domain/accounts/account_repository.dart';
 import 'package:hasad_erp/domain/auth/app_role.dart';
 import 'package:hasad_erp/domain/auth/app_user.dart';
+import 'package:hasad_erp/domain/customers/customer.dart';
+import 'package:hasad_erp/domain/customers/customer_draft.dart';
+import 'package:hasad_erp/domain/customers/customer_repository.dart';
 import 'package:hasad_erp/domain/dashboard/dashboard.dart';
 import 'package:hasad_erp/domain/journal/journal.dart';
 import 'package:hasad_erp/domain/journal/journal_repository.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
+import 'package:hasad_erp/domain/reminders/reminder_log_entry.dart';
+import 'package:hasad_erp/domain/reminders/reminder_repository.dart';
+import 'package:hasad_erp/domain/reminders/reminder_settings.dart';
 import 'package:hasad_erp/domain/reports/balance_sheet.dart';
 import 'package:hasad_erp/domain/reports/income_statement.dart';
 import 'package:hasad_erp/domain/reports/ledger.dart';
@@ -19,8 +25,10 @@ import 'package:hasad_erp/domain/reports/report_repository.dart';
 import 'package:hasad_erp/domain/reports/trial_balance.dart';
 import 'package:hasad_erp/presentation/providers/accounts_providers.dart';
 import 'package:hasad_erp/presentation/providers/auth_providers.dart';
+import 'package:hasad_erp/presentation/providers/customers_providers.dart';
 import 'package:hasad_erp/presentation/providers/dashboard_providers.dart';
 import 'package:hasad_erp/presentation/providers/journal_providers.dart';
+import 'package:hasad_erp/presentation/providers/reminders_providers.dart';
 import 'package:hasad_erp/presentation/providers/report_providers.dart'
     hide AsOfDate, BalanceSheet, IncomeRange, IncomeStatement, LedgerQuery, LedgerStatement, TrialBalance;
 import 'package:hasad_erp/presentation/shell/app_shell.dart';
@@ -299,6 +307,152 @@ void main() {
     expect(find.text('صافي الدخل حتى اليوم'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('reminders settings save, send-to-all and log feed render',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const user = AppUser(
+      id: 'u1',
+      email: 'admin@test.local',
+      name: 'مدير النظام',
+      role: AppRole.admin,
+      tenantId: 't1',
+    );
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith((ref) => Stream.value(user)),
+        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+        reminderRepositoryProvider.overrideWithValue(_FakeReminderRepository()),
+      ],
+      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+    ));
+    await tester.pumpAndSettle();
+
+    final navList = find.descendant(
+      of: find.byType(SideNavigation),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(find.text('الإعدادات'), 100,
+        scrollable: navList);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('إعدادات التذكيرات'), findsOneWidget);
+    expect(find.text('سجل الرسائل'), findsOneWidget);
+    expect(find.text('عميل تجريبي'), findsWidgets);
+    expect(find.text('فشل'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'رابط Webhook (n8n)'),
+      'https://n8n.example.invalid/webhook/test',
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('بعد أسبوع').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ الإعدادات'));
+    await tester.pumpAndSettle();
+    expect(find.text('تم حفظ الإعدادات'), findsOneWidget);
+
+    await tester.tap(find.text('إرسال للجميع الآن'));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تم إرسال تذكير لـ 2 عميل'), findsOneWidget);
+    expect(find.text('55'), findsOneWidget);
+    expect(find.text('120'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('customers remind action is admin-only and sends a reminder',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const user = AppUser(
+      id: 'u1',
+      email: 'admin@test.local',
+      name: 'مدير النظام',
+      role: AppRole.admin,
+      tenantId: 't1',
+    );
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith((ref) => Stream.value(user)),
+        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+        customerRepositoryProvider.overrideWithValue(_FakeCustomerRepository()),
+        reminderRepositoryProvider.overrideWithValue(_FakeReminderRepository()),
+      ],
+      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+    ));
+    await tester.pumpAndSettle();
+
+    final navList = find.descendant(
+      of: find.byType(SideNavigation),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(find.text('العملاء'), 100,
+        scrollable: navList);
+    await tester.tap(find.text('العملاء'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('عميل تجريبي'), findsOneWidget);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('إرسال تذكير'), findsOneWidget);
+
+    await tester.tap(find.text('إرسال تذكير'));
+    await tester.pumpAndSettle();
+    expect(find.text('تم إرسال تذكير إلى "عميل تجريبي"'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('customers remind action is hidden for the sales role',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const user = AppUser(
+      id: 'u2',
+      email: 'sales@test.local',
+      name: 'موظف مبيعات',
+      role: AppRole.sales,
+      tenantId: 't1',
+    );
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith((ref) => Stream.value(user)),
+        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+        customerRepositoryProvider.overrideWithValue(_FakeCustomerRepository()),
+      ],
+      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+    ));
+    await tester.pumpAndSettle();
+
+    final navList = find.descendant(
+      of: find.byType(SideNavigation),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(find.text('العملاء'), 100,
+        scrollable: navList);
+    await tester.tap(find.text('العملاء'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('عميل تجريبي'), findsOneWidget);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('إرسال تذكير'), findsNothing);
+    expect(find.text('تعديل'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FakeDashboardRepository implements DashboardRepository {
@@ -559,4 +713,64 @@ class _FakeReportRepository implements ReportRepository {
       'check': 0,
     });
   }
+}
+
+/// Guards the redesigned reminders settings screen against runtime layout
+/// exceptions, and proves the save / send-all / log feed flows end to end.
+class _FakeReminderRepository implements ReminderRepository {
+  @override
+  Future<ReminderSettings> loadSettings() async =>
+      const ReminderSettings(tenantId: 't1');
+
+  @override
+  Future<void> updateSettings(ReminderSettings settings) async {}
+
+  @override
+  Future<int> sendToAll() async => 2;
+
+  @override
+  Future<void> sendReminderNow(String customerId) async {}
+
+  @override
+  Future<List<ReminderLogEntry>> reminderLog({int limit = 50}) async => [
+        ReminderLogEntry.fromJson({
+          'id': 'r1',
+          'customer_id': 'c1',
+          'customers': {'name': 'عميل تجريبي'},
+          'amount': 5500,
+          'phone': '0599111222',
+          'message': 'عميل تجريبي يرجى سداد 55 شيكل',
+          'status': 'sent',
+          'created_at': '2026-09-09T09:00:00+00:00',
+        }),
+        ReminderLogEntry.fromJson({
+          'id': 'r2',
+          'customer_id': 'c2',
+          'customers': {'name': 'عميل ثان'},
+          'amount': 12000,
+          'phone': '0599122333',
+          'message': 'عميل ثان يرجى سداد 120 شيكل',
+          'status': 'failed',
+          'created_at': '2026-09-08T09:00:00+00:00',
+        }),
+      ];
+}
+
+class _FakeCustomerRepository implements CustomerRepository {
+  @override
+  Future<List<Customer>> listAll({String? search}) async =>
+      const [Customer(id: 'c1', name: 'عميل تجريبي', phone: '0599111222')];
+
+  @override
+  Future<Customer?> getById(String id) async => null;
+
+  @override
+  Future<Customer> create(CustomerDraft draft) async =>
+      Customer(id: 'new-c', name: draft.name, phone: draft.phone);
+
+  @override
+  Future<void> update({required String id, required CustomerDraft draft}) async {}
+
+  @override
+  Future<void> delete(String id) async {}
 }

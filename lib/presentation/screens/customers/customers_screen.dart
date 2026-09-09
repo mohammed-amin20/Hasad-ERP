@@ -7,7 +7,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../domain/customers/customer.dart';
 import '../../../domain/customers/customer_draft.dart';
+import '../../providers/auth_providers.dart';
 import '../../providers/customers_providers.dart';
+import '../../providers/reminders_providers.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -37,6 +39,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   @override
   Widget build(BuildContext context) {
     final listAsync = ref.watch(customersListProvider);
+    final user = ref.watch(authStateProvider).value;
 
     return PageScaffold(
       title: 'العملاء',
@@ -87,7 +90,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     if (customers.isEmpty) {
                       return const _EmptyState();
                     }
-                    return _CustomerList(customers: customers);
+                    return _CustomerList(
+                      customers: customers,
+                      canRemind: user?.isAdmin ?? false,
+                      onRemind: _sendReminder,
+                    );
                   },
                 ),
               ),
@@ -105,6 +112,23 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _sendReminder(Customer customer) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(reminderRepositoryProvider).sendReminderNow(customer.id);
+      messenger.showSnackBar(
+        SnackBar(content: Text('تم إرسال تذكير إلى "${customer.name}"')),
+      );
+    } on Object catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text(mapErrorToAppException(error).message),
+        ),
+      );
+    }
   }
 
   void _showCustomerForm(BuildContext context, {Customer? customer}) {
@@ -146,9 +170,15 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 }
 
 class _CustomerList extends StatelessWidget {
-  const _CustomerList({required this.customers});
+  const _CustomerList({
+    required this.customers,
+    required this.canRemind,
+    required this.onRemind,
+  });
 
   final List<Customer> customers;
+  final bool canRemind;
+  final void Function(Customer customer) onRemind;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +189,8 @@ class _CustomerList extends StatelessWidget {
         final c = customers[index];
         return _CustomerTile(
           customer: c,
+          canRemind: canRemind,
+          onRemind: () => onRemind(c),
           onEdit: () {
             final screen =
                 context.findAncestorStateOfType<_CustomersScreenState>();
@@ -174,11 +206,15 @@ class _CustomerList extends StatelessWidget {
 class _CustomerTile extends StatelessWidget {
   const _CustomerTile({
     required this.customer,
+    required this.canRemind,
+    required this.onRemind,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Customer customer;
+  final bool canRemind;
+  final VoidCallback onRemind;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -205,12 +241,15 @@ class _CustomerTile extends StatelessWidget {
           : null,
       trailing: PopupMenuButton<String>(
         onSelected: (v) {
+          if (v == 'remind') onRemind();
           if (v == 'edit') onEdit();
           if (v == 'delete') onDelete();
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('تعديل')),
-          PopupMenuItem(value: 'delete', child: Text('حذف')),
+        itemBuilder: (_) => [
+          if (canRemind)
+            const PopupMenuItem(value: 'remind', child: Text('إرسال تذكير')),
+          const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+          const PopupMenuItem(value: 'delete', child: Text('حذف')),
         ],
       ),
     );
