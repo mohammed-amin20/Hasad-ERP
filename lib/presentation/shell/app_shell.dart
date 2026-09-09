@@ -6,6 +6,8 @@ import '../../core/theme/app_colors.dart';
 import '../../domain/auth/app_user.dart';
 import '../providers/auth_providers.dart';
 import '../providers/navigation_providers.dart';
+import '../widgets/connectivity_listener.dart';
+import '../widgets/retry_widgets.dart';
 import 'app_tabs.dart';
 import 'side_navigation.dart';
 
@@ -31,21 +33,23 @@ class _AppShellState extends ConsumerState<AppShell> {
     final hasSidebar = width >= AppConfig.breakpointNarrow;
     final collapsed = isDesktop ? false : _sidebarCollapsed;
 
-    return Scaffold(
-      body: hasSidebar
-          ? Row(
-              children: [
-                SideNavigation(
-                  collapsed: collapsed,
-                  onToggleCollapse: isDesktop
-                      ? null
-                      : () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-                ),
-                Expanded(child: _ScreenBody(user: user)),
-              ],
-            )
-          : _ScreenBody(user: user),
-      drawer: hasSidebar ? null : const SideNavigation(),
+    return ConnectivityListener(
+      child: Scaffold(
+        body: hasSidebar
+            ? Row(
+                children: [
+                  SideNavigation(
+                    collapsed: collapsed,
+                    onToggleCollapse: isDesktop
+                        ? null
+                        : () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+                  ),
+                  Expanded(child: _ScreenBody(user: user)),
+                ],
+              )
+            : _ScreenBody(user: user),
+        drawer: hasSidebar ? null : const SideNavigation(),
+      ),
     );
   }
 }
@@ -68,6 +72,7 @@ class _ScreenBody extends ConsumerWidget {
 
     return Column(
       children: [
+        const OfflineBanner(),
         if (user != null && !user!.hasTenant) const _OnboardingBanner(),
         Expanded(child: body),
       ],

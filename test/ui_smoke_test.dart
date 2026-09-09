@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hasad_erp/core/network/connectivity_providers.dart';
 import 'package:hasad_erp/core/theme/app_theme.dart';
 import 'package:hasad_erp/domain/accounts/account.dart';
 import 'package:hasad_erp/domain/accounts/account_draft.dart';
@@ -30,7 +31,7 @@ import 'package:hasad_erp/presentation/providers/dashboard_providers.dart';
 import 'package:hasad_erp/presentation/providers/journal_providers.dart';
 import 'package:hasad_erp/presentation/providers/reminders_providers.dart';
 import 'package:hasad_erp/presentation/providers/report_providers.dart'
-    hide AsOfDate, BalanceSheet, IncomeRange, IncomeStatement, LedgerQuery, LedgerStatement, TrialBalance;
+    hide LedgerStatement, IncomeStatement, BalanceSheet;
 import 'package:hasad_erp/presentation/shell/app_shell.dart';
 import 'package:hasad_erp/presentation/shell/side_navigation.dart';
 
@@ -113,6 +114,7 @@ void main() {
           authStateProvider.overrideWith((ref) => Stream.value(user)),
           dashboardRepositoryProvider
               .overrideWithValue(_FakeDashboardRepository()),
+          isOnlineProvider.overrideWithValue(true),
         ],
         child: MaterialApp(
           theme: AppTheme.light,
