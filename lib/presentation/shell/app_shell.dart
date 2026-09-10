@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/skip_link.dart';
 import '../../domain/auth/app_role.dart';
 import '../../domain/auth/app_user.dart';
 import '../providers/auth_providers.dart';
@@ -26,6 +27,16 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   bool _sidebarCollapsed = false;
+  final FocusNode _contentFocus = FocusNode(
+    debugLabel: 'main-content-target',
+    skipTraversal: true,
+  );
+
+  @override
+  void dispose() {
+    _contentFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,19 +48,29 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return ConnectivityListener(
       child: Scaffold(
-        body: hasSidebar
-            ? Row(
-                children: [
-                  SideNavigation(
-                    collapsed: collapsed,
-                    onToggleCollapse: isDesktop
-                        ? null
-                        : () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-                  ),
-                  Expanded(child: _ScreenBody(user: user)),
-                ],
-              )
-            : _ScreenBody(user: user),
+        body: SkipLink(
+          target: _contentFocus,
+          child: hasSidebar
+              ? Row(
+                  children: [
+                    SideNavigation(
+                      collapsed: collapsed,
+                      onToggleCollapse: isDesktop
+                          ? null
+                          : () => setState(
+                              () => _sidebarCollapsed = !_sidebarCollapsed,
+                            ),
+                    ),
+                    Expanded(
+                      child: _ScreenBody(
+                        user: user,
+                        contentFocus: _contentFocus,
+                      ),
+                    ),
+                  ],
+                )
+              : _ScreenBody(user: user, contentFocus: _contentFocus),
+        ),
         drawer: hasSidebar ? null : const SideNavigation(),
       ),
     );
@@ -57,16 +78,18 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 class _ScreenBody extends ConsumerWidget {
-  const _ScreenBody({required this.user});
+  const _ScreenBody({required this.user, required this.contentFocus});
 
   final AppUser? user;
+  final FocusNode contentFocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(currentDestinationProvider);
     final width = MediaQuery.sizeOf(context).width;
     final isMobile = width < AppConfig.breakpointNarrow;
-    final visible = user == null ||
+    final visible =
+        user == null ||
         (index >= 0 &&
             index < appTabs.length &&
             appTabs[index].allowedFor(user!));
@@ -80,7 +103,9 @@ class _ScreenBody extends ConsumerWidget {
         children: [
           const OfflineBanner(),
           if (user != null && !user!.hasTenant) const _OnboardingBanner(),
-          Expanded(child: body),
+          Expanded(
+            child: Focus(focusNode: contentFocus, child: body),
+          ),
         ],
       ),
     );
@@ -119,39 +144,49 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
               onSelected: (tenantId) {
                 ref.read(tenantSwitchProvider.notifier).switchTo(tenantId);
               },
-              itemBuilder: (_) => tenants.map((t) => PopupMenuItem<String>(
-                value: t.id,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        t.name,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: t.id == current.id ? FontWeight.w700 : FontWeight.w500,
+              itemBuilder: (_) => tenants
+                  .map(
+                    (t) => PopupMenuItem<String>(
+                      value: t.id,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              t.name,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    fontWeight: t.id == current.id
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                        overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _roleColor(t.role).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              _roleLabel(t.role),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: _roleColor(t.role),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _roleColor(t.role).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        _roleLabel(t.role),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: _roleColor(t.role),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )).toList(),
+                  )
+                  .toList(),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -160,9 +195,8 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   Flexible(
                     child: Text(
                       current.name,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

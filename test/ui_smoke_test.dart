@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasad_erp/core/network/connectivity_providers.dart';
@@ -38,8 +39,9 @@ import 'package:hasad_erp/presentation/shell/side_navigation.dart';
 /// Guards the redesign shell (sidebar + live dashboard) against runtime layout
 /// exceptions without a Supabase connection.
 void main() {
-  testWidgets('shell and dashboard render without layout exceptions',
-      (tester) async {
+  testWidgets('shell and dashboard render without layout exceptions', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -56,13 +58,11 @@ void main() {
       ProviderScope(
         overrides: [
           authStateProvider.overrideWith((ref) => Stream.value(user)),
-          dashboardRepositoryProvider
-              .overrideWithValue(_FakeDashboardRepository()),
+          dashboardRepositoryProvider.overrideWithValue(
+            _FakeDashboardRepository(),
+          ),
         ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: const AppShell(),
-        ),
+        child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
       ),
     );
     await tester.pumpAndSettle();
@@ -91,11 +91,26 @@ void main() {
     expect(find.text('منتج تجريبي'), findsOneWidget);
     expect(find.text('5 / حد 10'), findsOneWidget);
     expect(find.text('مدير النظام'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final skipLink = find.text('الانتقال للمحتوى الرئيسي');
+    expect(skipLink, findsOneWidget);
+    final skipOpacity = tester.widget<Opacity>(
+      find.ancestor(of: skipLink, matching: find.byType(Opacity)).first,
+    );
+    expect(
+      skipOpacity.opacity,
+      1,
+      reason: 'first Tab should reveal the skip link in the shell',
+    );
+
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shell and dashboard render on a narrow phone viewport',
-      (tester) async {
+  testWidgets('shell and dashboard render on a narrow phone viewport', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -112,14 +127,12 @@ void main() {
       ProviderScope(
         overrides: [
           authStateProvider.overrideWith((ref) => Stream.value(user)),
-          dashboardRepositoryProvider
-              .overrideWithValue(_FakeDashboardRepository()),
+          dashboardRepositoryProvider.overrideWithValue(
+            _FakeDashboardRepository(),
+          ),
           isOnlineProvider.overrideWithValue(true),
         ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: const AppShell(),
-        ),
+        child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
       ),
     );
     await tester.pumpAndSettle();
@@ -130,8 +143,192 @@ void main() {
   });
 
   testWidgets(
-      'chart of accounts and journal render, and a manual entry is posted',
-      (tester) async {
+    'chart of accounts and journal render, and a manual entry is posted',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      const user = AppUser(
+        id: 'u1',
+        email: 'admin@test.local',
+        name: 'مدير النظام',
+        role: AppRole.admin,
+        tenantId: 't1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith((ref) => Stream.value(user)),
+            dashboardRepositoryProvider.overrideWithValue(
+              _FakeDashboardRepository(),
+            ),
+            accountRepositoryProvider.overrideWithValue(
+              _FakeAccountRepository(),
+            ),
+            journalRepositoryProvider.overrideWithValue(
+              _FakeJournalRepository(),
+            ),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final navList = find.descendant(
+        of: find.byType(SideNavigation),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text('دليل الحسابات'),
+        100,
+        scrollable: navList,
+      );
+      await tester.tap(find.text('دليل الحسابات'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('النقدية'), findsOneWidget);
+      expect(find.text('إيرادات المبيعات'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('قيد اليومية'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('قيد افتتاحي'), findsOneWidget);
+      expect(find.textContaining('قيد رقم 1042'), findsWidgets);
+
+      await tester.tap(find.textContaining('قيد افتتاحي'));
+      await tester.pumpAndSettle();
+      expect(find.text('5301 — الإيجار'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byTooltip('قيد يدوي جديد'));
+      await tester.pumpAndSettle();
+      expect(find.text('قيد يدوي جديد'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'مدين').at(0),
+        '100',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'دائن').at(1),
+        '100',
+      );
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1101 — النقدية').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4101 — إيرادات المبيعات').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('القيد متوازن'), findsOneWidget);
+
+      await tester.tap(find.text('ترحيل القيد'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('تم إضافة القيد رقم 2001'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'ledger, trial balance and financial statements render and toggle',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      const user = AppUser(
+        id: 'u1',
+        email: 'admin@test.local',
+        name: 'مدير النظام',
+        role: AppRole.admin,
+        tenantId: 't1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith((ref) => Stream.value(user)),
+            dashboardRepositoryProvider.overrideWithValue(
+              _FakeDashboardRepository(),
+            ),
+            accountRepositoryProvider.overrideWithValue(
+              _FakeAccountRepository(),
+            ),
+            journalRepositoryProvider.overrideWithValue(
+              _FakeJournalRepository(),
+            ),
+            reportRepositoryProvider.overrideWithValue(_FakeReportRepository()),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final navList = find.descendant(
+        of: find.byType(SideNavigation),
+        matching: find.byType(Scrollable),
+      );
+
+      await tester.scrollUntilVisible(
+        find.text('الأستاذ العام'),
+        100,
+        scrollable: navList,
+      );
+      await tester.tap(find.text('الأستاذ العام'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('اختر حساباً لعرض حركاته'), findsOneWidget);
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1101 — النقدية').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('فاتورة 1'), findsOneWidget);
+      expect(find.text('رصيد افتتاحي'), findsOneWidget);
+      expect(find.text('الرصيد الختامي'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('ميزان المراجعة'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('الميزان متوازن'), findsOneWidget);
+      expect(find.textContaining('كالتاريخ'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.scrollUntilVisible(
+        find.text('القوائم المالية'),
+        100,
+        scrollable: navList,
+      );
+      await tester.tap(find.text('القوائم المالية'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('صافي الربح (الخسارة)'), findsOneWidget);
+      expect(find.text('إيرادات المبيعات'), findsOneWidget);
+      expect(find.text('الإيجار'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('الميزانية العمومية'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('الميزانية متوازنة'), findsOneWidget);
+      expect(find.text('حقوق الملكية'), findsOneWidget);
+      expect(find.text('صافي الدخل حتى اليوم'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('reminders settings save, send-to-all and log feed render', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -148,17 +345,14 @@ void main() {
       ProviderScope(
         overrides: [
           authStateProvider.overrideWith((ref) => Stream.value(user)),
-          dashboardRepositoryProvider
-              .overrideWithValue(_FakeDashboardRepository()),
-          accountRepositoryProvider
-              .overrideWithValue(_FakeAccountRepository()),
-          journalRepositoryProvider
-              .overrideWithValue(_FakeJournalRepository()),
+          dashboardRepositoryProvider.overrideWithValue(
+            _FakeDashboardRepository(),
+          ),
+          reminderRepositoryProvider.overrideWithValue(
+            _FakeReminderRepository(),
+          ),
         ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: const AppShell(),
-        ),
+        child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
       ),
     );
     await tester.pumpAndSettle();
@@ -168,178 +362,10 @@ void main() {
       matching: find.byType(Scrollable),
     );
     await tester.scrollUntilVisible(
-      find.text('دليل الحسابات'),
+      find.text('الإعدادات'),
       100,
       scrollable: navList,
     );
-    await tester.tap(find.text('دليل الحسابات'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('النقدية'), findsOneWidget);
-    expect(find.text('إيرادات المبيعات'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('قيد اليومية'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('قيد افتتاحي'), findsOneWidget);
-    expect(find.textContaining('قيد رقم 1042'), findsWidgets);
-
-    await tester.tap(find.textContaining('قيد افتتاحي'));
-    await tester.pumpAndSettle();
-    expect(find.text('5301 — الإيجار'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.byTooltip('قيد يدوي جديد'));
-    await tester.pumpAndSettle();
-    expect(find.text('قيد يدوي جديد'), findsOneWidget);
-
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'مدين').at(0),
-      '100',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'دائن').at(1),
-      '100',
-    );
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('1101 — النقدية').last);
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('4101 — إيرادات المبيعات').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('القيد متوازن'), findsOneWidget);
-
-    await tester.tap(find.text('ترحيل القيد'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('تم إضافة القيد رقم 2001'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('ledger, trial balance and financial statements render and toggle',
-      (tester) async {
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    const user = AppUser(
-      id: 'u1',
-      email: 'admin@test.local',
-      name: 'مدير النظام',
-      role: AppRole.admin,
-      tenantId: 't1',
-    );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authStateProvider.overrideWith((ref) => Stream.value(user)),
-          dashboardRepositoryProvider
-              .overrideWithValue(_FakeDashboardRepository()),
-          accountRepositoryProvider
-              .overrideWithValue(_FakeAccountRepository()),
-          journalRepositoryProvider
-              .overrideWithValue(_FakeJournalRepository()),
-          reportRepositoryProvider.overrideWithValue(_FakeReportRepository()),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: const AppShell(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final navList = find.descendant(
-      of: find.byType(SideNavigation),
-      matching: find.byType(Scrollable),
-    );
-
-    await tester.scrollUntilVisible(
-      find.text('الأستاذ العام'),
-      100,
-      scrollable: navList,
-    );
-    await tester.tap(find.text('الأستاذ العام'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('اختر حساباً لعرض حركاته'), findsOneWidget);
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('1101 — النقدية').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('فاتورة 1'), findsOneWidget);
-    expect(find.text('رصيد افتتاحي'), findsOneWidget);
-    expect(find.text('الرصيد الختامي'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('ميزان المراجعة'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('الميزان متوازن'), findsOneWidget);
-    expect(find.textContaining('كالتاريخ'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('القوائم المالية'),
-      100,
-      scrollable: navList,
-    );
-    await tester.tap(find.text('القوائم المالية'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('صافي الربح (الخسارة)'), findsOneWidget);
-    expect(find.text('إيرادات المبيعات'), findsOneWidget);
-    expect(find.text('الإيجار'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('الميزانية العمومية'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('الميزانية متوازنة'), findsOneWidget);
-    expect(find.text('حقوق الملكية'), findsOneWidget);
-    expect(find.text('صافي الدخل حتى اليوم'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('reminders settings save, send-to-all and log feed render',
-      (tester) async {
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    const user = AppUser(
-      id: 'u1',
-      email: 'admin@test.local',
-      name: 'مدير النظام',
-      role: AppRole.admin,
-      tenantId: 't1',
-    );
-
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authStateProvider.overrideWith((ref) => Stream.value(user)),
-        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
-        reminderRepositoryProvider.overrideWithValue(_FakeReminderRepository()),
-      ],
-      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
-    ));
-    await tester.pumpAndSettle();
-
-    final navList = find.descendant(
-      of: find.byType(SideNavigation),
-      matching: find.byType(Scrollable),
-    );
-    await tester.scrollUntilVisible(find.text('الإعدادات'), 100,
-        scrollable: navList);
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
 
@@ -370,8 +396,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('customers remind action is admin-only and sends a reminder',
-      (tester) async {
+  testWidgets('customers remind action is admin-only and sends a reminder', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -384,23 +411,34 @@ void main() {
       tenantId: 't1',
     );
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authStateProvider.overrideWith((ref) => Stream.value(user)),
-        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
-        customerRepositoryProvider.overrideWithValue(_FakeCustomerRepository()),
-        reminderRepositoryProvider.overrideWithValue(_FakeReminderRepository()),
-      ],
-      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => Stream.value(user)),
+          dashboardRepositoryProvider.overrideWithValue(
+            _FakeDashboardRepository(),
+          ),
+          customerRepositoryProvider.overrideWithValue(
+            _FakeCustomerRepository(),
+          ),
+          reminderRepositoryProvider.overrideWithValue(
+            _FakeReminderRepository(),
+          ),
+        ],
+        child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final navList = find.descendant(
       of: find.byType(SideNavigation),
       matching: find.byType(Scrollable),
     );
-    await tester.scrollUntilVisible(find.text('العملاء'), 100,
-        scrollable: navList);
+    await tester.scrollUntilVisible(
+      find.text('العملاء'),
+      100,
+      scrollable: navList,
+    );
     await tester.tap(find.text('العملاء'));
     await tester.pumpAndSettle();
 
@@ -415,8 +453,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('customers remind action is hidden for the sales role',
-      (tester) async {
+  testWidgets('customers remind action is hidden for the sales role', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -429,22 +468,31 @@ void main() {
       tenantId: 't1',
     );
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authStateProvider.overrideWith((ref) => Stream.value(user)),
-        dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
-        customerRepositoryProvider.overrideWithValue(_FakeCustomerRepository()),
-      ],
-      child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => Stream.value(user)),
+          dashboardRepositoryProvider.overrideWithValue(
+            _FakeDashboardRepository(),
+          ),
+          customerRepositoryProvider.overrideWithValue(
+            _FakeCustomerRepository(),
+          ),
+        ],
+        child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final navList = find.descendant(
       of: find.byType(SideNavigation),
       matching: find.byType(Scrollable),
     );
-    await tester.scrollUntilVisible(find.text('العملاء'), 100,
-        scrollable: navList);
+    await tester.scrollUntilVisible(
+      find.text('العملاء'),
+      100,
+      scrollable: navList,
+    );
     await tester.tap(find.text('العملاء'));
     await tester.pumpAndSettle();
 
@@ -521,12 +569,12 @@ class _FakeAccountRepository implements AccountRepository {
 
   @override
   Future<Account> create(AccountDraft draft) async => Account(
-        id: 'a-new',
-        code: draft.code,
-        name: draft.name,
-        type: draft.type,
-        balance: 0,
-      );
+    id: 'a-new',
+    code: draft.code,
+    name: draft.name,
+    type: draft.type,
+    balance: 0,
+  );
 }
 
 class _FakeJournalRepository implements JournalRepository {
@@ -544,8 +592,18 @@ class _FakeJournalRepository implements JournalRepository {
         'source_type': 'manual',
         'total': 5000,
         'lines': [
-          {'account_code': '5301', 'account_name': 'الإيجار', 'debit': 5000, 'credit': 0},
-          {'account_code': '1101', 'account_name': 'النقدية', 'debit': 0, 'credit': 5000},
+          {
+            'account_code': '5301',
+            'account_name': 'الإيجار',
+            'debit': 5000,
+            'credit': 0,
+          },
+          {
+            'account_code': '1101',
+            'account_name': 'النقدية',
+            'debit': 0,
+            'credit': 5000,
+          },
         ],
       }),
       JournalEntry.fromJson({
@@ -562,11 +620,7 @@ class _FakeJournalRepository implements JournalRepository {
 
   @override
   Future<JournalEntryResult> createManual(ManualJournalDraft draft) async {
-    return const JournalEntryResult(
-      entryId: 'e3',
-      entryNo: 2001,
-      total: 10000,
-    );
+    return const JournalEntryResult(entryId: 'e3', entryNo: 2001, total: 10000);
   }
 }
 
@@ -735,33 +789,34 @@ class _FakeReminderRepository implements ReminderRepository {
 
   @override
   Future<List<ReminderLogEntry>> reminderLog({int limit = 50}) async => [
-        ReminderLogEntry.fromJson({
-          'id': 'r1',
-          'customer_id': 'c1',
-          'customers': {'name': 'عميل تجريبي'},
-          'amount': 5500,
-          'phone': '0599111222',
-          'message': 'عميل تجريبي يرجى سداد 55 شيكل',
-          'status': 'sent',
-          'created_at': '2026-09-09T09:00:00+00:00',
-        }),
-        ReminderLogEntry.fromJson({
-          'id': 'r2',
-          'customer_id': 'c2',
-          'customers': {'name': 'عميل ثان'},
-          'amount': 12000,
-          'phone': '0599122333',
-          'message': 'عميل ثان يرجى سداد 120 شيكل',
-          'status': 'failed',
-          'created_at': '2026-09-08T09:00:00+00:00',
-        }),
-      ];
+    ReminderLogEntry.fromJson({
+      'id': 'r1',
+      'customer_id': 'c1',
+      'customers': {'name': 'عميل تجريبي'},
+      'amount': 5500,
+      'phone': '0599111222',
+      'message': 'عميل تجريبي يرجى سداد 55 شيكل',
+      'status': 'sent',
+      'created_at': '2026-09-09T09:00:00+00:00',
+    }),
+    ReminderLogEntry.fromJson({
+      'id': 'r2',
+      'customer_id': 'c2',
+      'customers': {'name': 'عميل ثان'},
+      'amount': 12000,
+      'phone': '0599122333',
+      'message': 'عميل ثان يرجى سداد 120 شيكل',
+      'status': 'failed',
+      'created_at': '2026-09-08T09:00:00+00:00',
+    }),
+  ];
 }
 
 class _FakeCustomerRepository implements CustomerRepository {
   @override
-  Future<List<Customer>> listAll({String? search}) async =>
-      const [Customer(id: 'c1', name: 'عميل تجريبي', phone: '0599111222')];
+  Future<List<Customer>> listAll({String? search}) async => const [
+    Customer(id: 'c1', name: 'عميل تجريبي', phone: '0599111222'),
+  ];
 
   @override
   Future<Customer?> getById(String id) async => null;
@@ -771,7 +826,10 @@ class _FakeCustomerRepository implements CustomerRepository {
       Customer(id: 'new-c', name: draft.name, phone: draft.phone);
 
   @override
-  Future<void> update({required String id, required CustomerDraft draft}) async {}
+  Future<void> update({
+    required String id,
+    required CustomerDraft draft,
+  }) async {}
 
   @override
   Future<void> delete(String id) async {}
