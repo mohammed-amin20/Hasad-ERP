@@ -128,9 +128,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                 .createManual(draft);
             if (context.mounted) Navigator.of(context).pop();
             messenger.showSnackBar(
-              SnackBar(
-                content: Text('تم إضافة القيد رقم ${result.entryNo}'),
-              ),
+              SnackBar(content: Text('تم إضافة القيد رقم ${result.entryNo}')),
             );
           } on Object catch (error) {
             messenger.showSnackBar(
@@ -260,10 +258,8 @@ class _EntryTile extends StatelessWidget {
         shape: const Border(),
         collapsedShape: const Border(),
         leading: CircleAvatar(
-          backgroundColor:
-              (manual ? AppColors.warning : AppColors.success).withValues(
-            alpha: 0.12,
-          ),
+          backgroundColor: (manual ? AppColors.warning : AppColors.success)
+              .withValues(alpha: 0.12),
           child: FaIcon(
             manual ? FontAwesomeIcons.pen : FontAwesomeIcons.bolt,
             size: 16,
@@ -333,11 +329,9 @@ class _SourceBadge extends StatelessWidget {
       child: Text(
         manual ? 'يدوي' : 'آلي',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: manual
-                  ? AppColors.badgeCommissionFg
-                  : AppColors.badgePaidFg,
-              fontWeight: FontWeight.w700,
-            ),
+          color: manual ? AppColors.badgeCommissionFg : AppColors.badgePaidFg,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -348,10 +342,8 @@ class _LineHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppColors.textMuted,
-          fontWeight: FontWeight.w700,
-        );
+    final style = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w700);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: Row(
@@ -395,17 +387,11 @@ class _LineRow extends StatelessWidget {
           ),
           Expanded(
             flex: 2,
-            child: Text(
-              debit > 0 ? Money.format(debit) : '',
-              style: cell,
-            ),
+            child: Text(debit > 0 ? Money.format(debit) : '', style: cell),
           ),
           Expanded(
             flex: 2,
-            child: Text(
-              credit > 0 ? Money.format(credit) : '',
-              style: cell,
-            ),
+            child: Text(credit > 0 ? Money.format(credit) : '', style: cell),
           ),
         ],
       ),
@@ -468,14 +454,14 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
   }
 
   List<ManualJournalLineDraft> _collect() => [
-        for (final l in _lines)
-          if (l.accountId != null)
-            ManualJournalLineDraft(
-              accountId: l.accountId!,
-              debit: l.debit,
-              credit: l.credit,
-            ),
-      ];
+    for (final l in _lines)
+      if (l.accountId != null)
+        ManualJournalLineDraft(
+          accountId: l.accountId!,
+          debit: l.debit,
+          credit: l.credit,
+        ),
+  ];
 
   String? _validate() {
     for (var i = 0; i < _lines.length; i++) {
@@ -493,8 +479,11 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
     }
     final drafts = _collect();
     if (drafts.length < 2) return 'أدخل سطرين على الأقل (مدين ودائن)';
-    final draft =
-        ManualJournalDraft(date: _date, memo: _memoCtrl.text.trim(), lines: drafts);
+    final draft = ManualJournalDraft(
+      date: _date,
+      memo: _memoCtrl.text.trim(),
+      lines: drafts,
+    );
     if (!draft.isBalanced) {
       return 'القيد غير متوازن: مدين ${Money.format(draft.debitTotal)} '
           '≠ دائن ${Money.format(draft.creditTotal)}';
@@ -552,6 +541,7 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomPadding),
       child: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -569,8 +559,10 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                   onTap: _pickDate,
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.border),
@@ -585,9 +577,8 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                         const SizedBox(width: 12),
                         Text(
                           'التاريخ: ${_fmtDate(_date)}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -608,9 +599,8 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                 children: [
                   Text(
                     'السطور',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const Spacer(),
                   TextButton.icon(
@@ -646,49 +636,33 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
-                          flex: 3,
-                          child: Text('المدين'),
-                        ),
+                        const Expanded(flex: 3, child: Text('المدين')),
                         Expanded(
                           flex: 2,
                           child: Text(
                             Money.format(debitTotal),
                             textAlign: TextAlign.end,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
+                            style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        const Expanded(
-                          flex: 2,
-                          child: Text(''),
-                        ),
+                        const Expanded(flex: 2, child: Text('')),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Expanded(
-                          flex: 3,
-                          child: Text('الدائن'),
-                        ),
+                        const Expanded(flex: 3, child: Text('الدائن')),
                         Expanded(
                           flex: 2,
                           child: Text(
                             Money.format(creditTotal),
                             textAlign: TextAlign.end,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
+                            style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        const Expanded(
-                          flex: 2,
-                          child: Text(''),
-                        ),
+                        const Expanded(flex: 2, child: Text('')),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -701,9 +675,9 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                       Text(
                         _balanceError!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.danger,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          color: AppColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ],
@@ -746,10 +720,8 @@ class _StatusPill extends StatelessWidget {
         ),
         child: Text(
           balanced ? 'القيد متوازن' : 'القيد غير متوازن',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: color, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -826,9 +798,8 @@ class _ManualLineEditor extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               'تعذّر تحميل الحسابات — حدّث دليل الحسابات ثم أعد فتح النموذج',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.danger,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.danger),
             ),
           ),
         const SizedBox(height: 8),
@@ -837,8 +808,9 @@ class _ManualLineEditor extends StatelessWidget {
             Expanded(
               child: TextFormField(
                 controller: fields.debitCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -853,8 +825,9 @@ class _ManualLineEditor extends StatelessWidget {
             Expanded(
               child: TextFormField(
                 controller: fields.creditCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -928,10 +901,7 @@ class _ErrorState extends StatelessWidget {
               color: AppColors.danger,
             ),
             const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('حدث خطأ', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,

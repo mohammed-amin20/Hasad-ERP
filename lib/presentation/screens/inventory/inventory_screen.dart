@@ -50,7 +50,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Column(
@@ -87,10 +91,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 final filtered = _query.isEmpty
                     ? products
                     : products
-                        .where((p) =>
-                            p.name.contains(_query) ||
-                            (p.barcode?.contains(_query) ?? false))
-                        .toList();
+                          .where(
+                            (p) =>
+                                p.name.contains(_query) ||
+                                (p.barcode?.contains(_query) ?? false),
+                          )
+                          .toList();
                 if (filtered.isEmpty) {
                   return const _EmptyState();
                 }
@@ -191,9 +197,7 @@ class _ProductStockTile extends StatelessWidget {
         onPressed: onCount,
         icon: const FaIcon(FontAwesomeIcons.clipboardCheck, size: 18),
         label: const Text('جرد'),
-        style: OutlinedButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-        ),
+        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
       ),
     );
   }
@@ -268,6 +272,7 @@ class _CountSheetState extends State<_CountSheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomPadding),
       child: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -346,16 +351,20 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.boxesStacked,
-                size: 48, color: AppColors.textMuted),
+            const FaIcon(
+              FontAwesomeIcons.boxesStacked,
+              size: 48,
+              color: AppColors.textMuted,
+            ),
             const SizedBox(height: 16),
-            Text('لا توجد منتجات', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا توجد منتجات',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'أضف منتجات من شاشة المنتجات ثم قم بجردها هنا',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textMuted),
             ),
           ],
@@ -378,16 +387,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
+            ),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

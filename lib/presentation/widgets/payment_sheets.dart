@@ -31,8 +31,10 @@ void showSettleSupplierSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        _SettleSupplierSheet(supplierId: supplierId, supplierName: supplierName),
+    builder: (_) => _SettleSupplierSheet(
+      supplierId: supplierId,
+      supplierName: supplierName,
+    ),
   );
 }
 
@@ -47,6 +49,7 @@ class _RecordPaymentSheet extends ConsumerStatefulWidget {
 }
 
 class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
+  final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   String? _method = 'cash';
   DateTime _date = DateTime.now();
@@ -82,44 +85,22 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    final amount = priceToAgorot(_amountCtrl.text.trim());
-    if (amount == null || amount <= 0) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('أدخل مبلغ دفع صحيحاً'),
-        ),
-      );
-      return;
-    }
-    if (amount > invoice.remaining) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('المبلغ أكبر من المتبقي على الفاتورة'),
-        ),
-      );
-      return;
-    }
-    if (_method == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('اختر طريقة الدفع'),
-        ),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    final amount = priceToAgorot(_amountCtrl.text.trim())!;
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(paymentActionsProvider.notifier).record(
+      final result = await ref
+          .read(paymentActionsProvider.notifier)
+          .record(
             PaymentDraft(
               invoiceId: invoice.id,
               amount: amount,
               method: _method!,
               date: _date,
-              note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+              note: _noteCtrl.text.trim().isEmpty
+                  ? null
+                  : _noteCtrl.text.trim(),
             ),
           );
       navigator.pop();
@@ -154,84 +135,98 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
         top: 24,
         bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'تسجيل دفعة',
-            style: theme.textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'فاتورة ${invoice.no} · المتبقي ${Money.format(invoice.remaining)}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: PriceField(
-                  controller: _amountCtrl,
-                  label: 'المبلغ',
-                ),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('تسجيل دفعة', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'فاتورة ${invoice.no} · المتبقي ${Money.format(invoice.remaining)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _method,
-                  decoration: InputDecoration(
-                    labelText: 'طريقة الدفع',
-                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: PriceField(
+                    controller: _amountCtrl,
+                    label: 'المبلغ',
+                    requiredMessage: 'أدخل مبلغ دفع صحيحاً',
+                    extraValidator: (v) {
+                      final amount = priceToAgorot(v ?? '');
+                      if (amount == null || amount <= 0) {
+                        return 'أدخل مبلغ دفع صحيحاً';
+                      }
+                      if (amount > invoice.remaining) {
+                        return 'المبلغ أكبر من المتبقي على الفاتورة';
+                      }
+                      return null;
+                    },
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('نقدي')),
-                    DropdownMenuItem(value: 'bank', child: Text('بنك')),
-                  ],
-                  onChanged: (v) => setState(() => _method = v),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _method,
+                    decoration: InputDecoration(
+                      labelText: 'طريقة الدفع',
+                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'cash', child: Text('نقدي')),
+                      DropdownMenuItem(value: 'bank', child: Text('بنك')),
+                    ],
+                    onChanged: (v) => setState(() => _method = v),
+                    validator: (v) => v == null ? 'اختر طريقة الدفع' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickDate,
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'تاريخ الدفعة',
+                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                ),
+                child: Text(formatInvoiceDate(_date)),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: _pickDate,
-            child: InputDecorator(
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _noteCtrl,
+              textInputAction: TextInputAction.done,
+              maxLines: 2,
               decoration: InputDecoration(
-                labelText: 'تاريخ الدفعة',
-                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                labelText: 'ملاحظات',
+                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
               ),
-              child: Text(formatInvoiceDate(_date)),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _noteCtrl,
-            textInputAction: TextInputAction.done,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'ملاحظات',
-              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('حفظ الدفعة'),
             ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _submitting ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('حفظ الدفعة'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -252,6 +247,7 @@ class _SettleSupplierSheet extends ConsumerStatefulWidget {
 }
 
 class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
+  final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   String? _method = 'cash';
   DateTime _date = DateTime.now();
@@ -282,35 +278,22 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    final amount = priceToAgorot(_amountCtrl.text.trim());
-    if (amount == null || amount <= 0) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('أدخل مبلغ تسوية صحيحاً'),
-        ),
-      );
-      return;
-    }
-    if (_method == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('اختر طريقة الدفع'),
-        ),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    final amount = priceToAgorot(_amountCtrl.text.trim())!;
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(paymentActionsProvider.notifier).settle(
+      final result = await ref
+          .read(paymentActionsProvider.notifier)
+          .settle(
             SettlementDraft(
               supplierId: supplierId,
               amount: amount,
               method: _method!,
               date: _date,
-              note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+              note: _noteCtrl.text.trim().isEmpty
+                  ? null
+                  : _noteCtrl.text.trim(),
             ),
           );
       navigator.pop();
@@ -320,7 +303,7 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
             result.duplicate
                 ? 'التسوية مسجلة بالفعل'
                 : 'تمت التسوية: ${result.invoicesCount} فاتورة و '
-                    '${result.duesCount} عمولة بإجمالي ${Money.format(result.total)}',
+                      '${result.duesCount} عمولة بإجمالي ${Money.format(result.total)}',
           ),
         ),
       );
@@ -346,84 +329,95 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
         top: 24,
         bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'تسوية المورد',
-            style: theme.textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$supplierName — تُسوى أقدم الفواتير والعمولات أولاً',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: PriceField(
-                  controller: _amountCtrl,
-                  label: 'المبلغ',
-                ),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('تسوية المورد', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              '$supplierName — تُسوى أقدم الفواتير والعمولات أولاً',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _method,
-                  decoration: InputDecoration(
-                    labelText: 'طريقة الدفع',
-                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: PriceField(
+                    controller: _amountCtrl,
+                    label: 'المبلغ',
+                    requiredMessage: 'أدخل مبلغ تسوية صحيحاً',
+                    extraValidator: (v) {
+                      final amount = priceToAgorot(v ?? '');
+                      if (amount == null || amount <= 0) {
+                        return 'أدخل مبلغ تسوية صحيحاً';
+                      }
+                      return null;
+                    },
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('نقدي')),
-                    DropdownMenuItem(value: 'bank', child: Text('بنك')),
-                  ],
-                  onChanged: (v) => setState(() => _method = v),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _method,
+                    decoration: InputDecoration(
+                      labelText: 'طريقة الدفع',
+                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'cash', child: Text('نقدي')),
+                      DropdownMenuItem(value: 'bank', child: Text('بنك')),
+                    ],
+                    onChanged: (v) => setState(() => _method = v),
+                    validator: (v) => v == null ? 'اختر طريقة الدفع' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickDate,
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'تاريخ التسوية',
+                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                ),
+                child: Text(formatInvoiceDate(_date)),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: _pickDate,
-            child: InputDecorator(
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _noteCtrl,
+              textInputAction: TextInputAction.done,
+              maxLines: 2,
               decoration: InputDecoration(
-                labelText: 'تاريخ التسوية',
-                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                labelText: 'ملاحظات',
+                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
               ),
-              child: Text(formatInvoiceDate(_date)),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _noteCtrl,
-            textInputAction: TextInputAction.done,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'ملاحظات',
-              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('تنفيذ التسوية'),
             ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _submitting ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('تنفيذ التسوية'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

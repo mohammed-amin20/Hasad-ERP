@@ -18,8 +18,7 @@ class SaleInvoicesScreen extends ConsumerStatefulWidget {
   const SaleInvoicesScreen({super.key});
 
   @override
-  ConsumerState<SaleInvoicesScreen> createState() =>
-      _SaleInvoicesScreenState();
+  ConsumerState<SaleInvoicesScreen> createState() => _SaleInvoicesScreenState();
 }
 
 class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
@@ -64,10 +63,14 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
       title: 'المبيعات',
       subtitle: 'إنشاء ومتابعة فواتير البيع',
       actions: [
-IconButton(
+        IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -85,14 +88,18 @@ IconButton(
                         ref.read(saleSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث برقم الفاتورة...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
-? IconButton(
+                          ? IconButton(
                               tooltip: 'مسح البحث',
                               icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();
-                                ref.read(saleSearchProvider.notifier).update('');
+                                ref
+                                    .read(saleSearchProvider.notifier)
+                                    .update('');
                               },
                             )
                           : null,
@@ -114,8 +121,7 @@ IconButton(
                         context: context,
                         isScrollControlled: true,
                         useSafeArea: true,
-                        builder: (_) =>
-                            InvoiceDetailSheet(invoice: invoice),
+                        builder: (_) => InvoiceDetailSheet(invoice: invoice),
                       ),
                     );
                   },
@@ -251,7 +257,9 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(saleRepositoryProvider).create(
+      final result = await ref
+          .read(saleRepositoryProvider)
+          .create(
             SaleInvoiceDraft(
               customerId: _customerId!,
               date: _date,
@@ -302,6 +310,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
       child: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -312,8 +321,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
               ),
               const SizedBox(height: 16),
               customersAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ListErrorState(message: e.toString()),
                 data: (customers) => DropdownButtonFormField<String>(
                   initialValue: _customerId,
@@ -351,10 +359,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'الأصناف',
-                      style: theme.textTheme.titleMedium,
-                    ),
+                    child: Text('الأصناف', style: theme.textTheme.titleMedium),
                   ),
                   TextButton.icon(
                     onPressed: _addLine,
@@ -398,8 +403,9 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   Expanded(
                     child: TextFormField(
                       controller: _paidCtrl,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'المدفوع',
                         prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
@@ -511,9 +517,7 @@ class _LineRowState extends State<_LineRow> {
                 Expanded(
                   child: Text(
                     product.name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
+                    style: Theme.of(context).textTheme.bodyLarge
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -562,9 +566,9 @@ class _LineRowState extends State<_LineRow> {
                   Text(
                     Money.format(_lineTotal()),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ],
               ),
@@ -594,19 +598,20 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.receipt,
+            FaIcon(
+              FontAwesomeIcons.receipt,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
-            Text('لا توجد فواتير بيع',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا توجد فواتير بيع',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإنشاء أول فاتورة',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textMuted),
             ),
           ],

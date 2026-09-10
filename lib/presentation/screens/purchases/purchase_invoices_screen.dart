@@ -68,10 +68,14 @@ class _PurchaseInvoicesScreenState
       title: 'المشتريات',
       subtitle: 'استلام مباشر وبالعمولة (بضاعة أمانة)',
       actions: [
-IconButton(
+        IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -89,9 +93,11 @@ IconButton(
                         ref.read(purchaseSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث برقم الفاتورة...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
-? IconButton(
+                          ? IconButton(
                               tooltip: 'مسح البحث',
                               icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
@@ -120,8 +126,7 @@ IconButton(
                         context: context,
                         isScrollControlled: true,
                         useSafeArea: true,
-                        builder: (_) =>
-                            InvoiceDetailSheet(invoice: invoice),
+                        builder: (_) => InvoiceDetailSheet(invoice: invoice),
                       ),
                     );
                   },
@@ -202,8 +207,7 @@ class _NewPurchaseInvoicePageState
     super.dispose();
   }
 
-  bool get _isConsignment =>
-      _supplier?.dealType == SupplierDealType.commission;
+  bool get _isConsignment => _supplier?.dealType == SupplierDealType.commission;
 
   int get _subtotal {
     var sum = 0;
@@ -306,7 +310,9 @@ class _NewPurchaseInvoicePageState
       _showError('أضف على الأقل صنفاً واحداً');
       return;
     }
-    final paid = _isConsignment ? 0 : (priceToAgorot(_paidCtrl.text.trim()) ?? 0);
+    final paid = _isConsignment
+        ? 0
+        : (priceToAgorot(_paidCtrl.text.trim()) ?? 0);
     if (!_isConsignment && paid > 0 && _paymentMethod == null) {
       _showError('اختر طريقة الدفع عند الدفع');
       return;
@@ -318,7 +324,9 @@ class _NewPurchaseInvoicePageState
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(purchaseRepositoryProvider).create(
+      final result = await ref
+          .read(purchaseRepositoryProvider)
+          .create(
             PurchaseInvoiceDraft(
               supplierId: _supplierId!,
               date: _date,
@@ -365,11 +373,12 @@ class _NewPurchaseInvoicePageState
     final theme = Theme.of(context);
     final suppliersAsync = ref.watch(allSuppliersProvider);
 
-return Container(
+    return Container(
       color: AppColors.background,
       child: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -380,8 +389,7 @@ return Container(
               ),
               const SizedBox(height: 16),
               suppliersAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ListErrorState(message: e.toString()),
                 data: (suppliers) => DropdownButtonFormField<String>(
                   initialValue: _supplierId,
@@ -422,7 +430,7 @@ return Container(
               if (_isConsignment) ...[
                 const SizedBox(height: 12),
                 StatusBadge(
-label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُسدَّد لاحقاً',
+                  label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُسدَّد لاحقاً',
                   palette: BadgePalette.commission,
                 ),
               ],
@@ -442,10 +450,7 @@ label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُ
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'الأصناف',
-                      style: theme.textTheme.titleMedium,
-                    ),
+                    child: Text('الأصناف', style: theme.textTheme.titleMedium),
                   ),
                   TextButton.icon(
                     onPressed: _addLine,
@@ -495,7 +500,8 @@ label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُ
                           controller: _paidCtrl,
                           enabled: !_isConsignment,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             labelText: 'المدفوع',
                             prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
@@ -516,8 +522,7 @@ label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُ
                           initialValue: _paymentMethod,
                           decoration: const InputDecoration(
                             labelText: 'طريقة الدفع',
-                            prefixIcon:
-                                FaIcon(FontAwesomeIcons.wallet),
+                            prefixIcon: FaIcon(FontAwesomeIcons.wallet),
                           ),
                           items: [
                             for (final m in _paymentMethods)
@@ -526,8 +531,7 @@ label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُ
                                 child: Text(m.label),
                               ),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _paymentMethod = v),
+                          onChanged: (v) => setState(() => _paymentMethod = v),
                         ),
                       ),
                     ],
@@ -614,15 +618,16 @@ class _PurchaseLineRowState extends State<_PurchaseLineRow> {
                       Flexible(
                         child: Text(
                           entry.name,
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (entry.isNew) ...[
                         const SizedBox(width: 8),
                         StatusBadge(
-label: 'منتج جديد',
+                          label: 'منتج جديد',
                           palette: BadgePalette.commission,
                         ),
                       ],
@@ -666,10 +671,7 @@ label: 'منتج جديد',
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'إجمالي السطر: ',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  Text('إجمالي السطر: ', style: theme.textTheme.bodySmall),
                   const SizedBox(width: 4),
                   Text(
                     Money.format(_lineTotal()),
@@ -706,19 +708,20 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.bookOpen,
+            FaIcon(
+              FontAwesomeIcons.bookOpen,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
-            Text('لا توجد فواتير شراء',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا توجد فواتير شراء',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإنشاء أول فاتورة',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textMuted),
             ),
           ],

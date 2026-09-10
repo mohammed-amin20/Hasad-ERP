@@ -22,8 +22,11 @@ void showAddMovementSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        _AddMovementSheet(employeeName: employeeName, employeeId: employeeId, month: month),
+    builder: (_) => _AddMovementSheet(
+      employeeName: employeeName,
+      employeeId: employeeId,
+      month: month,
+    ),
   );
 }
 
@@ -64,6 +67,7 @@ class _AddMovementSheet extends ConsumerStatefulWidget {
 }
 
 class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
+  final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
@@ -92,13 +96,13 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
       : const ['advance', 'product', 'other'];
 
   String _categoryLabel(String c) => switch (c) {
-        'bonus' => 'مكافأة',
-        'allowance' => 'بدل',
-        'advance' => 'سلفة',
-        'product' => 'منتج',
-        'other' => 'أخرى',
-        _ => c,
-      };
+    'bonus' => 'مكافأة',
+    'allowance' => 'بدل',
+    'advance' => 'سلفة',
+    'product' => 'منتج',
+    'other' => 'أخرى',
+    _ => c,
+  };
 
   void _onDirectionChanged(String? v) {
     if (v == null) return;
@@ -128,45 +132,31 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
+    if (_isProduct && _product == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text('اختر المنتج'),
+        ),
+      );
+      return;
+    }
+    if (!_formKey.currentState!.validate()) return;
+
     int? amount;
     double? qty;
     if (_isProduct) {
-      if (_product == null) {
-        messenger.showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.danger,
-            content: Text('اختر المنتج'),
-          ),
-        );
-        return;
-      }
-      qty = double.tryParse(_qtyCtrl.text.trim());
-      if (qty == null || qty <= 0) {
-        messenger.showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.danger,
-            content: Text('أدخل كمية صحيحة'),
-          ),
-        );
-        return;
-      }
+      qty = double.parse(_qtyCtrl.text.trim());
       _amountCtrl.clear();
     } else {
-      amount = priceToAgorot(_amountCtrl.text.trim(), allowZero: false);
-      if (amount == null || amount <= 0) {
-        messenger.showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.danger,
-            content: Text('أدخل مبلغاً صحيحاً'),
-          ),
-        );
-        return;
-      }
+      amount = priceToAgorot(_amountCtrl.text.trim(), allowZero: false)!;
     }
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(salaryActionsProvider.notifier).movement(
+      final result = await ref
+          .read(salaryActionsProvider.notifier)
+          .movement(
             MovementDraft(
               employeeId: _employeeId,
               month: _month,
@@ -213,126 +203,139 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
         top: 24,
         bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'حركة شهرية',
-              style: theme.textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${widget.employeeName} · ${_month.year}/${_month.month.toString().padLeft(2, '0')}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _direction,
-                    decoration: InputDecoration(
-                      labelText: 'الجهة',
-                      prefixIcon: FaIcon(FontAwesomeIcons.arrowsUpDown),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('حركة شهرية', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.employeeName} · ${_month.year}/${_month.month.toString().padLeft(2, '0')}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _direction,
+                      decoration: InputDecoration(
+                        labelText: 'الجهة',
+                        prefixIcon: FaIcon(FontAwesomeIcons.arrowsUpDown),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'in', child: Text('إضافة')),
+                        DropdownMenuItem(value: 'out', child: Text('خصم')),
+                      ],
+                      onChanged: _onDirectionChanged,
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'in', child: Text('إضافة')),
-                      DropdownMenuItem(value: 'out', child: Text('خصم')),
-                    ],
-                    onChanged: _onDirectionChanged,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _category,
+                      decoration: InputDecoration(
+                        labelText: 'النوع',
+                        prefixIcon: Icon(Icons.category_outlined),
+                      ),
+                      items: [
+                        for (final c in _categories(_direction!))
+                          DropdownMenuItem(
+                            value: c,
+                            child: Text(_categoryLabel(c)),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _category = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_isProduct) ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _pickProduct,
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'المنتج',
+                      prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
+                    ),
+                    child: Text(
+                      _product == null
+                          ? 'اختر منتجاً...'
+                          : '${_product!.name} · المتوفر ${formatQty(_product!.qty, _product!.unitType)}',
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _category,
-                    decoration: InputDecoration(
-                      labelText: 'النوع',
-                      prefixIcon: Icon(Icons.category_outlined),
-                    ),
-                    items: [
-                      for (final c in _categories(_direction!))
-                        DropdownMenuItem(
-                          value: c,
-                          child: Text(_categoryLabel(c)),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _category = v);
-                    },
-                  ),
+                const SizedBox(height: 12),
+                ProductQuantityField(
+                  controller: _qtyCtrl,
+                  unitType: _product?.unitType ?? ProductUnitType.count,
+                  unit: _product?.unit ?? 'قطعة',
+                ),
+              ] else ...[
+                PriceField(
+                  controller: _amountCtrl,
+                  label: 'المبلغ',
+                  requiredMessage: 'أدخل مبلغاً صحيحاً',
+                  extraValidator: (v) {
+                    final amount = priceToAgorot(v ?? '');
+                    if (amount == null || amount <= 0) {
+                      return 'أدخل مبلغاً صحيحاً';
+                    }
+                    return null;
+                  },
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            if (_isProduct) ...[
+              const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: _pickProduct,
+                onTap: _pickDate,
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'المنتج',
-                    prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
+                    labelText: 'تاريخ الحركة',
+                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(
-                    _product == null
-                        ? 'اختر منتجاً...'
-                        : '${_product!.name} · المتوفر ${formatQty(_product!.qty, _product!.unitType)}',
+                    '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
                   ),
                 ),
               ),
               const SizedBox(height: 12),
-              ProductQuantityField(
-                controller: _qtyCtrl,
-                unitType: _product?.unitType ?? ProductUnitType.count,
-                unit: _product?.unit ?? 'قطعة',
-              ),
-            ] else ...[
-              PriceField(controller: _amountCtrl, label: 'المبلغ'),
-            ],
-            const SizedBox(height: 12),
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _pickDate,
-              child: InputDecorator(
+              TextFormField(
+                controller: _noteCtrl,
+                textInputAction: TextInputAction.done,
+                maxLines: 2,
                 decoration: InputDecoration(
-                  labelText: 'تاريخ الحركة',
-                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
-                ),
-                child: Text(
-                  '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
+                  labelText: 'وصف الحركة',
+                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _noteCtrl,
-              textInputAction: TextInputAction.done,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'وصف الحركة',
-                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _submitting ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text('حفظ الحركة'),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _submitting ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text('حفظ الحركة'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -357,6 +360,7 @@ class _PaySalarySheet extends ConsumerStatefulWidget {
 }
 
 class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
+  final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String? _method = 'cash';
@@ -394,45 +398,23 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    final paid = priceToAgorot(_amountCtrl.text.trim(), allowZero: false);
-    if (paid == null || paid <= 0) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('أدخل مبلغ صرف صحيحاً'),
-        ),
-      );
-      return;
-    }
-    if (paid > entitlement.netDue) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('المبلغ أكبر من صافي المستحقات'),
-        ),
-      );
-      return;
-    }
-    if (_method == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('اختر طريقة الدفع'),
-        ),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    final paid = priceToAgorot(_amountCtrl.text.trim(), allowZero: false)!;
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(salaryActionsProvider.notifier).pay(
+      final result = await ref
+          .read(salaryActionsProvider.notifier)
+          .pay(
             SalaryDraft(
               employeeId: widget.employeeId,
               month: widget.month,
               paid: paid,
               method: _method!,
               date: _date,
-              note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+              note: _noteCtrl.text.trim().isEmpty
+                  ? null
+                  : _noteCtrl.text.trim(),
             ),
           );
       navigator.pop();
@@ -442,7 +424,7 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
             result.duplicate
                 ? 'راتب هذا الشهر مسجل بالفعل'
                 : 'تم صرف الراتب — قيد ${result.entryNo}'
-                    '${result.arrearsCarried > 0 ? ' (متبقي ${Money.format(result.arrearsCarried)})' : ''}',
+                      '${result.arrearsCarried > 0 ? ' (متبقي ${Money.format(result.arrearsCarried)})' : ''}',
           ),
         ),
       );
@@ -468,86 +450,100 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
         top: 24,
         bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'صرف الراتب',
-            style: theme.textTheme.titleLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.employeeName} · صافي المستحقات ${Money.format(entitlement.netDue)}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: PriceField(
-                  controller: _amountCtrl,
-                  label: 'المبلغ المصروف',
-                ),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('صرف الراتب', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.employeeName} · صافي المستحقات ${Money.format(entitlement.netDue)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _method,
-                  decoration: InputDecoration(
-                    labelText: 'طريقة الدفع',
-                    prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: PriceField(
+                    controller: _amountCtrl,
+                    label: 'المبلغ المصروف',
+                    requiredMessage: 'أدخل مبلغ صرف صحيحاً',
+                    extraValidator: (v) {
+                      final paid = priceToAgorot(v ?? '');
+                      if (paid == null || paid <= 0) {
+                        return 'أدخل مبلغ صرف صحيحاً';
+                      }
+                      if (paid > entitlement.netDue) {
+                        return 'المبلغ أكبر من صافي المستحقات';
+                      }
+                      return null;
+                    },
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('نقدي')),
-                    DropdownMenuItem(value: 'bank', child: Text('بنك')),
-                  ],
-                  onChanged: (v) => setState(() => _method = v),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _method,
+                    decoration: InputDecoration(
+                      labelText: 'طريقة الدفع',
+                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'cash', child: Text('نقدي')),
+                      DropdownMenuItem(value: 'bank', child: Text('بنك')),
+                    ],
+                    onChanged: (v) => setState(() => _method = v),
+                    validator: (v) => v == null ? 'اختر طريقة الدفع' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickDate,
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'تاريخ الصرف',
+                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                ),
+                child: Text(
+                  '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: _pickDate,
-            child: InputDecorator(
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _noteCtrl,
+              textInputAction: TextInputAction.done,
+              maxLines: 2,
               decoration: InputDecoration(
-                labelText: 'تاريخ الصرف',
-                prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
-              ),
-              child: Text(
-                '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
+                labelText: 'ملاحظات',
+                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _noteCtrl,
-            textInputAction: TextInputAction.done,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'ملاحظات',
-              prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('تنفيذ الصرف'),
             ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _submitting ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('تنفيذ الصرف'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

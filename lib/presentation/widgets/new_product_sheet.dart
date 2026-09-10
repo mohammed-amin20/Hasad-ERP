@@ -72,6 +72,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomPadding),
       child: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -136,8 +137,9 @@ class _NewProductSheetState extends State<_NewProductSheet> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _salePriceCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -155,8 +157,9 @@ class _NewProductSheetState extends State<_NewProductSheet> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _commissionCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'نسبة العمولة % (اختياري)',
                   prefixIcon: FaIcon(FontAwesomeIcons.percent),

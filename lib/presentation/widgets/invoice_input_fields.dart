@@ -68,10 +68,18 @@ class ProductQuantityField extends StatelessWidget {
 
 /// Price input that stores agorot (schema bigint) while editing in decimals.
 class PriceField extends StatelessWidget {
-  const PriceField({super.key, required this.controller, required this.label});
+  const PriceField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.requiredMessage,
+    this.extraValidator,
+  });
 
   final TextEditingController controller;
   final String label;
+  final String? requiredMessage;
+  final String? Function(String? value)? extraValidator;
 
   @override
   Widget build(BuildContext context) {
@@ -81,8 +89,14 @@ class PriceField extends StatelessWidget {
       decoration: InputDecoration(labelText: label),
       validator: (v) {
         final text = (v ?? '').trim();
-        if (text.isEmpty) return null;
-        if (double.tryParse(text) == null) return 'قيمة غير صالحة';
+        if (text.isEmpty && requiredMessage != null) return requiredMessage;
+        if (extraValidator != null) {
+          final extra = extraValidator!(v);
+          if (extra != null) return extra;
+        }
+        if (text.isNotEmpty && double.tryParse(text) == null) {
+          return 'قيمة غير صالحة';
+        }
         return null;
       },
     );
