@@ -334,6 +334,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
               controller: _nameCtrl,
               textInputAction: TextInputAction.next,
               autofocus: true,
+              autofillHints: const [AutofillHints.name],
               decoration: const InputDecoration(
                 labelText: 'اسم العميل',
                 prefixIcon: FaIcon(FontAwesomeIcons.user),
@@ -347,6 +348,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
               controller: _phoneCtrl,
               textInputAction: TextInputAction.next,
               keyboardType: TextInputType.phone,
+              autofillHints: const [AutofillHints.telephoneNumber],
               decoration: const InputDecoration(
                 labelText: 'رقم الهاتف',
                 prefixIcon: FaIcon(FontAwesomeIcons.phone),

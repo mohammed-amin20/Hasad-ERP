@@ -202,6 +202,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
             TextFormField(
               controller: _webhookCtrl,
               keyboardType: TextInputType.url,
+              autofillHints: const [AutofillHints.url],
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: const InputDecoration(
                 labelText: 'رابط Webhook (n8n)',
@@ -354,7 +355,9 @@ class _ReminderLogCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final logAsync = ref.watch(reminderLogProvider);
 
-    return _SectionCard(
+    return Semantics(
+      liveRegion: true,
+      child: _SectionCard(
       icon: FontAwesomeIcons.inbox,
       color: AppColors.info,
       title: 'سجل الرسائل',
@@ -440,7 +443,8 @@ class _ReminderLogCard extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
 

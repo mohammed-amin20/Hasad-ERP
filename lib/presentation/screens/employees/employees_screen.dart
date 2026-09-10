@@ -347,6 +347,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 controller: _nameCtrl,
                 textInputAction: TextInputAction.next,
                 autofocus: true,
+                autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم الموظف',
                   prefixIcon: FaIcon(FontAwesomeIcons.user),
@@ -369,6 +370,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 controller: _phoneCtrl,
                 textInputAction: TextInputAction.next,
                 keyboardType: TextInputType.phone,
+                autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: const InputDecoration(
                   labelText: 'رقم الهاتف',
                   prefixIcon: FaIcon(FontAwesomeIcons.phone),

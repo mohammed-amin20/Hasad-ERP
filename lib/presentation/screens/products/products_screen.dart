@@ -496,6 +496,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 controller: _nameCtrl,
                 textInputAction: TextInputAction.next,
                 autofocus: true,
+                autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم المنتج',
                   prefixIcon: FaIcon(FontAwesomeIcons.tableCells),
