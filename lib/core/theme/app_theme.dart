@@ -44,17 +44,21 @@ abstract final class AppTheme {
         fontWeight: FontWeight.w700,
       ),
     ),
-    scaffoldBackgroundColor: AppColors.background,
-    cardTheme: const CardThemeData(
-      color: AppColors.surface,
-      elevation: 1,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-        side: BorderSide(color: AppColors.border),
+scaffoldBackgroundColor: AppColors.background,
+      focusColor: AppColors.primary.withValues(alpha: 0.12),
+      hoverColor: AppColors.primary.withValues(alpha: 0.08),
+      highlightColor: AppColors.primary.withValues(alpha: 0.12),
+      splashFactory: InkSparkle.splashFactory,
+      cardTheme: const CardThemeData(
+        color: AppColors.surface,
+        elevation: 1,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: AppColors.border),
+        ),
       ),
-    ),
-    dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1),
+      dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
@@ -89,8 +93,26 @@ abstract final class AppTheme {
         disabledBackgroundColor: AppColors.textMuted,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         minimumSize: const Size.fromHeight(48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: _baseText.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+      ).copyWith(
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.focused)) {
+            return AppColors.surface.withValues(alpha: 0.12);
+          }
+          if (states.contains(WidgetState.pressed)) {
+            return AppColors.surface.withValues(alpha: 0.24);
+          }
+          return null;
+        }),
+        elevation: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.hovered)
+              ? 3
+              : states.contains(WidgetState.pressed)
+                  ? 0
+                  : 1,
+        ),
+        shape: _focusRing(10),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -98,6 +120,36 @@ abstract final class AppTheme {
         foregroundColor: AppColors.primary,
         minimumSize: const Size(48, 48),
         textStyle: _baseText.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+      ).copyWith(
+        overlayColor: _buttonOverlay(),
+        shape: _focusRing(10),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.primary,
+        minimumSize: const Size(48, 48),
+        side: const BorderSide(color: AppColors.primary),
+        textStyle: _baseText.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+      ).copyWith(
+        overlayColor: _buttonOverlay(),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.focused)
+                ? AppColors.primaryDark
+                : AppColors.primary,
+            width: states.contains(WidgetState.focused) ? 2 : 1,
+          ),
+        ),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ).copyWith(
+        overlayColor: _buttonOverlay(),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -106,6 +158,38 @@ abstract final class AppTheme {
       contentTextStyle: _baseText.copyWith(fontSize: 13, color: AppColors.surface),
     ),
   );
+
+  /// Hover/focus/pressed overlay tint applied to all button variants.
+  static WidgetStateProperty<Color?> _buttonOverlay() {
+    return WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.hovered) ||
+          states.contains(WidgetState.focused)) {
+        return AppColors.primary.withValues(alpha: 0.10);
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return AppColors.primary.withValues(alpha: 0.20);
+      }
+      return null;
+    });
+  }
+
+  /// 2px primary focus ring (rounded [radius]) so keyboard navigation
+  /// is always visible; idles to a borderless rounded shape.
+  static WidgetStateProperty<RoundedRectangleBorder> _focusRing(
+    double radius,
+  ) {
+    return WidgetStateProperty.resolveWith((states) {
+      final shape = RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+      );
+      if (states.contains(WidgetState.focused)) {
+        return shape.copyWith(
+          side: const BorderSide(color: AppColors.primary, width: 2),
+        );
+      }
+      return shape;
+    });
+  }
 
   static const ColorScheme _colorScheme = ColorScheme.light(
     primary: AppColors.primary,
