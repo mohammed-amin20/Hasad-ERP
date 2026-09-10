@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
@@ -160,7 +161,8 @@ class _DashboardBody extends ConsumerWidget {
                           height: 140,
                           child: summary == null
                               ? const _EmptyPanel(
-                                  icon: FontAwesomeIcons.userGroup)
+                                  icon: FontAwesomeIcons.userGroup,
+                                )
                               : _DebtorsPanel(
                                   debtors: summary.topDebtors,
                                   loading: summaryAsync.isLoading,
@@ -178,7 +180,8 @@ class _DashboardBody extends ConsumerWidget {
                           height: 140,
                           child: summary == null
                               ? const _EmptyPanel(
-                                  icon: FontAwesomeIcons.boxesStacked)
+                                  icon: FontAwesomeIcons.boxesStacked,
+                                )
                               : _LowStockPanel(
                                   items: summary.lowStock,
                                   loading: summaryAsync.isLoading,
@@ -227,25 +230,25 @@ class _DashboardBody extends ConsumerWidget {
   }
 
   StatCard _valueCard(StatCard card, String value) => StatCard(
-        icon: card.icon,
-        iconColor: card.iconColor,
-        label: card.label,
-        value: value,
-        valueColor: card.valueColor,
-        accentColor: card.accentColor,
-        backgroundColor: card.backgroundColor,
-        borderColor: card.borderColor,
-      );
+    icon: card.icon,
+    iconColor: card.iconColor,
+    label: card.label,
+    value: value,
+    valueColor: card.valueColor,
+    accentColor: card.accentColor,
+    backgroundColor: card.backgroundColor,
+    borderColor: card.borderColor,
+  );
 
   List<String> _cardValues(DashboardSummary summary) => [
-        Money.format(summary.todaySales),
-        Money.format(summary.todayPurchases),
-        Money.format(summary.customerDebts),
-        Money.format(summary.supplierDebts),
-        Money.format(summary.monthExpenses),
-        Money.format(summary.monthSalaries),
-        Money.format(summary.netProfitMonth),
-      ];
+    Money.format(summary.todaySales),
+    Money.format(summary.todayPurchases),
+    Money.format(summary.customerDebts),
+    Money.format(summary.supplierDebts),
+    Money.format(summary.monthExpenses),
+    Money.format(summary.monthSalaries),
+    Money.format(summary.netProfitMonth),
+  ];
 }
 
 class _ErrorBanner extends StatelessWidget {
@@ -304,7 +307,7 @@ class _ChartArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final days = summary?.last7Days ?? const <DailySalesPurchases>[];
     if (loading) {
-      return const _CenteredStatus(child: CircularProgressIndicator());
+      return const _CenteredStatus(child: AppProgress());
     }
     if (days.isEmpty) {
       return const _EmptyPanel(icon: FontAwesomeIcons.chartColumn);
@@ -347,10 +350,8 @@ class _TrendChart extends StatelessWidget {
         gridData: FlGridData(
           drawVerticalLine: false,
           horizontalInterval: _gridInterval(yMax),
-          getDrawingHorizontalLine: (value) => const FlLine(
-            color: Color(0xFFEEF2F7),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) =>
+              const FlLine(color: Color(0xFFEEF2F7), strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -419,10 +420,7 @@ class _TrendChart extends StatelessWidget {
           ),
         ),
         lineBarsData: [
-          _TrendLine(
-            color: const Color(0xFF2563EB),
-            spots: sales,
-          ).resolve(),
+          _TrendLine(color: const Color(0xFF2563EB), spots: sales).resolve(),
           _TrendLine(
             color: const Color(0xFF7C3AED),
             spots: purchases,
@@ -446,41 +444,35 @@ class _TrendChart extends StatelessWidget {
 }
 
 class _TrendLine {
-  const _TrendLine({
-    required this.color,
-    required this.spots,
-  });
+  const _TrendLine({required this.color, required this.spots});
 
   final Color color;
   final List<FlSpot> spots;
 
   LineChartBarData resolve() => LineChartBarData(
-        spots: spots,
-        isCurved: true,
-        curveSmoothness: 0.3,
-        barWidth: 2.5,
+    spots: spots,
+    isCurved: true,
+    curveSmoothness: 0.3,
+    barWidth: 2.5,
+    color: color,
+    belowBarData: BarAreaData(
+      show: true,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0.02)],
+      ),
+    ),
+    dotData: FlDotData(
+      show: true,
+      getDotPainter: (_, _, _, _) => FlDotCirclePainter(
+        radius: 3.5,
         color: color,
-        belowBarData: BarAreaData(
-          show: true,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              color.withValues(alpha: 0.18),
-              color.withValues(alpha: 0.02),
-            ],
-          ),
-        ),
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (_, _, _, _) => FlDotCirclePainter(
-            radius: 3.5,
-            color: color,
-            strokeWidth: 2,
-            strokeColor: Colors.white,
-          ),
-        ),
-      );
+        strokeWidth: 2,
+        strokeColor: Colors.white,
+      ),
+    ),
+  );
 }
 
 class _Legend extends StatelessWidget {
@@ -539,7 +531,7 @@ class _DebtorsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const _CenteredStatus(child: CircularProgressIndicator());
+      return const _CenteredStatus(child: AppProgress());
     }
     if (debtors.isEmpty) {
       return const _EmptyPanel(icon: FontAwesomeIcons.userGroup);
@@ -603,7 +595,7 @@ class _LowStockPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const _CenteredStatus(child: CircularProgressIndicator());
+      return const _CenteredStatus(child: AppProgress());
     }
     if (items.isEmpty) {
       return const _EmptyPanel(icon: FontAwesomeIcons.boxesStacked);
@@ -679,13 +671,7 @@ class _CenteredStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        width: 24,
-        height: 24,
-        child: child,
-      ),
-    );
+    return Center(child: SizedBox(width: 24, height: 24, child: child));
   }
 }
 
@@ -770,8 +756,9 @@ class _EmptyPanel extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'لا توجد بيانات بعد',
-              style: AppTheme.light.textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
+              style: AppTheme.light.textTheme.bodySmall?.copyWith(
+                color: AppColors.textMuted,
+              ),
             ),
           ],
         ),

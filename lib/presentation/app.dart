@@ -29,6 +29,12 @@ class HasadApp extends ConsumerWidget {
         ],
         theme: AppTheme.light,
         debugShowCheckedModeBanner: false,
+        builder: (context, child) {
+          final reduceMotion =
+              MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+          if (!reduceMotion) return child!;
+          return Theme(data: AppTheme.lightReduced, child: child!);
+        },
         home: auth.when(
           loading: () => const SplashScreen(),
           error: (_, _) => const LoginScreen(),

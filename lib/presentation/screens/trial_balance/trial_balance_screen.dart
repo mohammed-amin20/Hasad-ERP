@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -49,7 +50,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
           const SizedBox(height: 16),
           Expanded(
             child: reportAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: AppProgress()),
               error: (e, _) => _ErrorState(message: e.toString()),
               data: (report) => _TrialBalanceView(report: report),
             ),
@@ -98,9 +99,8 @@ class _AsOfChip extends StatelessWidget {
                 const SizedBox(width: 12),
                 Text(
                   '$label ${_fmtDate(date)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -125,9 +125,7 @@ class _TrialBalanceView extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(
-              child: _BalancePill(balanced: report.balanced),
-            ),
+            Expanded(child: _BalancePill(balanced: report.balanced)),
             const SizedBox(width: 12),
             Expanded(
               child: _TotalsCard(
@@ -152,18 +150,36 @@ class _TrialBalanceView extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 child: Row(
                   children: [
-                    Expanded(flex: 2, child: Text('الكود', style: _header(theme))),
-                    Expanded(flex: 5, child: Text('الحساب', style: _header(theme))),
-                    Expanded(flex: 3, child: Text('مدين', style: _header(theme))),
-                    Expanded(flex: 3, child: Text('دائن', style: _header(theme))),
-                    Expanded(flex: 3, child: Text('الرصيد', style: _header(theme))),
+                    Expanded(
+                      flex: 2,
+                      child: Text('الكود', style: _header(theme)),
+                    ),
+                    Expanded(
+                      flex: 5,
+                      child: Text('الحساب', style: _header(theme)),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text('مدين', style: _header(theme)),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text('دائن', style: _header(theme)),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text('الرصيد', style: _header(theme)),
+                    ),
                   ],
                 ),
               ),
               const Divider(height: 1),
               for (final row in report.rows)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -266,11 +282,10 @@ class _TrialBalanceView extends StatelessWidget {
     );
   }
 
-  TextStyle? _header(ThemeData theme) =>
-      theme.textTheme.bodySmall?.copyWith(
-        color: AppColors.textMuted,
-        fontWeight: FontWeight.w800,
-      );
+  TextStyle? _header(ThemeData theme) => theme.textTheme.bodySmall?.copyWith(
+    color: AppColors.textMuted,
+    fontWeight: FontWeight.w800,
+  );
 }
 
 class _TotalsCard extends StatelessWidget {
@@ -341,10 +356,8 @@ class _BalancePill extends StatelessWidget {
           Flexible(
             child: Text(
               balanced ? 'الميزان متوازن' : 'الميزان غير متوازن',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: color, fontWeight: FontWeight.w800),
             ),
           ),
         ],

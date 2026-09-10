@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -113,8 +114,7 @@ class _PurchaseInvoicesScreenState
                 ),
               Expanded(
                 child: listAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => ListErrorState(message: e.toString()),
                   data: (invoices) {
                     if (invoices.isEmpty) {
@@ -389,7 +389,7 @@ class _NewPurchaseInvoicePageState
               ),
               const SizedBox(height: 16),
               suppliersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: AppProgress()),
                 error: (e, _) => ListErrorState(message: e.toString()),
                 data: (suppliers) => DropdownButtonFormField<String>(
                   initialValue: _supplierId,
@@ -558,7 +558,7 @@ class _NewPurchaseInvoicePageState
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : const Text('حفظ الفاتورة'),
               ),

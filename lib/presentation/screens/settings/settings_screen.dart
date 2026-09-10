@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -22,10 +23,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveSettings(ReminderSettings settings) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(reminderSettingsControllerProvider.notifier).save(settings);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('تم حفظ الإعدادات')),
-      );
+      await ref
+          .read(reminderSettingsControllerProvider.notifier)
+          .save(settings);
+      messenger.showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات')));
     } on Object catch (error) {
       messenger.showSnackBar(
         SnackBar(
@@ -67,7 +68,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: 'الإعدادات',
       subtitle: 'إعدادات المنشأة والتذكيرات والنسخ الاحتياطي',
       child: settingsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: AppProgress()),
         error: (e, _) => _ErrorState(message: e.toString()),
         data: (settings) => ListView(
           padding: const EdgeInsets.only(bottom: 24),
@@ -154,14 +155,15 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
   void _insertPlaceholder(String placeholder) {
     final ctrl = _messageCtrl;
     final selection = ctrl.selection;
-    final start =
-        selection.isValid ? selection.start : ctrl.text.length;
+    final start = selection.isValid ? selection.start : ctrl.text.length;
     ctrl.text = ctrl.text.replaceRange(
       start,
       selection.isValid ? selection.end : start,
       placeholder,
     );
-    ctrl.selection = TextSelection.collapsed(offset: start + placeholder.length);
+    ctrl.selection = TextSelection.collapsed(
+      offset: start + placeholder.length,
+    );
   }
 
   Future<void> _submit() async {
@@ -226,10 +228,9 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
                 prefixIcon: FaIcon(FontAwesomeIcons.message, size: 16),
                 alignLabelWithHint: true,
               ),
-              validator: (value) =>
-                  (value == null || value.trim().isEmpty)
-                      ? 'أدخل نص الرسالة'
-                      : null,
+              validator: (value) => (value == null || value.trim().isEmpty)
+                  ? 'أدخل نص الرسالة'
+                  : null,
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -246,7 +247,9 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
                       ),
                     ),
                     backgroundColor: AppColors.primary.withValues(alpha: 0.06),
-                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.25)),
+                    side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                    ),
                     onPressed: () => _insertPlaceholder(placeholder),
                   ),
               ],
@@ -277,7 +280,9 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 title: const Text('تفعيل التذكيرات اليومية التلقائية'),
-                subtitle: const Text('يعمل على الجدولة الصباحية الأوتوماتيكية فقط'),
+                subtitle: const Text(
+                  'يعمل على الجدولة الصباحية الأوتوماتيكية فقط',
+                ),
                 value: _enabled,
                 onChanged: (value) => setState(() => _enabled = value),
               ),
@@ -291,7 +296,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : const FaIcon(FontAwesomeIcons.floppyDisk, size: 16),
                 label: const Text('حفظ الإعدادات'),
@@ -404,7 +409,7 @@ class _ReminderLogCard extends ConsumerWidget {
           logAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AppProgress()),
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.all(12),
@@ -428,9 +433,7 @@ class _ReminderLogCard extends ConsumerWidget {
                 );
               }
               return Column(
-                children: [
-                  for (final entry in entries) _LogRow(entry: entry),
-                ],
+                children: [for (final entry in entries) _LogRow(entry: entry)],
               );
             },
           ),
@@ -483,14 +486,8 @@ class _LogRow extends StatelessWidget {
           SizedBox(
             width: 56,
             child: entry.failed
-                ? StatusBadge(
-                    label: 'فشل',
-                    palette: BadgePalette.unpaid,
-                  )
-                : StatusBadge(
-                    label: 'أُرسل',
-                    palette: BadgePalette.paid,
-                  ),
+                ? StatusBadge(label: 'فشل', palette: BadgePalette.unpaid)
+                : StatusBadge(label: 'أُرسل', palette: BadgePalette.paid),
           ),
         ],
       ),

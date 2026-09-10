@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -45,14 +46,11 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       child: Stack(
         children: [
           chartAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: AppProgress()),
             error: (e, _) => _ErrorState(message: e.toString()),
             data: (accounts) {
               if (accounts.isEmpty) return const _EmptyState();
-              return _GroupedList(
-                accounts: accounts,
-                typeOrder: _typeOrder,
-              );
+              return _GroupedList(accounts: accounts, typeOrder: _typeOrder);
             },
           ),
           Positioned(
@@ -122,8 +120,7 @@ class _GroupedList extends StatelessWidget {
         for (final type in typeOrder)
           if (groups[type]?.isNotEmpty ?? false) ...[
             _TypeHeader(type: type, count: groups[type]!.length),
-            for (final account in groups[type]!)
-              _AccountTile(account: account),
+            for (final account in groups[type]!) _AccountTile(account: account),
             const SizedBox(height: 16),
           ],
       ],
@@ -343,10 +340,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                 prefixIcon: FaIcon(FontAwesomeIcons.layerGroup),
               ),
               items: const [
-                DropdownMenuItem(
-                  value: AccountType.asset,
-                  child: Text('أصول'),
-                ),
+                DropdownMenuItem(value: AccountType.asset, child: Text('أصول')),
                 DropdownMenuItem(
                   value: AccountType.liability,
                   child: Text('خصوم'),
@@ -384,7 +378,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: AppProgress(strokeWidth: 2),
                     )
                   : const Text('إضافة'),
             ),
@@ -442,17 +436,13 @@ class _ErrorState extends StatelessWidget {
               color: AppColors.danger,
             ),
             const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),

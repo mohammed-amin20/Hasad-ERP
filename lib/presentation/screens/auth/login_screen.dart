@@ -2,6 +2,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -40,7 +41,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).signInWithPassword(
+      await ref
+          .read(authRepositoryProvider)
+          .signInWithPassword(
             email: _email.text.trim(),
             password: _password.text,
           );
@@ -293,21 +296,24 @@ class _LoginCard extends StatelessWidget {
               onPressed: submitting ? null : onSubmit,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
-                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               child: submitting
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+                      child: AppProgress(strokeWidth: 2, color: Colors.white),
                     )
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        FaIcon(FontAwesomeIcons.arrowRightFromBracket, size: 16),
+                        FaIcon(
+                          FontAwesomeIcons.arrowRightFromBracket,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         const Text('تسجيل الدخول'),
                       ],
@@ -337,9 +343,7 @@ class _LoginCard extends StatelessWidget {
                       ),
                     ),
                     const TextSpan(text: '\n'),
-                    TextSpan(
-                      text: 'owner4@test.local   /   Test@1234567',
-                    ),
+                    TextSpan(text: 'owner4@test.local   /   Test@1234567'),
                   ],
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -45,7 +46,11 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -63,7 +68,9 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
                         ref.read(supplierSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
                               tooltip: 'مسح البحث',
@@ -81,8 +88,7 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
                 ),
               Expanded(
                 child: listAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => _ErrorState(message: e.toString()),
                   data: (suppliers) {
                     if (suppliers.isEmpty) {
@@ -161,8 +167,8 @@ class _SupplierList extends StatelessWidget {
         return _SupplierTile(
           supplier: s,
           onEdit: () {
-            final screen =
-                context.findAncestorStateOfType<_SuppliersScreenState>();
+            final screen = context
+                .findAncestorStateOfType<_SuppliersScreenState>();
             screen?._showSupplierForm(context, supplier: s);
           },
           onDelete: () => _confirmDelete(context, s),
@@ -245,10 +251,10 @@ class _CommissionBadge extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF92400E),
-            ),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF92400E),
+        ),
       ),
     );
   }
@@ -315,15 +321,12 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
       await widget.onSave(
         SupplierDraft(
           name: _nameCtrl.text.trim(),
-          phone: _phoneCtrl.text.trim().isEmpty
-              ? null
-              : _phoneCtrl.text.trim(),
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           dealType: _dealType,
-          commissionRate:
-              isCommission ? double.parse(rateText.replaceAll('٪', '')) : null,
+          commissionRate: isCommission
+              ? double.parse(rateText.replaceAll('٪', ''))
+              : null,
         ),
       );
     } finally {
@@ -403,8 +406,9 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 TextFormField(
                   controller: _commissionCtrl,
                   textInputAction: TextInputAction.done,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'نسبة العمولة %',
                     prefixIcon: FaIcon(FontAwesomeIcons.percent),
@@ -439,7 +443,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : Text(_isEditing ? 'حفظ التعديلات' : 'إضافة'),
               ),
@@ -503,18 +507,21 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.building,
+            FaIcon(
+              FontAwesomeIcons.building,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
-            Text('لا يوجد موردون', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا يوجد موردون',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإضافة أول مورد',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -536,19 +543,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
             ),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

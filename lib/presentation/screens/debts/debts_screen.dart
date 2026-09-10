@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -29,7 +30,8 @@ class DebtsScreen extends ConsumerWidget {
           _sectionTitle(context, 'لنا على العملاء'),
           const SizedBox(height: 8),
           customersAsync.when(
-            loading: () => const _LoadingRow(label: 'جاري تحميل ديون العملاء...'),
+            loading: () =>
+                const _LoadingRow(label: 'جاري تحميل ديون العملاء...'),
             error: (e, _) => ListErrorState(message: e.toString()),
             data: (balances) => balances.isEmpty
                 ? const _EmptyHint(label: 'لا توجد ديون مسجلة للعملاء')
@@ -45,7 +47,8 @@ class DebtsScreen extends ConsumerWidget {
           _sectionTitle(context, 'علينا للموردين'),
           const SizedBox(height: 8),
           suppliersAsync.when(
-            loading: () => const _LoadingRow(label: 'جاري تحميل ديون الموردين...'),
+            loading: () =>
+                const _LoadingRow(label: 'جاري تحميل ديون الموردين...'),
             error: (e, _) => ListErrorState(message: e.toString()),
             data: (balances) => balances.isEmpty
                 ? const _EmptyHint(label: 'لا توجد ديون مسجلة للموردين')
@@ -95,10 +98,10 @@ class DebtsScreen extends ConsumerWidget {
               },
               onSettle: partyType == 'supplier'
                   ? () => showSettleSupplierSheet(
-                        context,
-                        supplierId: balances[i].id,
-                        supplierName: balances[i].name,
-                      )
+                      context,
+                      supplierId: balances[i].id,
+                      supplierName: balances[i].name,
+                    )
                   : null,
             ),
             if (i < balances.length - 1) const Divider(height: 1),
@@ -131,10 +134,7 @@ class _PartyTile extends StatelessWidget {
         backgroundColor: leadingColor.withValues(alpha: 0.12),
         child: Text(
           balance.name.isEmpty ? '؟' : balance.name.substring(0, 1),
-          style: TextStyle(
-            color: leadingColor,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: leadingColor, fontWeight: FontWeight.w700),
         ),
       ),
       title: Text(
@@ -167,17 +167,17 @@ class _PartyTile extends StatelessWidget {
                   ),
                   if (onSettle != null) ...[
                     const SizedBox(width: 4),
-                    TextButton(
-                      onPressed: onSettle,
-                      child: const Text('تسوية'),
-                    ),
+                    TextButton(onPressed: onSettle, child: const Text('تسوية')),
                   ],
                 ],
               ),
             ],
           ),
           const SizedBox(width: 4),
-          const FaIcon(FontAwesomeIcons.chevronLeft, color: AppColors.textMuted),
+          const FaIcon(
+            FontAwesomeIcons.chevronLeft,
+            color: AppColors.textMuted,
+          ),
         ],
       ),
     );
@@ -196,7 +196,7 @@ class _LoadingRow extends StatelessWidget {
           const SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: AppProgress(strokeWidth: 2),
           ),
           const SizedBox(width: 12),
           Text(label, style: Theme.of(context).textTheme.bodySmall),
@@ -215,9 +215,7 @@ class _EmptyHint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Text(
         label,
-        style: Theme.of(context)
-            .textTheme
-            .bodySmall
+        style: Theme.of(context).textTheme.bodySmall
             ?.copyWith(color: AppColors.textMuted),
       ),
     );

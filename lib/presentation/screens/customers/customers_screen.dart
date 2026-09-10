@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -48,7 +49,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -66,7 +71,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         ref.read(customerSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
                               tooltip: 'مسح البحث',
@@ -84,8 +91,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 ),
               Expanded(
                 child: listAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => _ErrorState(message: e.toString()),
                   data: (customers) {
                     if (customers.isEmpty) {
@@ -193,8 +199,8 @@ class _CustomerList extends StatelessWidget {
           canRemind: canRemind,
           onRemind: () => onRemind(c),
           onEdit: () {
-            final screen =
-                context.findAncestorStateOfType<_CustomersScreenState>();
+            final screen = context
+                .findAncestorStateOfType<_CustomersScreenState>();
             screen?._showCustomerForm(context, customer: c);
           },
           onDelete: () => _confirmDelete(context, c),
@@ -299,12 +305,8 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
       await widget.onSave(
         CustomerDraft(
           name: _nameCtrl.text.trim(),
-          phone: _phoneCtrl.text.trim().isEmpty
-              ? null
-              : _phoneCtrl.text.trim(),
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         ),
       );
     } finally {
@@ -368,7 +370,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: AppProgress(strokeWidth: 2),
                     )
                   : Text(_isEditing ? 'حفظ التعديلات' : 'إضافة'),
             ),
@@ -431,18 +433,21 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.userPlus,
+            FaIcon(
+              FontAwesomeIcons.userPlus,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
-            Text('لا يوجد عملاء', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا يوجد عملاء',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإضافة أول عميل',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -464,19 +469,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
             ),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

@@ -6,6 +6,11 @@ import 'app_colors.dart';
 abstract final class AppTheme {
   static ThemeData get light => _theme;
 
+  /// Built for platforms / users that request "reduce motion": swaps the
+  /// sparkle inked splash for a plain ripple so touch feedback stays fast.
+  static ThemeData get lightReduced =>
+      _theme.copyWith(splashFactory: InkRipple.splashFactory);
+
   // Cairo variable font is bundled and registered in pubspec under the
   // "Cairo" family; it covers all weights from 200-1000.
   static const TextStyle _baseText = TextStyle(fontFamily: 'Cairo');

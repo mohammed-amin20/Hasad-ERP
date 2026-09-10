@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -39,15 +40,16 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
             accountId: query.accountId,
             from: query.from,
             to: query.to,
-            onAccountChanged: (accountId) =>
-                ref.read(ledgerQueryProvider.notifier).update(accountId: accountId),
+            onAccountChanged: (accountId) => ref
+                .read(ledgerQueryProvider.notifier)
+                .update(accountId: accountId),
             onFromTap: _pickFrom,
             onToTap: _pickTo,
           ),
           const SizedBox(height: 16),
           Expanded(
             child: statementAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: AppProgress()),
               error: (e, _) => _ErrorState(message: e.toString()),
               data: (statement) => statement == null
                   ? const _SelectAccountState()
@@ -68,7 +70,9 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       lastDate: DateTime(2100),
     );
     if (picked == null) return;
-    ref.read(ledgerQueryProvider.notifier).update(
+    ref
+        .read(ledgerQueryProvider.notifier)
+        .update(
           from: picked,
           to: query.to.isBefore(picked) ? picked : query.to,
         );
@@ -83,7 +87,9 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       lastDate: DateTime(2100),
     );
     if (picked == null) return;
-    ref.read(ledgerQueryProvider.notifier).update(
+    ref
+        .read(ledgerQueryProvider.notifier)
+        .update(
           to: picked,
           from: query.from.isAfter(picked) ? picked : query.from,
         );
@@ -139,9 +145,8 @@ class _LedgerControls extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             'تعذّر تحميل الحسابات — حدّث دليل الحسابات ثم أعد المحاولة',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.danger,
-                ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: AppColors.danger),
           ),
         ],
         const SizedBox(height: 12),
@@ -197,9 +202,8 @@ class _DateChip extends StatelessWidget {
               Expanded(
                 child: Text(
                   '$label ${_fmtDate(date)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -271,10 +275,7 @@ class _LedgerView extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  _SummaryItem(
-                    label: 'رصيد افتتاحي',
-                    value: statement.opening,
-                  ),
+                  _SummaryItem(label: 'رصيد افتتاحي', value: statement.opening),
                   const Spacer(),
                   _SummaryItem(
                     label: 'الرصيد الختامي',

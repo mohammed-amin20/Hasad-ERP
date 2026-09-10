@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -85,7 +86,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             ),
           Expanded(
             child: listAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: AppProgress()),
               error: (e, _) => _ErrorState(message: e.toString()),
               data: (products) {
                 final filtered = _query.isEmpty
@@ -328,7 +329,7 @@ class _CountSheetState extends State<_CountSheet> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : const Text('حفظ الجرد'),
               ),

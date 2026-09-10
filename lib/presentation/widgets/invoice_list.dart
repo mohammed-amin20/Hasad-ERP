@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/widgets/app_progress.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money.dart';
 import '../../core/widgets/status_badge.dart';
@@ -36,16 +37,14 @@ class InvoiceListView extends StatelessWidget {
             child: Text(
               _shortNo(invoice.no),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           title: Text(
             invoice.partyName ?? '',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
+            style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
@@ -62,9 +61,9 @@ class InvoiceListView extends StatelessWidget {
                   Text(
                     Money.format(invoice.total),
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -74,7 +73,8 @@ class InvoiceListView extends StatelessWidget {
                         label: invoice.status.label,
                         palette: badgeForStatus(invoice.status),
                       ),
-                      if (invoice.ownership == InvoiceOwnership.consignment) ...[
+                      if (invoice.ownership ==
+                          InvoiceOwnership.consignment) ...[
                         const SizedBox(width: 4),
                         StatusBadge(
                           label: invoice.ownership.label,
@@ -86,7 +86,10 @@ class InvoiceListView extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 4),
-              const FaIcon(FontAwesomeIcons.chevronLeft, color: AppColors.textMuted),
+              const FaIcon(
+                FontAwesomeIcons.chevronLeft,
+                color: AppColors.textMuted,
+              ),
             ],
           ),
         );
@@ -94,7 +97,8 @@ class InvoiceListView extends StatelessWidget {
     );
   }
 
-  String _shortNo(String no) => no.length > 3 ? no.substring(no.length - 3) : no;
+  String _shortNo(String no) =>
+      no.length > 3 ? no.substring(no.length - 3) : no;
 }
 
 /// Detail bottom sheet for a single invoice (header, lines, totals).
@@ -133,14 +137,15 @@ class InvoiceDetailSheet extends ConsumerWidget {
               const SizedBox(height: 8),
               Text(
                 '${invoice.partyName ?? ''} · ${formatInvoiceDate(invoice.date)}',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: AppColors.textSecondary),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 20),
               if (snapshot.connectionState == ConnectionState.waiting)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: AppProgress()),
                 ),
               for (final item in items)
                 Padding(
@@ -152,14 +157,16 @@ class InvoiceDetailSheet extends ConsumerWidget {
                           '${item.productName ?? 'منتج'} × '
                           '${formatQty(item.qty, item.productUnitType ?? ProductUnitType.count)}'
                           '${item.productUnit != null ? ' ${item.productUnit}' : ''}',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       Text(
                         Money.format(item.total),
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: AppColors.textSecondary),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -179,8 +186,8 @@ class InvoiceDetailSheet extends ConsumerWidget {
                   invoice.ownership != InvoiceOwnership.consignment &&
                   _canPay(ref)) ...[
                 ElevatedButton.icon(
-                  onPressed: () => showRecordPaymentSheet(context,
-                      invoice: invoice),
+                  onPressed: () =>
+                      showRecordPaymentSheet(context, invoice: invoice),
                   icon: const FaIcon(FontAwesomeIcons.moneyBill),
                   label: const Text('تسجيل دفعة'),
                   style: ElevatedButton.styleFrom(
@@ -216,16 +223,18 @@ class ListErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
+            ),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

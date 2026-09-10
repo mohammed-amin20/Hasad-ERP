@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -49,7 +50,11 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -67,7 +72,9 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                         ref.read(productSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو الباركود...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
                               tooltip: 'مسح البحث',
@@ -85,8 +92,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                 ),
               Expanded(
                 child: listAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => _ErrorState(message: e.toString()),
                   data: (products) {
                     if (products.isEmpty) {
@@ -165,8 +171,8 @@ class _ProductList extends StatelessWidget {
         return _ProductTile(
           product: p,
           onEdit: () {
-            final screen =
-                context.findAncestorStateOfType<_ProductsScreenState>();
+            final screen = context
+                .findAncestorStateOfType<_ProductsScreenState>();
             screen?._showProductForm(context, product: p);
           },
           onDelete: () => _confirmDelete(context, p),
@@ -270,10 +276,10 @@ class _UnitBadge extends StatelessWidget {
       child: Text(
         '$unit · $unitTypeLabel',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primary,
+        ),
       ),
     );
   }
@@ -331,9 +337,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
       text: p == null ? '' : formatQty(p.reorderLevel, p.unitType),
     );
     _commissionCtrl = TextEditingController(
-      text: p?.commissionRate == null
-          ? ''
-          : _trimRate(p!.commissionRate!),
+      text: p?.commissionRate == null ? '' : _trimRate(p!.commissionRate!),
     );
     _unitType = p?.unitType ?? ProductUnitType.count;
     // When editing, remember an existing commission attachment even before
@@ -348,14 +352,12 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     _loadSuppliers();
   }
 
-  String _trimRate(double rate) => rate == rate.roundToDouble()
-      ? rate.toStringAsFixed(0)
-      : rate.toString();
+  String _trimRate(double rate) =>
+      rate == rate.roundToDouble() ? rate.toStringAsFixed(0) : rate.toString();
 
   Future<void> _loadSuppliers() async {
     try {
-      final suppliers =
-          await ref.read(supplierRepositoryProvider).listAll();
+      final suppliers = await ref.read(supplierRepositoryProvider).listAll();
       if (!mounted) return;
       setState(() {
         _suppliers = suppliers;
@@ -433,7 +435,9 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
         return;
       }
       commissionRate = double.tryParse(text);
-      if (commissionRate == null || commissionRate < 0 || commissionRate > 100) {
+      if (commissionRate == null ||
+          commissionRate < 0 ||
+          commissionRate > 100) {
         _showError('نسبة العمولة بين 0 و 100');
         return;
       }
@@ -522,8 +526,9 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                         hintText: 'كجم، قطعة، كيس...',
                       ),
                       autovalidateMode: AutovalidateMode.onUserInteraction,
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'أدخل الوحدة' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'أدخل الوحدة'
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -642,8 +647,9 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 TextFormField(
                   controller: _commissionCtrl,
                   textInputAction: TextInputAction.done,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'نسبة العمولة %',
                     prefixIcon: FaIcon(FontAwesomeIcons.percent),
@@ -666,7 +672,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : Text(_isEditing ? 'حفظ التعديلات' : 'إضافة'),
               ),
@@ -685,9 +691,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     return TextFormField(
       controller: ctrl,
       textInputAction: TextInputAction.next,
-      keyboardType: TextInputType.numberWithOptions(
-        decimal: _isWeight,
-      ),
+      keyboardType: TextInputType.numberWithOptions(decimal: _isWeight),
       inputFormatters: [
         _isWeight
             ? FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
@@ -755,19 +759,21 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.boxesStacked,
+            FaIcon(
+              FontAwesomeIcons.boxesStacked,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
-            Text('لا يوجد منتجات',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'لا يوجد منتجات',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإضافة أول منتج',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -789,16 +795,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
+            ),
             const SizedBox(height: 16),
             Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

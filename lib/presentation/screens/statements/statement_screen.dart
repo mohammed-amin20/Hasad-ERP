@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/printing/statement_pdf.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -116,7 +117,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
         : null;
     final statement = statementAsync?.value;
 
-return Container(
+    return Container(
       color: AppColors.background,
       child: SafeArea(
         child: Column(
@@ -136,7 +137,7 @@ return Container(
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: AppProgress(strokeWidth: 2),
                             )
                           : const FaIcon(FontAwesomeIcons.print, size: 18),
                     ),
@@ -157,8 +158,7 @@ return Container(
                           child: InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'من تاريخ',
-                              prefixIcon:
-                                  FaIcon(FontAwesomeIcons.calendarDay),
+                              prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_from)),
                           ),
@@ -171,8 +171,7 @@ return Container(
                           child: InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'إلى تاريخ',
-                              prefixIcon:
-                                  FaIcon(FontAwesomeIcons.calendarDay),
+                              prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_to)),
                           ),
@@ -192,22 +191,23 @@ return Container(
               ),
             ),
             Expanded(
-              child: statementAsync?.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      e.toString(),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: AppColors.danger),
+              child:
+                  statementAsync?.when(
+                    loading: () => const Center(child: AppProgress()),
+                    error: (e, _) => Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          e.toString(),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                data: (st) => _StatementBody(statement: st),
-              ) ??
+                    data: (st) => _StatementBody(statement: st),
+                  ) ??
                   const _PromptState(),
             ),
           ],
@@ -233,7 +233,9 @@ class _StatementBody extends StatelessWidget {
             children: [
               Expanded(
                 child: _SummaryCard(
-                    label: 'الرصيد الافتتاحي', value: statement.opening),
+                  label: 'الرصيد الافتتاحي',
+                  value: statement.opening,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -254,27 +256,39 @@ class _StatementBody extends StatelessWidget {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: Text('البيان',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.textSecondary)),
+                    child: Text(
+                      'البيان',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                   Expanded(
-                    child: Text('مدين',
-                        textAlign: TextAlign.end,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.textSecondary)),
+                    child: Text(
+                      'مدين',
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                   Expanded(
-                    child: Text('دائن',
-                        textAlign: TextAlign.end,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.textSecondary)),
+                    child: Text(
+                      'دائن',
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                   Expanded(
-                    child: Text('الرصيد',
-                        textAlign: TextAlign.end,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: AppColors.textSecondary)),
+                    child: Text(
+                      'الرصيد',
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -293,8 +307,9 @@ class _StatementBody extends StatelessWidget {
                   child: Center(
                     child: Text(
                       'لا توجد حركات في هذه الفترة',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: AppColors.textSecondary),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 ),
@@ -378,8 +393,9 @@ class _LineRow extends StatelessWidget {
               if (date != null)
                 Text(
                   formatDate(date!),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.textSecondary),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
             ],
           ),
@@ -388,9 +404,7 @@ class _LineRow extends StatelessWidget {
           child: Text(
             debit > 0 ? Money.format(debit) : '',
             textAlign: TextAlign.end,
-            style: debit > 0
-                ? style?.copyWith(color: AppColors.danger)
-                : style,
+            style: debit > 0 ? style?.copyWith(color: AppColors.danger) : style,
           ),
         ),
         Expanded(
@@ -438,9 +452,7 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style:
-                  theme.textTheme.bodySmall?.copyWith(color: color)),
+          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: color)),
           const SizedBox(height: 4),
           Text(
             Money.format(value),
@@ -467,11 +479,16 @@ class _PromptState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.receipt,
-                size: 48, color: AppColors.textMuted),
+            const FaIcon(
+              FontAwesomeIcons.receipt,
+              size: 48,
+              color: AppColors.textMuted,
+            ),
             const SizedBox(height: 16),
-            Text('اختر الفترة ثم اضغط "عرض الكشف"',
-                style: theme.textTheme.bodyMedium),
+            Text(
+              'اختر الفترة ثم اضغط "عرض الكشف"',
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
@@ -482,4 +499,3 @@ class _PromptState extends StatelessWidget {
 String formatDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
     '${d.day.toString().padLeft(2, '0')}';
-

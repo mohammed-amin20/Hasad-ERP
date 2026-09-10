@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -13,7 +14,8 @@ class ConnectivityListener extends ConsumerStatefulWidget {
   final Widget child;
 
   @override
-  ConsumerState<ConnectivityListener> createState() => _ConnectivityListenerState();
+  ConsumerState<ConnectivityListener> createState() =>
+      _ConnectivityListenerState();
 }
 
 class _ConnectivityListenerState extends ConsumerState<ConnectivityListener> {

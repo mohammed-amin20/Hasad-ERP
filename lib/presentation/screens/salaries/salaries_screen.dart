@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -45,7 +46,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           employeesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: AppProgress()),
             error: (e, _) => _InlineError(message: e.toString()),
             data: (employees) => _buildControls(context, employees),
           ),
@@ -55,9 +56,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
               child: ref
                   .watch(salaryRunProvider(selectedId, _month))
                   .when(
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    loading: () => const Center(child: AppProgress()),
                     error: (e, _) => _ErrorState(message: e.toString()),
                     data: (ent) => _buildRun(
                       context,
@@ -130,15 +129,9 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                _EntitlementRow(
-                  label: 'الراتب الأساسي',
-                  value: ent.baseSalary,
-                ),
+                _EntitlementRow(label: 'الراتب الأساسي', value: ent.baseSalary),
                 const SizedBox(height: 8),
-                _EntitlementRow(
-                  label: 'متأخرات سابقة',
-                  value: ent.arrears,
-                ),
+                _EntitlementRow(label: 'متأخرات سابقة', value: ent.arrears),
                 const SizedBox(height: 8),
                 _EntitlementRow(
                   label: 'إضافات',
@@ -181,12 +174,12 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
               child: FilledButton.icon(
                 onPressed: canPay
                     ? () => showPaySalarySheet(
-                          context,
-                          employeeId: ent.employeeId,
-                          employeeName: name,
-                          month: _month,
-                          entitlement: ent,
-                        )
+                        context,
+                        employeeId: ent.employeeId,
+                        employeeName: name,
+                        month: _month,
+                        entitlement: ent,
+                      )
                     : null,
                 icon: const FaIcon(FontAwesomeIcons.moneyBill),
                 label: const Text('صرف الراتب'),
@@ -248,10 +241,8 @@ class _SalaryHistoryList extends ConsumerWidget {
     final theme = Theme.of(context);
     final historyAsync = ref.watch(salaryHistoryProvider);
     return historyAsync.when(
-      loading: () => const SizedBox(
-        height: 60,
-        child: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const SizedBox(height: 60, child: Center(child: AppProgress())),
       error: (e, _) => Text(
         mapErrorToAppException(e).message,
         style: theme.textTheme.bodySmall?.copyWith(color: AppColors.danger),
@@ -264,8 +255,9 @@ class _SalaryHistoryList extends ConsumerWidget {
         if (mine.isEmpty) {
           return Text(
             'لا يوجد صرف لهذا الموظف بعد',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: AppColors.textMuted),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.textMuted,
+            ),
           );
         }
         return Column(
@@ -310,16 +302,16 @@ class _HintState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.handshake,
+            FaIcon(
+              FontAwesomeIcons.handshake,
               size: 48,
               color: AppColors.textMuted,
             ),
             const SizedBox(height: 16),
             Text(
               'اختر موظفاً وشهراً لعرض المستحقات',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -337,9 +329,7 @@ class _InlineError extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       message,
-      style: Theme.of(context)
-          .textTheme
-          .bodySmall
+      style: Theme.of(context).textTheme.bodySmall
           ?.copyWith(color: AppColors.danger),
     );
   }
@@ -358,19 +348,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
             ),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -47,7 +48,11 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
-          icon: FaIcon(_searchOpen ? FontAwesomeIcons.xmark : FontAwesomeIcons.magnifyingGlass),
+          icon: FaIcon(
+            _searchOpen
+                ? FontAwesomeIcons.xmark
+                : FontAwesomeIcons.magnifyingGlass,
+          ),
         ),
       ],
       child: Stack(
@@ -65,7 +70,9 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                         ref.read(employeeSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
+                      prefixIcon: const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                      ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
                               tooltip: 'مسح البحث',
@@ -83,8 +90,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                 ),
               Expanded(
                 child: listAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => _ErrorState(message: e.toString()),
                   data: (employees) {
                     if (employees.isEmpty) {
@@ -171,8 +177,8 @@ class _EmployeeList extends StatelessWidget {
             ),
           ),
           onEdit: () {
-            final screen =
-                context.findAncestorStateOfType<_EmployeesScreenState>();
+            final screen = context
+                .findAncestorStateOfType<_EmployeesScreenState>();
             screen?._showEmployeeForm(context, employee: e);
           },
           onDelete: () => _confirmDelete(context, e),
@@ -372,8 +378,9 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
               TextFormField(
                 controller: _salaryCtrl,
                 textInputAction: TextInputAction.done,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'الراتب الأساسي',
                   prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
@@ -393,7 +400,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : Text(_isEditing ? 'حفظ التعديلات' : 'إضافة'),
               ),
@@ -457,10 +464,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.user,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
+            FaIcon(FontAwesomeIcons.user, size: 48, color: AppColors.textMuted),
             const SizedBox(height: 16),
             Text(
               'لا يوجد موظفون',
@@ -469,9 +473,8 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'اضغط على + لإضافة أول موظف',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -493,19 +496,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
             ),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

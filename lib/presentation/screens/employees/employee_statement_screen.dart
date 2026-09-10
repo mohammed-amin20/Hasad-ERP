@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/printing/employee_slip_pdf.dart';
 import '../../../core/theme/app_colors.dart';
@@ -56,8 +57,11 @@ class _EmployeeStatementScreenState
 
   @override
   Widget build(BuildContext context) {
-    final request =
-        EmployeeStatementRequest(employeeId: widget.employeeId, from: _from, to: _to);
+    final request = EmployeeStatementRequest(
+      employeeId: widget.employeeId,
+      from: _from,
+      to: _to,
+    );
     final statementAsync = ref.watch(employeeStatementProvider(request));
     final valid = _validRange();
 
@@ -74,8 +78,10 @@ class _EmployeeStatementScreenState
               final messenger = ScaffoldMessenger.of(context);
               try {
                 await Printing.layoutPdf(
-                  onLayout: (_) =>
-                      EmployeeSlipPdf.build(statement: st, employeeName: widget.employeeName),
+                  onLayout: (_) => EmployeeSlipPdf.build(
+                    statement: st,
+                    employeeName: widget.employeeName,
+                  ),
                 );
               } on Object catch (error) {
                 messenger.showSnackBar(
@@ -135,7 +141,7 @@ class _EmployeeStatementScreenState
             ),
           Expanded(
             child: statementAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: AppProgress()),
               error: (e, _) => _ErrorState(message: e.toString()),
               data: (statement) => _buildStatement(context, statement),
             ),
@@ -182,8 +188,9 @@ class _EmployeeStatementScreenState
             child: Center(
               child: Text(
                 'لا توجد حركات رواتب في هذه الفترة',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: AppColors.textMuted),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
           )
@@ -219,10 +226,7 @@ class _StatementTable extends StatelessWidget {
     return Table(
       defaultColumnWidth: const FixedColumnWidth(minWidth),
       border: TableBorder(
-        horizontalInside: BorderSide(
-          width: 0.4,
-          color: AppColors.border,
-        ),
+        horizontalInside: BorderSide(width: 0.4, color: AppColors.border),
       ),
       children: [
         TableRow(
@@ -314,13 +318,18 @@ class _SummaryBox extends StatelessWidget {
       children: [
         Text(
           label,
-          style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.textMuted,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
           Money.format(value),
-          style: (emphasized ? theme.textTheme.titleLarge : theme.textTheme.titleMedium)
-              ?.copyWith(fontWeight: FontWeight.w700, color: color),
+          style:
+              (emphasized
+                      ? theme.textTheme.titleLarge
+                      : theme.textTheme.titleMedium)
+                  ?.copyWith(fontWeight: FontWeight.w700, color: color),
         ),
       ],
     );
@@ -340,19 +349,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.circleExclamation, size: 48, color: AppColors.danger),
-            const SizedBox(height: 16),
-            Text(
-              'حدث خطأ',
-              style: Theme.of(context).textTheme.titleMedium,
+            const FaIcon(
+              FontAwesomeIcons.circleExclamation,
+              size: 48,
+              color: AppColors.danger,
             ),
+            const SizedBox(height: 16),
+            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textSecondary),
             ),
           ],

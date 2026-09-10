@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
@@ -88,8 +89,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: entriesAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: AppProgress()),
                   error: (e, _) => _ErrorState(message: e.toString()),
                   data: (entries) {
                     if (entries.isEmpty) return const _EmptyState();
@@ -690,7 +690,7 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2),
                       )
                     : const Text('ترحيل القيد'),
               ),

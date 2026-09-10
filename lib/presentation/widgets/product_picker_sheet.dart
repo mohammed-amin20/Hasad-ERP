@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/widgets/app_progress.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money.dart';
 import '../../domain/products/product.dart';
@@ -45,10 +46,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'اختيار منتج',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('اختيار منتج', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             TextField(
               controller: _searchCtrl,
@@ -63,8 +61,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
             const SizedBox(height: 12),
             Expanded(
               child: productsAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: AppProgress()),
                 error: (e, _) => Center(child: Text('$e')),
                 data: (products) {
                   if (products.isEmpty) {
@@ -77,8 +74,10 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
                       final p = products[i];
                       return ListTile(
                         title: Text(p.name),
-                        subtitle: Text('${p.unit} · الكمية: '
-                            '${formatQty(p.qty, p.unitType)}'),
+                        subtitle: Text(
+                          '${p.unit} · الكمية: '
+                          '${formatQty(p.qty, p.unitType)}',
+                        ),
                         trailing: Text(
                           Money.format(p.salePrice),
                           style: const TextStyle(

@@ -2,6 +2,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/widgets/app_progress.dart';
+import '../../core/accessibility/reduced_motion.dart';
 import '../../core/config/app_config.dart';
 import '../../core/error/app_exception.dart';
 import '../../core/theme/app_colors.dart';
@@ -44,11 +46,11 @@ class SideNavigation extends ConsumerWidget {
     }
 
     Widget item(int index) => _NavItem(
-          tab: appTabs[index],
-          collapsed: collapsed,
-          active: selected == index,
-          onTap: () => select(index),
-        );
+      tab: appTabs[index],
+      collapsed: collapsed,
+      active: selected == index,
+      onTap: () => select(index),
+    );
 
     final navChildren = <Widget>[
       // Standalone dashboard item (index 0), like the reference sidebar.
@@ -72,7 +74,11 @@ class SideNavigation extends ConsumerWidget {
           colors: [Color(0xFF0F172A), Color(0xFF121E33)],
         ),
         boxShadow: [
-          BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(3, 0)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(3, 0),
+          ),
         ],
       ),
       child: Column(
@@ -120,7 +126,8 @@ class _Header extends ConsumerWidget {
                         children: [
                           Text(
                             AppConfig.appName,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -141,7 +148,10 @@ class _Header extends ConsumerWidget {
                         onPressed: onToggleCollapse,
                         tooltip: 'طي القائمة',
                         color: AppColors.sidebarText,
-                        icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 15),
+                        icon: const FaIcon(
+                          FontAwesomeIcons.chevronLeft,
+                          size: 15,
+                        ),
                       ),
                   ],
                 )
@@ -154,7 +164,10 @@ class _Header extends ConsumerWidget {
                               onPressed: onToggleCollapse,
                               tooltip: 'توسيع القائمة',
                               color: AppColors.sidebarText,
-                              icon: const FaIcon(FontAwesomeIcons.chevronRight, size: 15),
+                              icon: const FaIcon(
+                                FontAwesomeIcons.chevronRight,
+                                size: 15,
+                              ),
                             ),
                     ),
                   ],
@@ -182,7 +195,7 @@ class _Header extends ConsumerWidget {
               },
               loading: () => const SizedBox(
                 height: 36,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                child: Center(child: AppProgress(strokeWidth: 2)),
               ),
               error: (_, _) => const SizedBox.shrink(),
             ),
@@ -229,56 +242,74 @@ class _TenantSwitcher extends StatelessWidget {
         child: PopupMenuButton<String>(
           tooltip: 'تبديل المنشأة',
           onSelected: onSwitch,
-          itemBuilder: (_) => tenants.map((t) => PopupMenuItem<String>(
-            value: t.id,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: Text(
-                    t.name,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: t.id == current.id ? FontWeight.w700 : FontWeight.w500,
+          itemBuilder: (_) => tenants
+              .map(
+                (t) => PopupMenuItem<String>(
+                  value: t.id,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          t.name,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontWeight: t.id == current.id
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _roleColor(t.role).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _roleLabel(t.role),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _roleColor(t.role),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _roleColor(t.role).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _roleLabel(t.role),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: _roleColor(t.role),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )).toList(),
+              )
+              .toList(),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const FaIcon(FontAwesomeIcons.building, size: 16, color: Colors.white),
+              const FaIcon(
+                FontAwesomeIcons.building,
+                size: 16,
+                color: Colors.white,
+              ),
               const SizedBox(width: 10),
               Flexible(
                 child: Text(
                   current.name,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 6),
-              const FaIcon(FontAwesomeIcons.chevronDown, size: 12, color: AppColors.sidebarText),
+              const FaIcon(
+                FontAwesomeIcons.chevronDown,
+                size: 12,
+                color: AppColors.sidebarText,
+              ),
             ],
           ),
         ),
@@ -354,7 +385,10 @@ class _NavItem extends StatelessWidget {
               ? Colors.transparent
               : Colors.white.withValues(alpha: 0.06),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: motionDuration(
+              context,
+              const Duration(milliseconds: 180),
+            ),
             height: 44,
             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -400,7 +434,9 @@ class _NavItem extends StatelessWidget {
                           style: AppTheme.light.textTheme.bodyLarge?.copyWith(
                             color: color,
                             fontSize: 13.5,
-                            fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                            fontWeight: active
+                                ? FontWeight.w700
+                                : FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -445,8 +481,9 @@ class _SidebarFooter extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            mainAxisAlignment:
-                collapsed ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: collapsed
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.spaceBetween,
             children: [
               if (showLabel)
                 Expanded(
@@ -506,8 +543,10 @@ class _UserLabel extends StatelessWidget {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTheme.light.textTheme.bodySmall
-                ?.copyWith(color: AppColors.sidebarText, fontSize: 12),
+            style: AppTheme.light.textTheme.bodySmall?.copyWith(
+              color: AppColors.sidebarText,
+              fontSize: 12,
+            ),
           ),
         ),
       ],

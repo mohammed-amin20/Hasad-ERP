@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
@@ -33,10 +34,9 @@ class _FinancialStatementsScreenState
       actions: [
         IconButton(
           tooltip: 'تحديث',
-          onPressed: () => ref
-              .invalidate(_showBalanceSheet
-                  ? balanceSheetProvider
-                  : incomeStatementProvider),
+          onPressed: () => ref.invalidate(
+            _showBalanceSheet ? balanceSheetProvider : incomeStatementProvider,
+          ),
           icon: const FaIcon(FontAwesomeIcons.rotate),
         ),
       ],
@@ -44,33 +44,22 @@ class _FinancialStatementsScreenState
         children: [
           SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(
-                value: false,
-                label: Text('قائمة الدخل'),
-              ),
-              ButtonSegment(
-                value: true,
-                label: Text('الميزانية العمومية'),
-              ),
+              ButtonSegment(value: false, label: Text('قائمة الدخل')),
+              ButtonSegment(value: true, label: Text('الميزانية العمومية')),
             ],
             selected: {_showBalanceSheet},
             onSelectionChanged: (selection) =>
                 setState(() => _showBalanceSheet = selection.first),
           ),
           const SizedBox(height: 16),
-          if (_showBalanceSheet)
-            _AsOfControl()
-          else
-            _RangeControl(),
+          if (_showBalanceSheet) _AsOfControl() else _RangeControl(),
           const SizedBox(height: 16),
           Expanded(
             child: reportAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: AppProgress()),
               error: (e, _) => _ErrorState(message: e.toString()),
               data: (data) => _showBalanceSheet
-                  ? _BalanceSheetView(
-                      sheet: data as sheet_models.BalanceSheet,
-                    )
+                  ? _BalanceSheetView(sheet: data as sheet_models.BalanceSheet)
                   : _IncomeView(statement: data as pnl_models.IncomeStatement),
             ),
           ),
@@ -93,19 +82,35 @@ class _RangeControl extends ConsumerWidget {
         lastDate: DateTime(2100),
       );
       if (picked == null) return;
-      ref.read(incomeRangeProvider.notifier).update(
+      ref
+          .read(incomeRangeProvider.notifier)
+          .update(
             from: isFrom
                 ? picked
                 : (range.from.isAfter(picked) ? picked : range.from),
-            to: isFrom ? (picked.isAfter(range.to) ? picked : range.to) : picked,
+            to: isFrom
+                ? (picked.isAfter(range.to) ? picked : range.to)
+                : picked,
           );
     }
 
     return Row(
       children: [
-        Expanded(child: _DateChip(label: 'من', date: range.from, onTap: () => pick(true))),
+        Expanded(
+          child: _DateChip(
+            label: 'من',
+            date: range.from,
+            onTap: () => pick(true),
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _DateChip(label: 'إلى', date: range.to, onTap: () => pick(false))),
+        Expanded(
+          child: _DateChip(
+            label: 'إلى',
+            date: range.to,
+            onTap: () => pick(false),
+          ),
+        ),
       ],
     );
   }
@@ -172,9 +177,8 @@ class _DateChip extends StatelessWidget {
               Expanded(
                 child: Text(
                   '$label ${_fmtDate(date)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -463,7 +467,10 @@ class _SectionCard extends StatelessWidget {
           else
             for (final row in rows)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     SizedBox(
