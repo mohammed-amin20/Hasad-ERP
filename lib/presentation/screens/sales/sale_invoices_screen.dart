@@ -87,7 +87,8 @@ IconButton(
                       hintText: 'بحث برقم الفاتورة...',
                       prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
+? IconButton(
+                              tooltip: 'مسح البحث',
                               icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();

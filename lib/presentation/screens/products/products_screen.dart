@@ -70,6 +70,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
+                              tooltip: 'مسح البحث',
                               icon: const FaIcon(FontAwesomeIcons.xmark),
                               onPressed: () {
                                 _searchCtrl.clear();

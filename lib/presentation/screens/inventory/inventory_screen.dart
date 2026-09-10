@@ -68,6 +68,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
+                          tooltip: 'مسح البحث',
                           icon: const FaIcon(FontAwesomeIcons.xmark),
                           onPressed: () {
                             _searchCtrl.clear();
