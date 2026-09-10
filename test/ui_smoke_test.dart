@@ -503,6 +503,159 @@ void main() {
     expect(find.text('تعديل'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('responsive sweep: shell mode and data screens at '
+      '375/768/1024/1440', (tester) async {
+    const user = AppUser(
+      id: 'u1',
+      email: 'admin@test.local',
+      name: 'مدير النظام',
+      role: AppRole.admin,
+      tenantId: 't1',
+    );
+
+    final overrides = [
+      authStateProvider.overrideWith((ref) => Stream.value(user)),
+      dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+      accountRepositoryProvider.overrideWithValue(_FakeAccountRepository()),
+      journalRepositoryProvider.overrideWithValue(_FakeJournalRepository()),
+      reportRepositoryProvider.overrideWithValue(_FakeReportRepository()),
+      reminderRepositoryProvider.overrideWithValue(_FakeReminderRepository()),
+      customerRepositoryProvider.overrideWithValue(_FakeCustomerRepository()),
+      isOnlineProvider.overrideWithValue(true),
+    ];
+
+    const cases = <(double, bool, int)>[
+      (1440, false, 4),
+      (1024, false, 2),
+      (768, false, 2),
+      (375, true, 1),
+    ];
+
+    bool mobile = false;
+
+    Future<void> goTo(String label) async {
+      if (label == 'لوحة التحكم' &&
+          find.text('مبيعات اليوم').evaluate().isNotEmpty) {
+        return;
+      }
+      if (mobile) {
+        await tester.tap(find.byIcon(Icons.menu));
+        await tester.pumpAndSettle();
+      }
+      final navList = find.descendant(
+        of: find.byType(SideNavigation),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text(label),
+        100,
+        scrollable: navList,
+      );
+      await tester.ensureVisible(find.text(label).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
+
+    for (final (width, isMobile, gridCols) in cases) {
+      mobile = isMobile;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: overrides,
+          child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await goTo('لوحة التحكم');
+
+      expect(
+        find.byType(AppBar),
+        isMobile ? findsOneWidget : findsNothing,
+        reason: 'AppBar (mobile) expected at $width',
+      );
+      expect(
+        find.byType(SideNavigation),
+        isMobile ? findsNothing : findsOneWidget,
+        reason: 'Sidebar visibility expected at $width',
+      );
+      expect(
+        find.byTooltip('طي القائمة'),
+        (!isMobile && width < 1100) ? findsOneWidget : findsNothing,
+        reason: 'collapsible toggle expected at $width',
+      );
+
+      final grid = tester.widget<GridView>(find.byType(GridView));
+      final delegate =
+          grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(
+        delegate.crossAxisCount,
+        gridCols,
+        reason: 'dashboard stat columns at $width',
+      );
+
+      expect(find.text('مبيعات اليوم'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'dashboard layout at $width',
+      );
+
+      await goTo('العملاء');
+      expect(find.text('عميل تجريبي'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'customers at $width');
+
+      await goTo('دليل الحسابات');
+      expect(find.text('النقدية'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'chart of accounts at $width',
+      );
+
+      await goTo('قيد اليومية');
+      expect(find.textContaining('قيد افتتاحي'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'journal at $width');
+
+      await goTo('الأستاذ العام');
+      expect(find.text('اختر حساباً لعرض حركاته'), findsOneWidget);
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1101 — النقدية').last);
+      await tester.pumpAndSettle();
+      expect(find.text('فاتورة 1'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'ledger table at $width');
+
+      await goTo('ميزان المراجعة');
+      expect(find.text('الميزان متوازن'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'trial balance at $width');
+
+      await goTo('القوائم المالية');
+      expect(find.text('إيرادات المبيعات'), findsOneWidget);
+      await tester.tap(find.text('الميزانية العمومية'));
+      await tester.pumpAndSettle();
+      expect(find.text('الميزانية متوازنة'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'financial statements at $width',
+      );
+
+      await goTo('الإعدادات');
+      expect(find.text('إعدادات التذكيرات'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'reminders settings at $width',
+      );
+    }
+  });
 }
 
 class _FakeDashboardRepository implements DashboardRepository {

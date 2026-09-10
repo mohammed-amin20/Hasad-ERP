@@ -88,7 +88,7 @@ class _DashboardBody extends ConsumerWidget {
 
   int _statColumns(double width) {
     if (width >= 1040) return 4;
-    if (width >= 480) return 2;
+    if (width >= 440) return 2;
     return 1;
   }
 

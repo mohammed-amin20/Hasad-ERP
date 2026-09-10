@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../../core/widgets/app_progress.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/skip_link.dart';
@@ -27,6 +28,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   bool _sidebarCollapsed = false;
+  final GlobalKey<ScaffoldState> _shellKey = GlobalKey<ScaffoldState>();
   final FocusNode _contentFocus = FocusNode(
     debugLabel: 'main-content-target',
     skipTraversal: true,
@@ -48,6 +50,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return ConnectivityListener(
       child: Scaffold(
+        key: _shellKey,
         body: SkipLink(
           target: _contentFocus,
           child: hasSidebar
@@ -65,11 +68,17 @@ class _AppShellState extends ConsumerState<AppShell> {
                       child: _ScreenBody(
                         user: user,
                         contentFocus: _contentFocus,
+                        onOpenDrawer: () =>
+                            _shellKey.currentState?.openDrawer(),
                       ),
                     ),
                   ],
                 )
-              : _ScreenBody(user: user, contentFocus: _contentFocus),
+              : _ScreenBody(
+                  user: user,
+                  contentFocus: _contentFocus,
+                  onOpenDrawer: () => _shellKey.currentState?.openDrawer(),
+                ),
         ),
         drawer: hasSidebar ? null : const SideNavigation(),
       ),
@@ -78,10 +87,15 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 class _ScreenBody extends ConsumerWidget {
-  const _ScreenBody({required this.user, required this.contentFocus});
+  const _ScreenBody({
+    required this.user,
+    required this.contentFocus,
+    required this.onOpenDrawer,
+  });
 
   final AppUser? user;
   final FocusNode contentFocus;
+  final VoidCallback onOpenDrawer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -98,7 +112,9 @@ class _ScreenBody extends ConsumerWidget {
         : const SizedBox.shrink();
 
     return Scaffold(
-      appBar: isMobile ? _MobileAppBar(user: user) : null,
+      appBar: isMobile
+          ? _MobileAppBar(user: user, onOpenDrawer: onOpenDrawer)
+          : null,
       body: Column(
         children: [
           const OfflineBanner(),
@@ -114,9 +130,10 @@ class _ScreenBody extends ConsumerWidget {
 
 /// Mobile AppBar with tenant switcher for < 700px.
 class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
-  const _MobileAppBar({required this.user});
+  const _MobileAppBar({required this.user, required this.onOpenDrawer});
 
   final AppUser? user;
+  final VoidCallback onOpenDrawer;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -127,6 +144,11 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final currentTenantId = user?.tenantId;
 
     return AppBar(
+      leading: IconButton(
+        tooltip: 'القائمة',
+        onPressed: onOpenDrawer,
+        icon: const Icon(Icons.menu),
+      ),
       title: const Text('حصاد'),
       centerTitle: true,
       actions: [
@@ -209,7 +231,7 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
           loading: () => const SizedBox(
             width: 24,
             height: 24,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: Center(child: AppProgress(strokeWidth: 2)),
           ),
           error: (_, _) => const SizedBox.shrink(),
         ),

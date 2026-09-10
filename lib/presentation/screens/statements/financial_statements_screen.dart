@@ -352,7 +352,13 @@ class _SheetCheckCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('الأصول'),
+              const Flexible(
+                child: Text(
+                  'الأصول',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const Spacer(),
               Text(
                 Money.format(sheet.assetsTotal),
@@ -365,7 +371,13 @@ class _SheetCheckCard extends StatelessWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              const Text('الخصوم + حقوق الملكية'),
+              Flexible(
+                child: Text(
+                  'الخصوم + حقوق الملكية',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const Spacer(),
               Text(
                 Money.format(sheet.liabilitiesTotal + sheet.equityTotal),

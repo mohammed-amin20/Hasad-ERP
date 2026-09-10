@@ -257,6 +257,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
             const SizedBox(height: 20),
             DropdownButtonFormField<int>(
               initialValue: _threshold,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'إرسال تذكير بعد',
                 prefixIcon: FaIcon(FontAwesomeIcons.clock, size: 16),

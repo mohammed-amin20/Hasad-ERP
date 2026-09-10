@@ -36,17 +36,22 @@ String _arabicDate(DateTime now) =>
 
 /// Topbar trailing block replicating the HTML header: today's date chip and
 /// the current user's avatar circle (initial on blue-100).
+///
+/// [showDate] is driven by the header's available width (W8-7 responsive
+/// polish): the page shell drops the date chip once the header has no room
+/// for it, so the title keeps enough width and the topbar never overflows.
 class UserCorner extends StatelessWidget {
-  const UserCorner({super.key});
+  const UserCorner({super.key, this.showDate = true});
+
+  final bool showDate;
 
   @override
   Widget build(BuildContext context) {
-    final narrow = MediaQuery.sizeOf(context).width < 760;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!narrow) ...[
-          const _DateChip(),
+        if (showDate) ...[
+          const Flexible(child: _DateChip()),
           const SizedBox(width: 16),
         ],
         const _UserAvatar(),
@@ -71,8 +76,9 @@ class _DateChip extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           _arabicDate(DateTime.now()),
-          style: AppTheme.light.textTheme.bodySmall
-              ?.copyWith(color: AppColors.textSecondary),
+          style: AppTheme.light.textTheme.bodySmall?.copyWith(
+            color: AppColors.textSecondary,
+          ),
         ),
       ],
     );
@@ -98,7 +104,11 @@ class _UserAvatar extends ConsumerWidget {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 2),
           boxShadow: const [
-            BoxShadow(color: Color(0x1F0F172A), blurRadius: 8, offset: Offset(0, 2)),
+            BoxShadow(
+              color: Color(0x1F0F172A),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
           ],
         ),
         child: Text(

@@ -97,10 +97,14 @@ class _AsOfChip extends StatelessWidget {
                   color: AppColors.primary,
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  '$label ${_fmtDate(date)}',
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: Text(
+                    '$label ${_fmtDate(date)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -123,18 +127,28 @@ class _TrialBalanceView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
-        Row(
-          children: [
-            Expanded(child: _BalancePill(balanced: report.balanced)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _TotalsCard(
-                label: 'المجاميع',
-                debit: report.totalDebit,
-                credit: report.totalCredit,
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final pill = _BalancePill(balanced: report.balanced);
+            final totals = _TotalsCard(
+              label: 'المجاميع',
+              debit: report.totalDebit,
+              credit: report.totalCredit,
+            );
+            if (constraints.maxWidth >= 520) {
+              return Row(
+                children: [
+                  Expanded(child: pill),
+                  const SizedBox(width: 12),
+                  Expanded(child: totals),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [pill, const SizedBox(height: 12), totals],
+            );
+          },
         ),
         const SizedBox(height: 12),
         Container(
@@ -310,18 +324,26 @@ class _TotalsCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'مدين ${Money.format(debit)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              'مدين ${Money.format(debit)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-          Text(
-            'دائن ${Money.format(credit)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              'دائن ${Money.format(credit)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],

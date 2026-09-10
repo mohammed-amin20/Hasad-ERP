@@ -48,31 +48,36 @@ class PageScaffold extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, style: theme.textTheme.headlineMedium),
-                        if (subtitle != null)
-                          Text(subtitle!, style: theme.textTheme.bodySmall),
-                      ],
-                    ),
-                  ),
-                  if (actions != null)
-                    for (final action in actions!)
-                      ...[action, const SizedBox(width: 4)],
-                  if (actions != null && actions!.isNotEmpty)
-                    const SizedBox(width: 8),
-                  const UserCorner(),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showDate = constraints.maxWidth >= 700;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: theme.textTheme.headlineMedium),
+                            if (subtitle != null)
+                              Text(subtitle!, style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                      if (actions != null)
+                        for (final action in actions!) ...[
+                          action,
+                          const SizedBox(width: 4),
+                        ],
+                      if (actions != null && actions!.isNotEmpty)
+                        const SizedBox(width: 8),
+                      UserCorner(showDate: showDate),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 24),
-            Expanded(
-              child: child ?? const ContentPlaceholder(),
-            ),
+            Expanded(child: child ?? const ContentPlaceholder()),
           ],
         ),
       ),

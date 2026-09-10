@@ -275,12 +275,19 @@ class _LedgerView extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  _SummaryItem(label: 'رصيد افتتاحي', value: statement.opening),
-                  const Spacer(),
-                  _SummaryItem(
-                    label: 'الرصيد الختامي',
-                    value: statement.closing,
-                    emphasize: true,
+                  Expanded(
+                    child: _SummaryItem(
+                      label: 'رصيد افتتاحي',
+                      value: statement.opening,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _SummaryItem(
+                      label: 'الرصيد الختامي',
+                      value: statement.closing,
+                      emphasize: true,
+                    ),
                   ),
                 ],
               ),
@@ -320,6 +327,8 @@ class _SummaryItem extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           Money.format(value),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodyLarge?.copyWith(
             fontWeight: FontWeight.w800,
             color: emphasize
@@ -454,29 +463,37 @@ class _LedgerTable extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Row(
               children: [
-                const Expanded(flex: 3, child: SizedBox.shrink()),
-                const Spacer(),
-                Text(
-                  'الإجمالي',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                const Expanded(flex: 9, child: SizedBox.shrink()),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'الإجمالي',
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 24),
-                Text(
-                  Money.format(statement.totalDebit),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    Money.format(statement.totalDebit),
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 24),
-                Text(
-                  Money.format(statement.totalCredit),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    Money.format(statement.totalCredit),
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 36),
               ],
             ),
           ),

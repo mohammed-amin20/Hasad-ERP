@@ -60,43 +60,46 @@ class _SkipLinkState extends State<SkipLink> {
           Positioned(
             top: 12,
             left: 12,
-            child: FocusTraversalOrder(
-              order: const NumericFocusOrder(-1),
-              child: Opacity(
-                opacity: _focused ? 1 : 0,
-                child: Material(
-                  color: AppColors.surface,
-                  elevation: _focused ? 4 : 0,
-                  borderRadius: BorderRadius.circular(12),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    focusNode: _linkFocus,
-                    canRequestFocus: true,
-                    onFocusChange: (focused) =>
-                        setState(() => _focused = focused),
-                    onTap: _activate,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const FaIcon(
-                            FontAwesomeIcons.keyboard,
-                            size: 16,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'الانتقال للمحتوى الرئيسي',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w700,
+            child: IgnorePointer(
+              ignoring: !_focused,
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(-1),
+                child: Opacity(
+                  opacity: _focused ? 1 : 0,
+                  child: Material(
+                    color: AppColors.surface,
+                    elevation: _focused ? 4 : 0,
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      focusNode: _linkFocus,
+                      canRequestFocus: true,
+                      onFocusChange: (focused) =>
+                          setState(() => _focused = focused),
+                      onTap: _activate,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const FaIcon(
+                              FontAwesomeIcons.keyboard,
+                              size: 16,
+                              color: AppColors.primary,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Text(
+                              'الانتقال للمحتوى الرئيسي',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
