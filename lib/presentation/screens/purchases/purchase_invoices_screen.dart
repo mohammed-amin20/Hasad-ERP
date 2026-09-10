@@ -421,8 +421,8 @@ return Container(
               if (_isConsignment) ...[
                 const SizedBox(height: 12),
                 StatusBadge(
-                  label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُسدَّد لاحقاً',
-                  palette: BadgePalette.info,
+label: 'بضاعة أمانة — لا يُستلم إلا كمخزون، ويُسدَّد لاحقاً',
+                  palette: BadgePalette.commission,
                 ),
               ],
               const SizedBox(height: 12),
@@ -621,8 +621,8 @@ class _PurchaseLineRowState extends State<_PurchaseLineRow> {
                       if (entry.isNew) ...[
                         const SizedBox(width: 8),
                         StatusBadge(
-                          label: 'منتج جديد',
-                          palette: BadgePalette.info,
+label: 'منتج جديد',
+                          palette: BadgePalette.commission,
                         ),
                       ],
                     ],

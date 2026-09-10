@@ -162,7 +162,7 @@ class _PartyTile extends StatelessWidget {
                   StatusBadge(
                     label: onSettle != null ? 'مورد' : 'عميل',
                     palette: onSettle != null
-                        ? BadgePalette.info
+                        ? BadgePalette.commission
                         : BadgePalette.partial,
                   ),
                   if (onSettle != null) ...[

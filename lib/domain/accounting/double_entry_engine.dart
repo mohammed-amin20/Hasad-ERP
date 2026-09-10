@@ -5,11 +5,9 @@ import 'account.dart';
 import 'invoice_lines.dart';
 import '../customers/customer.dart';
 import '../products/product.dart';
-import '../products/product.dart' show ProductUnitType;
 import '../suppliers/supplier.dart' show Supplier, SupplierDealType;
 import '../employees/employee.dart' show Employee;
 import '../invoices/invoice.dart';
-import '../../core/utils/money.dart';
 
 /// Result of a double-entry operation
 class DoubleEntryResult {
@@ -292,7 +290,6 @@ class DoubleEntryEngine {
     final journalLines = <JournalLine>[];
 
     final isSale = invoice.type == 'sale';
-    final isPurchase = invoice.type == 'purchase';
 
     // Debit: Cash/Bank
     final cashAccount = _getAccount(accounts, method == 'cash' ? '1010' : '1015');

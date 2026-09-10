@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -26,7 +25,7 @@ Stream<List<ConnectivityResult>> connectivityStream(Ref ref) {
 class ConnectivityState extends _$ConnectivityState {
   @override
   List<ConnectivityResult> build() {
-    final stream = ref.watch(connectivityStreamProvider);
+    ref.watch(connectivityStreamProvider);
     ref.onDispose(() {});
     return <ConnectivityResult>[ConnectivityResult.none];
   }

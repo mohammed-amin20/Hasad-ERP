@@ -184,7 +184,7 @@ class _Header extends ConsumerWidget {
                 height: 36,
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
             ),
           ],
         ],
@@ -214,7 +214,7 @@ class _TenantSwitcher extends StatelessWidget {
       case AppRole.sales:
         return AppColors.success;
       default:
-        return AppColors.textMuted;
+        return AppColors.sidebarText;
     }
   }
 

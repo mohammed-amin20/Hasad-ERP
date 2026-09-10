@@ -177,7 +177,7 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
             height: 24,
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (_, _) => const SizedBox.shrink(),
         ),
       ],
     );
@@ -192,7 +192,7 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
       case AppRole.sales:
         return AppColors.success;
       default:
-        return AppColors.textMuted;
+        return AppColors.sidebarText;
     }
   }
 

@@ -22,7 +22,7 @@ class BadgePalette {
     background: AppColors.badgeUnpaidBg,
     foreground: AppColors.badgeUnpaidFg,
   );
-  static const info = BadgePalette(
+  static const commission = BadgePalette(
     background: AppColors.badgeCommissionBg,
     foreground: AppColors.badgeCommissionFg,
   );
@@ -69,5 +69,8 @@ BadgePalette badgeForStatus(InvoiceStatus status) => switch (status) {
 /// Palette for an invoice ownership badge.
 BadgePalette badgeForOwnership(InvoiceOwnership ownership) =>
     ownership == InvoiceOwnership.consignment
-        ? BadgePalette.info
-        : const BadgePalette(background: AppColors.border, foreground: AppColors.textMuted);
+        ? BadgePalette.commission
+        : const BadgePalette(
+            background: AppColors.border,
+            foreground: AppColors.textPrimary,
+          );

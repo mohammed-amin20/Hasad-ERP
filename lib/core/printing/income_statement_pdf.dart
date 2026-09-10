@@ -216,7 +216,6 @@ abstract final class IncomeStatementPdf {
         ? const PdfColor.fromInt(0xFFECFDF5) // light green
         : const PdfColor.fromInt(0xFFFEF2F2); // light red
     final borderColor = isProfit ? ReportPdfHelpers.success : ReportPdfHelpers.danger;
-    final textColor = const PdfColor.fromInt(0xFFFFFFFF);
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(20),

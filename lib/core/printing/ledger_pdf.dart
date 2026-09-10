@@ -1,9 +1,7 @@
 import 'package:flutter/services.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../../domain/reports/ledger.dart'
-    show LedgerStatement, LedgerLine;
+import '../../domain/reports/ledger.dart' show LedgerStatement;
 import '../../domain/accounts/account.dart';
 import 'report_pdf_helpers.dart';
 

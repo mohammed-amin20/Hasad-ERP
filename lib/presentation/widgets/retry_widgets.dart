@@ -107,9 +107,10 @@ class AsyncOperationWrapper<T> extends ConsumerWidget {
         }
         
         if (snapshot.hasData) {
+          final data = snapshot.data;
           // Use post-frame callback to avoid build-phase side effects
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            onSuccess(snapshot.data!);
+            if (data != null) onSuccess(data);
           });
           return const SizedBox.shrink();
         }
