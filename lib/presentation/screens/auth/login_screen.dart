@@ -224,7 +224,11 @@ class _LoginCard extends StatelessWidget {
               decoration: const InputDecoration(
                 labelText: 'اسم المستخدم',
                 hintText: 'name@example.com',
-                prefixIcon: FaIcon(FontAwesomeIcons.envelope),
+                prefixIcon: FaIcon(
+                  FontAwesomeIcons.envelope,
+                  size: 20,
+                  color: AppColors.inputIcon,
+                ),
               ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               validator: (value) {
@@ -246,12 +250,20 @@ class _LoginCard extends StatelessWidget {
               onFieldSubmitted: (_) => onSubmit(),
               decoration: InputDecoration(
                 labelText: 'كلمة المرور',
-                prefixIcon: const FaIcon(FontAwesomeIcons.lock),
+                prefixIcon: const FaIcon(
+                  FontAwesomeIcons.lock,
+                  size: 20,
+                  color: AppColors.inputIcon,
+                ),
                 suffixIcon: IconButton(
+                  iconSize: 20,
                   tooltip: obscure ? 'إظهار كلمة المرور' : 'إخفاء كلمة المرور',
                   onPressed: onToggleObscure,
                   icon: FaIcon(
-                    obscure ? FontAwesomeIcons.eye : FontAwesomeIcons.eyeSlash,
+                    obscure
+                        ? FontAwesomeIcons.eye
+                        : FontAwesomeIcons.eyeSlash,
+                    color: AppColors.inputIcon,
                   ),
                 ),
               ),
@@ -358,11 +370,16 @@ class _LoginCard extends StatelessWidget {
 class _LoginLogo extends StatelessWidget {
   const _LoginLogo();
 
+  /// Optical compensation for FontAwesome's `wheatAwn` glyph, whose visual
+  /// mass sits toward the top-right of its em-square. Tunable to taste.
+  static const Offset _wheatShift = Offset(-1, 2);
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 76,
       height: 76,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -380,11 +397,14 @@ class _LoginLogo extends StatelessWidget {
           BoxShadow(color: Color(0x59FFFFFF), offset: Offset(0, -1)),
         ],
       ),
-      child: const FaIcon(
-        FontAwesomeIcons.wheatAwn,
-        color: Colors.white,
-        semanticLabel: 'شعار حصاد',
-        size: 34,
+      child: Transform.translate(
+        offset: _wheatShift,
+        child: const FaIcon(
+          FontAwesomeIcons.wheatAwn,
+          color: Colors.white,
+          semanticLabel: 'شعار حصاد',
+          size: 34,
+        ),
       ),
     );
   }

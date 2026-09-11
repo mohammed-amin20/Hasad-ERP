@@ -28,6 +28,7 @@ abstract final class AppColors {
   static const Color textPrimary = Color(0xFF1E293B);
   static const Color textSecondary = Color(0xFF64748B);
   static const Color textMuted = Color(0xFF5B6B84);
+  static const Color inputIcon = Color(0xFF94A3B8);
 
   // Badge pairs (background / foreground) — DESIGN_SYSTEM §2.
   // Commission/Info now uses warning bg + textPrimary fg for 4.5:1 contrast.
