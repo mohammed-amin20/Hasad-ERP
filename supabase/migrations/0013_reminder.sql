@@ -86,7 +86,7 @@
             p_customer_id  uuid,
             p_customer_name text,
             p_phone        text,
-            p_amount       bigint,
+            p_amount       numeric,
             p_webhook      text,
             p_template     text,
             p_company_name text
@@ -108,7 +108,7 @@
             v_msg := replace(v_msg, '{phone}',         coalesce(p_phone, ''));
 
             insert into public.reminder_log (tenant_id, customer_id, amount, phone, message, status)
-            values (p_tenant_id, p_customer_id, p_amount, p_phone, v_msg, 'sent')
+            values (p_tenant_id, p_customer_id, p_amount::bigint, p_phone, v_msg, 'sent')
             returning id into v_log_id;
 
             perform net.http_post(
@@ -192,7 +192,7 @@
         $$;
 
         revoke all on function public.send_due_reminders() from public;
-        revoke all on function public._fire_reminder(uuid, uuid, text, text, bigint, text, text, text) from public;
+        revoke all on function public._fire_reminder(uuid, uuid, text, text, numeric, text, text, text) from public;
 
         -- ---------------------------------------------------------------------
         -- On-demand single reminder (the app's "remind now" button).

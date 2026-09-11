@@ -10,6 +10,20 @@
 begin;
 
 -- ---------------------------------------------------------------------
+-- Schema: processed_requests (generic idempotency ledger for bulk RPCs)
+--   Must exist before the ALTER below for sequential fresh applies.
+--   see also 0011_idempotency.sql for policies + grants.
+-- ---------------------------------------------------------------------
+create table if not exists public.processed_requests (
+    id         uuid primary key default gen_random_uuid(),
+    tenant_id  uuid not null references public.tenants(id) on delete cascade,
+    request_id uuid not null constraint processed_requests_request_id_key unique,
+    rpc_name   text,
+    result     jsonb,
+    created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
 -- Schema: idempotency support + result replay for bulk settlements
 -- ---------------------------------------------------------------------
 alter table public.payments add column if not exists request_id uuid;

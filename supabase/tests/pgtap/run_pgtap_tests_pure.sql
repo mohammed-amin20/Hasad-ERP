@@ -42,10 +42,15 @@ END $$;
 
 -- Set role to tenant A
 SET ROLE authenticated;
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Tenant A should see only their data
 SELECT is(
@@ -71,10 +76,15 @@ SELECT is(
 );
 
 -- Switch to tenant B
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_b, tenant_b)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_b, tenant_b)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 SELECT is(
   (SELECT count(*) FROM customers),
@@ -93,10 +103,15 @@ SELECT is(
 );
 
 -- Switch back to tenant A
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 SELECT is(
   (SELECT count(*) FROM customers),
@@ -109,10 +124,15 @@ SELECT is(
 -- ============================================================
 
 -- Setup: customer, product, accounts for tenant A
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 DO $$
 DECLARE
@@ -170,10 +190,15 @@ SELECT is(
 -- ============================================================
 
 -- Setup: commission supplier + product linked to it
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 DO $$
 DECLARE
@@ -264,10 +289,15 @@ SELECT is(
 -- TEST 4: Payments (record_payment)
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Get an unpaid invoice from tenant A
 SELECT lives_ok(
@@ -306,10 +336,15 @@ SELECT is(
 -- TEST 5: Party Statement (get_party_statement)
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Get customer statement
 SELECT lives_ok(
@@ -334,10 +369,15 @@ SELECT ok(
 -- TEST 6: Inventory Adjustment (adjust_inventory)
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Count = 105 (increase by 7)
 SELECT lives_ok(
@@ -367,10 +407,15 @@ SELECT ok(
 -- TEST 7: Salaries (add_employee_movement, pay_salary)
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 DO $$
 DECLARE
@@ -426,10 +471,15 @@ SELECT is(
 -- TEST 8: Idempotency (p_request_id)
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Generate request_id once
 DO $$
@@ -487,10 +537,15 @@ SELECT is(
 -- TEST 9: Reminder Functions
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Configure tenant settings for reminders
 UPDATE tenant_settings SET
@@ -535,10 +590,15 @@ SELECT lives_ok(
 -- TEST 10: Financial Reports
 -- ============================================================
 
-SET request.jwt.claims = (
-  SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
-  FROM test_context
-);
+DO $$
+DECLARE
+  v_claims jsonb := (
+    SELECT format('{"sub": "%s", "tenant_id": "%s"}', user_a, tenant_a)::jsonb
+    FROM test_context
+  );
+BEGIN
+  EXECUTE format('SET request.jwt.claims = %L', v_claims);
+END $$;
 
 -- Dashboard summary
 SELECT lives_ok(

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 
 /// Service that monitors network connectivity changes.
 class ConnectivityService {
@@ -60,6 +62,17 @@ class ConnectivityService {
 
   Future<bool> verifyInternetConnectivity() async {
     try {
+      if (kIsWeb) {
+        // `dart:io` HttpClient is unavailable at runtime on Flutter web, and
+        // the browser's connectivity events only reflect network interfaces.
+        // Verify real internet access via an HTTP 204/200 endpoint instead.
+        final response = await http
+            .get(Uri.parse(_verificationUrl))
+            .timeout(_verificationTimeout);
+        _verifiedOnline =
+            response.statusCode == 204 || response.statusCode == 200;
+        return _verifiedOnline;
+      }
       final client = HttpClient();
       client.connectionTimeout = _verificationTimeout;
       final request = await client.getUrl(Uri.parse(_verificationUrl));
