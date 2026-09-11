@@ -83,7 +83,7 @@ Daily/weekly/monthly operational procedures for the production environment.
 
 - [ ] **Full Backup Restore Test**: Restore last month's backup to a test project
   1. Create temporary Supabase project
-  2. Apply migrations (0001-0020)
+  2. Apply migrations (0001-0021, e.g. paste `production/prod_schema.sql`)
   3. Restore backup
   4. Run `reports.ps1` against restored data
   5. Verify all 5 cases pass

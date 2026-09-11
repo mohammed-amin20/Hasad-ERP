@@ -22,33 +22,27 @@ create extension if not exists pg_net;
 create extension if not exists "uuid-ossp";
 ```
 
-### Apply Migrations (in order)
+### Apply Migrations (single-paste — Recommended)
 
-In **SQL Editor**, paste and run each migration file **in order** from `../migrations/`:
+The combined file `prod_schema.sql` in this folder concatenates `0001–0021` in order. Paste the entire file into **SQL Editor** once and run. Verify no errors in the output; then confirm the verification query at the end (table/function/cron counts).
+
+**Important**: Extensions `pg_cron` and `pg_net` are allowlisted by Supabase but must be enabled; the script runs `create extension if not exists` which activates them. For `0013_reminder.sql` and `0020_reminders_to_all.sql`, cron jobs are created but **won't fire** until the n8n webhook is configured (see §3 below).
+
+### Apply Migrations (per-file fallback)
+
+If the combined script fails, paste each file individually in order from `../migrations/`:
+
 ```
-0001_extensions.sql
-0002_schema.sql
-0003_auth_helpers.sql
-0004_rls_grants.sql
-0005_register_tenant.sql
-0006_invoice_counters.sql
-0007_rpc_sales.sql
-0008_rpc_purchases.sql
-0009_rpc_payments.sql
-0010_rpc_employees.sql
-0011_idempotency.sql
-0012_storage.sql
-0013_reminder.sql
-0014_stock_adjust.sql
-0015_get_party_statement.sql
-0016_employees_rls.sql
-0017_master_tables_set_tenant.sql
-0018_purchase_links_existing_product.sql
-0019_reports.sql
-0020_reminders_to_all.sql
+0001_extensions.sql → 0002_schema.sql → 0003_auth_helpers.sql → 0004_rls_grants.sql
+→ 0005_register_tenant.sql → 0006_invoice_counters.sql → 0007_rpc_sales.sql
+→ 0008_rpc_purchases.sql → 0009_rpc_payments.sql → 0010_rpc_employees.sql
+→ 0011_idempotency.sql → 0012_storage.sql → 0013_reminder.sql → 0014_stock_adjust.sql
+→ 0015_get_party_statement.sql → 0016_employees_rls.sql → 0017_master_tables_set_tenant.sql
+→ 0018_purchase_links_existing_product.sql → 0019_reports.sql → 0020_reminders_to_all.sql
+→ 0021_user_tenants.sql
 ```
 
-**Important**: After each migration, verify no errors. For `0013_reminder.sql` and `0020_reminders_to_all.sql`, the cron job and reminders will be created but **won't fire** until n8n webhook is configured (see below).
+After each, verify no errors. `0021` creates `user_tenants`, backfills `current_tenant_id`, and adds the `switch_tenant` RPC — required for multi-business (M9 WS6) and the `_TenantSwitcher` sidebar.
 
 ### Configure Auth
 
@@ -147,7 +141,7 @@ Run: `docker compose up -d`
 ### Import the Workflow
 
 1. Open n8n at `https://n8n.yourdomain.com`
-2. **Workflows → Import** → select `n8n-workflows/sms-reminder.json` (create this file, see below)
+2. **Workflows → Import** → select `production/sms-reminder.json` (in this folder)
 3. Configure credentials:
    - **HTTP Request** node → authentication for your SMS provider (e.g., Twilio, local provider API)
    - **Webhook** node → path: `/webhook/hasad-reminder`
@@ -303,7 +297,8 @@ pg_dump -h db.xxxxx.supabase.co -U postgres -d postgres \
 | `README.md` | This file |
 | `docker-compose.yml` | n8n + PostgreSQL for VPS |
 | `.env.example` | Template for n8n environment |
+| `prod_schema.sql` | Combined 0001–0021 migration script (single SQL Editor paste) |
 | `apply_migrations.ps1` | PowerShell script to apply all migrations to production |
-| `n8n-workflows/sms-reminder.json` | n8n workflow template (to be created) |
+| `sms-reminder.json` | n8n workflow template (SMS credential = placeholder, wire provider when decided) |
 | `backup.ps1` | pg_dump backup script |
 | `OPERATIONS.md` | Runbook for daily operations |

@@ -9,7 +9,7 @@
 .PREREQUISITES
     - PowerShell 5.1+
     - Supabase project URL and service_role key (NOT anon key)
-    - Migrations in ../migrations/ numbered 0001..0020
+    - Migrations in ../migrations/ numbered 0001..0021
 
 .PARAMETER SupabaseUrl
     Production Supabase project URL (e.g., https://xxxx.supabase.co)
