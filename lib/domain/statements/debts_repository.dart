@@ -3,7 +3,11 @@ import '../invoices/invoice.dart';
 /// A party's outstanding balances, aggregated from the RLS-protected reads of
 /// `invoices` and `commission_dues` (no separate DB object needed).
 class PartyBalance {
-  const PartyBalance({required this.id, required this.name, required this.amount});
+  const PartyBalance({
+    required this.id,
+    required this.name,
+    required this.amount,
+  });
 
   final String id;
   final String name;

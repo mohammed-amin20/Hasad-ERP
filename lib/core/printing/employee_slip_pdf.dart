@@ -26,8 +26,8 @@ abstract final class EmployeeSlipPdf {
     required String employeeName,
     Uint8List? fontBytes,
   }) async {
-    final font = fontBytes ??
-        (await rootBundle.load(_cairoAsset)).buffer.asUint8List();
+    final font =
+        fontBytes ?? (await rootBundle.load(_cairoAsset)).buffer.asUint8List();
     final data = font.buffer.asByteData();
 
     final doc = pw.Document(
@@ -88,7 +88,10 @@ abstract final class EmployeeSlipPdf {
           ],
         ),
         pw.SizedBox(height: 10),
-        pw.Text('الموظف: $employeeName', style: const pw.TextStyle(fontSize: 12)),
+        pw.Text(
+          'الموظف: $employeeName',
+          style: const pw.TextStyle(fontSize: 12),
+        ),
         pw.SizedBox(height: 4),
         pw.Text(
           'الفترة: ${_month(statement.monthFrom)} إلى ${_month(statement.monthTo)}',
@@ -108,7 +111,11 @@ abstract final class EmployeeSlipPdf {
         ),
         pw.SizedBox(width: 12),
         pw.Expanded(
-          child: _summaryBox('إجمالي المتبقي الختامي', statement.closing, _primary),
+          child: _summaryBox(
+            'إجمالي المتبقي الختامي',
+            statement.closing,
+            _primary,
+          ),
         ),
       ],
     );
@@ -193,7 +200,10 @@ abstract final class EmployeeSlipPdf {
     return pw.Table(
       border: pw.TableBorder(
         horizontalInside: const pw.BorderSide(width: 0.4, color: _border),
-        top: const pw.BorderSide(width: 0.8, color: PdfColor.fromInt(0xFF94A3B8)),
+        top: const pw.BorderSide(
+          width: 0.8,
+          color: PdfColor.fromInt(0xFF94A3B8),
+        ),
         bottom: const pw.BorderSide(
           width: 0.8,
           color: PdfColor.fromInt(0xFF94A3B8),

@@ -15,10 +15,10 @@ class AccountDraft {
   final String? parentCode;
 
   Map<String, dynamic> toJson() => {
-        'p_code': code,
-        'p_name': name,
-        'p_type': type.apiValue,
-        if (parentCode != null && parentCode!.isNotEmpty)
-          'p_parent_code': parentCode,
-      };
+    'p_code': code,
+    'p_name': name,
+    'p_type': type.apiValue,
+    if (parentCode != null && parentCode!.isNotEmpty)
+      'p_parent_code': parentCode,
+  };
 }

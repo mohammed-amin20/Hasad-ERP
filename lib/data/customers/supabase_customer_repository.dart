@@ -66,10 +66,7 @@ class SupabaseCustomerRepository implements CustomerRepository {
     required CustomerDraft draft,
   }) async {
     try {
-      await _client
-          .from('customers')
-          .update(draft.toJson())
-          .eq('id', id);
+      await _client.from('customers').update(draft.toJson()).eq('id', id);
     } on Object catch (error) {
       throw mapErrorToAppException(error);
     }

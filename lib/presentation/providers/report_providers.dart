@@ -21,18 +21,10 @@ class LedgerQuery extends _$LedgerQuery {
   @override
   ({String? accountId, DateTime from, DateTime to}) build() {
     final now = DateTime.now();
-    return (
-      accountId: null,
-      from: DateTime(now.year, now.month, 1),
-      to: now,
-    );
+    return (accountId: null, from: DateTime(now.year, now.month, 1), to: now);
   }
 
-  void update({
-    String? accountId,
-    DateTime? from,
-    DateTime? to,
-  }) {
+  void update({String? accountId, DateTime? from, DateTime? to}) {
     final current = state;
     state = (
       accountId: accountId ?? current.accountId,
@@ -50,11 +42,9 @@ class LedgerStatement extends _$LedgerStatement {
     final query = ref.watch(ledgerQueryProvider);
     final accountId = query.accountId;
     if (accountId == null) return null;
-    return ref.watch(reportRepositoryProvider).ledger(
-          accountId: accountId,
-          from: query.from,
-          to: query.to,
-        );
+    return ref
+        .watch(reportRepositoryProvider)
+        .ledger(accountId: accountId, from: query.from, to: query.to);
   }
 }
 
@@ -71,10 +61,9 @@ class AsOfDate extends _$AsOfDate {
 @riverpod
 class TrialBalance extends _$TrialBalance {
   @override
-  Future<tb_models.TrialBalanceReport> build() =>
-      ref.watch(reportRepositoryProvider).trialBalance(
-            ref.watch(asOfDateProvider),
-          );
+  Future<tb_models.TrialBalanceReport> build() => ref
+      .watch(reportRepositoryProvider)
+      .trialBalance(ref.watch(asOfDateProvider));
 }
 
 /// Income statement range (default: from first-of-month to now).

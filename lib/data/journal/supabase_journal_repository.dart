@@ -21,10 +21,7 @@ class SupabaseJournalRepository implements JournalRepository {
     try {
       final result = await _client.rpc(
         'get_journal_entries',
-        params: {
-          'p_from': _isoDate(from),
-          'p_to': _isoDate(to),
-        },
+        params: {'p_from': _isoDate(from), 'p_to': _isoDate(to)},
       );
       final rows = result as List;
       return [

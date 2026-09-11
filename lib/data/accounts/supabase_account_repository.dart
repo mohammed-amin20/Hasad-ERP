@@ -28,8 +28,10 @@ class SupabaseAccountRepository implements AccountRepository {
   @override
   Future<Account> create(AccountDraft draft) async {
     try {
-      final result = await _client
-          .rpc('create_account', params: draft.toJson()) as Map<String, dynamic>;
+      final result = await _client.rpc(
+        'create_account',
+        params: draft.toJson(),
+      ) as Map<String, dynamic>;
       if (result['duplicate'] == true) {
         throw ValidationException('كود الحساب "${draft.code}" مستخدم مسبقاً');
       }

@@ -77,7 +77,17 @@ class ProductDraft extends Equatable {
   final double? commissionRate;
 
   @override
-  List<Object?> get props => [name, unitType, unit, salePrice, costPrice, qtyOnHand, reorderLevel, supplierId, commissionRate];
+  List<Object?> get props => [
+    name,
+    unitType,
+    unit,
+    salePrice,
+    costPrice,
+    qtyOnHand,
+    reorderLevel,
+    supplierId,
+    commissionRate,
+  ];
 
   Map<String, dynamic> toJson() => {
     'name': name,

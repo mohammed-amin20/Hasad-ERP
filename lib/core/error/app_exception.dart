@@ -27,7 +27,9 @@ final class ValidationException extends AppException {
 
 /// No connectivity / server timeout — retry is appropriate.
 final class NetworkException extends AppException {
-  const NetworkException([super.message = 'تعذر الاتصال بالخادم، حاول مرة أخرى']);
+  const NetworkException([
+    super.message = 'تعذر الاتصال بالخادم، حاول مرة أخرى',
+  ]);
 }
 
 /// Unexpected internal failure.

@@ -136,14 +136,22 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize {
+    // Note: This is a static getter, but we can't access MediaQuery here.
+    // The actual height adjustment is handled in build() by returning a smaller
+    // AppBar with custom toolbarHeight when on very small screens.
+    return const Size.fromHeight(kToolbarHeight);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tenantsAsync = ref.watch(availableTenantsProvider);
     final currentTenantId = user?.tenantId;
+    final isSmallMobile = MediaQuery.of(context).size.width < 375;
+    final toolbarHeight = isSmallMobile ? 48.0 : kToolbarHeight;
 
     return AppBar(
+      toolbarHeight: toolbarHeight,
       leading: IconButton(
         tooltip: 'القائمة',
         onPressed: onOpenDrawer,
@@ -151,6 +159,9 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
       ),
       title: const Text('حصاد'),
       centerTitle: true,
+      titleTextStyle: isSmallMobile
+          ? Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 16)
+          : null,
       actions: [
         tenantsAsync.when(
           data: (tenants) {

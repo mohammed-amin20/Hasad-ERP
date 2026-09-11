@@ -14,7 +14,9 @@ class SupabaseSupplierRepository implements SupplierRepository {
   @override
   Future<List<Supplier>> listAll({String? search}) async {
     try {
-      var query = _client.from('suppliers').select(
+      var query = _client
+          .from('suppliers')
+          .select(
             'id, name, phone, notes, deal_type, commission_rate, created_at',
           );
 
@@ -35,7 +37,9 @@ class SupabaseSupplierRepository implements SupplierRepository {
     try {
       final row = await _client
           .from('suppliers')
-          .select('id, name, phone, notes, deal_type, commission_rate, created_at')
+          .select(
+            'id, name, phone, notes, deal_type, commission_rate, created_at',
+          )
           .eq('id', id)
           .maybeSingle();
 
@@ -52,7 +56,9 @@ class SupabaseSupplierRepository implements SupplierRepository {
       final rows = await _client
           .from('suppliers')
           .insert(draft.toJson())
-          .select('id, name, phone, notes, deal_type, commission_rate, created_at')
+          .select(
+            'id, name, phone, notes, deal_type, commission_rate, created_at',
+          )
           .single();
       return Supplier.fromJson(rows);
     } on Object catch (error) {

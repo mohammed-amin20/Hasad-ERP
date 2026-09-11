@@ -8,20 +8,20 @@ enum AccountType {
 
   /// Safe parser — unknown values fall back to [AccountType.asset].
   static AccountType from(String value) => switch (value) {
-        'liability' => AccountType.liability,
-        'equity' => AccountType.equity,
-        'revenue' => AccountType.revenue,
-        'expense' => AccountType.expense,
-        _ => AccountType.asset,
-      };
+    'liability' => AccountType.liability,
+    'equity' => AccountType.equity,
+    'revenue' => AccountType.revenue,
+    'expense' => AccountType.expense,
+    _ => AccountType.asset,
+  };
 
   String get label => switch (this) {
-        AccountType.asset => 'أصول',
-        AccountType.liability => 'خصوم',
-        AccountType.equity => 'حقوق ملكية',
-        AccountType.revenue => 'إيرادات',
-        AccountType.expense => 'مصاريف',
-      };
+    AccountType.asset => 'أصول',
+    AccountType.liability => 'خصوم',
+    AccountType.equity => 'حقوق ملكية',
+    AccountType.revenue => 'إيرادات',
+    AccountType.expense => 'مصاريف',
+  };
 
   String get apiValue => name;
 }
@@ -49,12 +49,12 @@ class Account {
   final int balance;
 
   factory Account.fromJson(Map<String, dynamic> json) => Account(
-        id: json['account_id'] as String,
-        code: json['code'] as String,
-        name: json['name'] as String,
-        type: AccountType.from(json['type'] as String? ?? 'asset'),
-        parentId: json['parent_id'] as String?,
-        parentCode: json['parent_code'] as String?,
-        balance: (json['balance'] as num?)?.toInt() ?? 0,
-      );
+    id: json['account_id'] as String,
+    code: json['code'] as String,
+    name: json['name'] as String,
+    type: AccountType.from(json['type'] as String? ?? 'asset'),
+    parentId: json['parent_id'] as String?,
+    parentCode: json['parent_code'] as String?,
+    balance: (json['balance'] as num?)?.toInt() ?? 0,
+  );
 }

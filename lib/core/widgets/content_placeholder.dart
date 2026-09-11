@@ -8,7 +8,8 @@ class ContentPlaceholder extends StatelessWidget {
   const ContentPlaceholder({
     super.key,
     this.title = 'قريباً',
-    this.message = 'هذه الشاشة ضمن خطة التطبيق وسيتم تفعيلها في المراحل القادمة',
+    this.message =
+        'هذه الشاشة ضمن خطة التطبيق وسيتم تفعيلها في المراحل القادمة',
     this.icon,
   });
 
@@ -26,13 +27,10 @@ class ContentPlaceholder extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null)
-              FaIcon(
-                icon,
-                size: 48,
-                color: AppColors.textMuted,
-              )
+              FaIcon(icon, size: 48, color: AppColors.textMuted)
             else
-              FaIcon(FontAwesomeIcons.hammer,
+              FaIcon(
+                FontAwesomeIcons.hammer,
                 size: 48,
                 color: AppColors.textMuted,
               ),
@@ -42,7 +40,9 @@ class ContentPlaceholder extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.textMuted,
+              ),
             ),
           ],
         ),

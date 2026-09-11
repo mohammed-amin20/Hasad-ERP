@@ -48,8 +48,12 @@ abstract final class TrialBalancePdf {
         pw.Expanded(
           child: _summaryBox(
             report.balanced ? 'متوازن' : 'غير متوازن',
-            ReportPdfHelpers.formatAmount(report.totalDebit - report.totalCredit),
-            report.balanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+            ReportPdfHelpers.formatAmount(
+              report.totalDebit - report.totalCredit,
+            ),
+            report.balanced
+                ? ReportPdfHelpers.success
+                : ReportPdfHelpers.danger,
           ),
         ),
       ],
@@ -63,10 +67,10 @@ abstract final class TrialBalancePdf {
         color: color == ReportPdfHelpers.primary
             ? const PdfColor.fromInt(0xFFEFF6FF)
             : color == ReportPdfHelpers.danger
-                ? const PdfColor.fromInt(0xFFFEF2F2)
-                : color == ReportPdfHelpers.success
-                    ? const PdfColor.fromInt(0xFFECFDF5)
-                    : const PdfColor.fromInt(0xFFF8FAFC),
+            ? const PdfColor.fromInt(0xFFFEF2F2)
+            : color == ReportPdfHelpers.success
+            ? const PdfColor.fromInt(0xFFECFDF5)
+            : const PdfColor.fromInt(0xFFF8FAFC),
         borderRadius: pw.BorderRadius.circular(6),
         border: pw.Border.all(color: color, width: 1),
       ),
@@ -75,7 +79,10 @@ abstract final class TrialBalancePdf {
         children: [
           pw.Text(
             label,
-            style: const pw.TextStyle(fontSize: 9, color: ReportPdfHelpers.muted),
+            style: const pw.TextStyle(
+              fontSize: 9,
+              color: ReportPdfHelpers.muted,
+            ),
           ),
           pw.SizedBox(height: 2),
           pw.Text(
@@ -96,7 +103,10 @@ abstract final class TrialBalancePdf {
       return pw.Center(
         child: pw.Text(
           'لا توجد حسابات',
-          style: const pw.TextStyle(fontSize: 12, color: ReportPdfHelpers.muted),
+          style: const pw.TextStyle(
+            fontSize: 12,
+            color: ReportPdfHelpers.muted,
+          ),
         ),
       );
     }
@@ -132,9 +142,14 @@ abstract final class TrialBalancePdf {
     };
 
     final rows = <pw.TableRow>[
-      ReportPdfHelpers.tableHeaderRow(
-        ['رقم الحساب', 'اسم الحساب', 'النوع', 'مدين', 'دائن', 'الرصيد'],
-      ),
+      ReportPdfHelpers.tableHeaderRow([
+        'رقم الحساب',
+        'اسم الحساب',
+        'النوع',
+        'مدين',
+        'دائن',
+        'الرصيد',
+      ]),
     ];
 
     for (final type in typeOrder) {
@@ -165,48 +180,54 @@ abstract final class TrialBalancePdf {
       for (final row in typeRows) {
         final balance = row.balance;
         final isDebit = balance >= 0;
-        rows.add(ReportPdfHelpers.tableDataRow(
-          [
-            row.code,
-            row.name,
-            typeLabels[type] ?? type.name,
-            row.debit > 0 ? ReportPdfHelpers.formatAmount(row.debit) : '',
-            row.credit > 0 ? ReportPdfHelpers.formatAmount(row.credit) : '',
-            ReportPdfHelpers.formatAmount(balance),
-          ],
-          bold: false,
-          colors: [
-            null, // code
-            null, // name
-            typeColors[type], // type
-            row.debit > 0 ? ReportPdfHelpers.danger : null, // debit
-            row.credit > 0 ? ReportPdfHelpers.primary : null, // credit
-            isDebit ? ReportPdfHelpers.success : ReportPdfHelpers.danger, // balance
-          ],
-        ));
+        rows.add(
+          ReportPdfHelpers.tableDataRow(
+            [
+              row.code,
+              row.name,
+              typeLabels[type] ?? type.name,
+              row.debit > 0 ? ReportPdfHelpers.formatAmount(row.debit) : '',
+              row.credit > 0 ? ReportPdfHelpers.formatAmount(row.credit) : '',
+              ReportPdfHelpers.formatAmount(balance),
+            ],
+            bold: false,
+            colors: [
+              null, // code
+              null, // name
+              typeColors[type], // type
+              row.debit > 0 ? ReportPdfHelpers.danger : null, // debit
+              row.credit > 0 ? ReportPdfHelpers.primary : null, // credit
+              isDebit
+                  ? ReportPdfHelpers.success
+                  : ReportPdfHelpers.danger, // balance
+            ],
+          ),
+        );
       }
     }
 
     // Totals row
-    rows.add(ReportPdfHelpers.tableDataRow(
-      [
-        '',
-        'الإجماليات',
-        '',
-        ReportPdfHelpers.formatAmount(report.totalDebit),
-        ReportPdfHelpers.formatAmount(report.totalCredit),
-        ReportPdfHelpers.formatAmount(report.totalDebit - report.totalCredit),
-      ],
-      bold: true,
-      colors: [
-        null,
-        ReportPdfHelpers.muted,
-        null,
-        ReportPdfHelpers.danger,
-        ReportPdfHelpers.primary,
-        report.balanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
-      ],
-    ));
+    rows.add(
+      ReportPdfHelpers.tableDataRow(
+        [
+          '',
+          'الإجماليات',
+          '',
+          ReportPdfHelpers.formatAmount(report.totalDebit),
+          ReportPdfHelpers.formatAmount(report.totalCredit),
+          ReportPdfHelpers.formatAmount(report.totalDebit - report.totalCredit),
+        ],
+        bold: true,
+        colors: [
+          null,
+          ReportPdfHelpers.muted,
+          null,
+          ReportPdfHelpers.danger,
+          ReportPdfHelpers.primary,
+          report.balanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+        ],
+      ),
+    );
 
     return pw.Table(
       border: pw.TableBorder(

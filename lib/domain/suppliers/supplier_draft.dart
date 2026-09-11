@@ -17,10 +17,10 @@ class SupplierDraft {
   final double? commissionRate;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'phone': phone,
-        'notes': notes,
-        'deal_type': dealType.dbValue,
-        'commission_rate': commissionRate,
-      };
+    'name': name,
+    'phone': phone,
+    'notes': notes,
+    'deal_type': dealType.dbValue,
+    'commission_rate': commissionRate,
+  };
 }

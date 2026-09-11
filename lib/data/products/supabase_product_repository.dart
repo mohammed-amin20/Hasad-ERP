@@ -63,10 +63,7 @@ class SupabaseProductRepository implements ProductRepository {
   }
 
   @override
-  Future<void> update({
-    required String id,
-    required ProductDraft draft,
-  }) async {
+  Future<void> update({required String id, required ProductDraft draft}) async {
     try {
       await _client.from('products').update(draft.toJson()).eq('id', id);
     } on Object catch (error) {

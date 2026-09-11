@@ -27,8 +27,8 @@ abstract final class StatementPdf {
     required String partyType,
     Uint8List? fontBytes,
   }) async {
-    final font = fontBytes ??
-        (await rootBundle.load(_cairoAsset)).buffer.asUint8List();
+    final font =
+        fontBytes ?? (await rootBundle.load(_cairoAsset)).buffer.asUint8List();
     final data = font.buffer.asByteData();
 
     final doc = pw.Document(
@@ -56,10 +56,7 @@ abstract final class StatementPdf {
               alignment: pw.Alignment.centerLeft,
               child: pw.Text(
                 'حصاد — برنامج إدارة الحسابات',
-                style: const pw.TextStyle(
-                  fontSize: 8,
-                  color: _muted,
-                ),
+                style: const pw.TextStyle(fontSize: 8, color: _muted),
               ),
             ),
           ],
@@ -143,10 +140,7 @@ abstract final class StatementPdf {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            label,
-            style: const pw.TextStyle(fontSize: 9, color: _muted),
-          ),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 9, color: _muted)),
           pw.SizedBox(height: 2),
           pw.Text(
             Money.format(amount),
@@ -265,26 +259,23 @@ abstract final class StatementPdf {
           child: pw.Text(
             date ?? '',
             textAlign: pw.TextAlign.end,
-            style: pw.TextStyle(
-              fontSize: 9,
-              color: bold ? null : _muted,
-            ),
+            style: pw.TextStyle(fontSize: 9, color: bold ? null : _muted),
           ),
         ),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 5),
-          child: pw.Text(label,
-              textAlign: pw.TextAlign.end,
-              style: style.copyWith(fontSize: 10)),
+          child: pw.Text(
+            label,
+            textAlign: pw.TextAlign.end,
+            style: style.copyWith(fontSize: 10),
+          ),
         ),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 5),
           child: pw.Text(
             debit,
             textAlign: pw.TextAlign.end,
-            style: style.copyWith(
-              color: debitColor ?? (bold ? null : _muted),
-            ),
+            style: style.copyWith(color: debitColor ?? (bold ? null : _muted)),
           ),
         ),
         pw.Padding(
@@ -292,9 +283,7 @@ abstract final class StatementPdf {
           child: pw.Text(
             credit,
             textAlign: pw.TextAlign.end,
-            style: style.copyWith(
-              color: creditColor ?? (bold ? null : _muted),
-            ),
+            style: style.copyWith(color: creditColor ?? (bold ? null : _muted)),
           ),
         ),
         pw.Padding(
@@ -332,6 +321,6 @@ abstract final class StatementPdf {
   static String _date(DateTime? d) => d == null
       ? ''
       : '${d.year.toString().padLeft(4, '0')}/'
-          '${d.month.toString().padLeft(2, '0')}/'
-          '${d.day.toString().padLeft(2, '0')}';
+            '${d.month.toString().padLeft(2, '0')}/'
+            '${d.day.toString().padLeft(2, '0')}';
 }

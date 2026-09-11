@@ -290,10 +290,10 @@ class _TenantSwitcher extends StatelessWidget {
             children: [
               const FaIcon(
                 FontAwesomeIcons.building,
-                size: 16,
+                size: 18,
                 color: Colors.white,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   current.name,

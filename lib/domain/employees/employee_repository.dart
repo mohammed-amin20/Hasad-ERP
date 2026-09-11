@@ -9,9 +9,6 @@ abstract interface class EmployeeRepository {
   Future<List<Employee>> listAll({String? search});
   Future<Employee?> getById(String id);
   Future<Employee> create(EmployeeDraft draft);
-  Future<void> update({
-    required String id,
-    required EmployeeDraft draft,
-  });
+  Future<void> update({required String id, required EmployeeDraft draft});
   Future<void> delete(String id);
 }

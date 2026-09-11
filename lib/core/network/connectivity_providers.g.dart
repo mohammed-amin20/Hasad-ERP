@@ -144,7 +144,7 @@ final class ConnectivityStateProvider
   }
 }
 
-String _$connectivityStateHash() => r'606f4595f982843ef56fa02937afd2429fcf389c';
+String _$connectivityStateHash() => r'88321c8ff5f294882888d475efbdc45c49ec0feb';
 
 /// Provider that holds the current connectivity state (rebuilds on change)
 
@@ -167,16 +167,111 @@ abstract class _$ConnectivityState extends $Notifier<List<ConnectivityResult>> {
   }
 }
 
-/// Convenience provider: true if device has internet connection
+/// Convenience provider: true if device has a network interface (instant, may be false positive)
+
+@ProviderFor(hasInterface)
+final hasInterfaceProvider = HasInterfaceProvider._();
+
+/// Convenience provider: true if device has a network interface (instant, may be false positive)
+
+final class HasInterfaceProvider extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// Convenience provider: true if device has a network interface (instant, may be false positive)
+  HasInterfaceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'hasInterfaceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$hasInterfaceHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return hasInterface(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$hasInterfaceHash() => r'd43f433ef2afd2eb68ae56df8443a7c914c3a832';
+
+/// Provider that emits verified online status (interface + HTTP check)
+
+@ProviderFor(VerifiedOnline)
+final verifiedOnlineProvider = VerifiedOnlineProvider._();
+
+/// Provider that emits verified online status (interface + HTTP check)
+final class VerifiedOnlineProvider
+    extends $AsyncNotifierProvider<VerifiedOnline, bool> {
+  /// Provider that emits verified online status (interface + HTTP check)
+  VerifiedOnlineProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'verifiedOnlineProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$verifiedOnlineHash();
+
+  @$internal
+  @override
+  VerifiedOnline create() => VerifiedOnline();
+}
+
+String _$verifiedOnlineHash() => r'65f6673494fa30565b190f035bdaf9c3008a7e40';
+
+/// Provider that emits verified online status (interface + HTTP check)
+
+abstract class _$VerifiedOnline extends $AsyncNotifier<bool> {
+  FutureOr<bool> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<AsyncValue<bool>, bool>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<bool>, bool>,
+              AsyncValue<bool>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+/// Convenience provider: true if verified online (interface + HTTP check)
 
 @ProviderFor(isOnline)
 final isOnlineProvider = IsOnlineProvider._();
 
-/// Convenience provider: true if device has internet connection
+/// Convenience provider: true if verified online (interface + HTTP check)
 
 final class IsOnlineProvider extends $FunctionalProvider<bool, bool, bool>
     with $Provider<bool> {
-  /// Convenience provider: true if device has internet connection
+  /// Convenience provider: true if verified online (interface + HTTP check)
   IsOnlineProvider._()
     : super(
         from: null,
@@ -210,4 +305,4 @@ final class IsOnlineProvider extends $FunctionalProvider<bool, bool, bool>
   }
 }
 
-String _$isOnlineHash() => r'bba79b0b7e6e37067967ec0d3121228b68e450b0';
+String _$isOnlineHash() => r'045ed046340508dcae28922a4a33d72658604e90';

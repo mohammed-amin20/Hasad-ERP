@@ -47,10 +47,7 @@ class SupabaseSalaryRepository implements SalaryRepository {
   @override
   Future<SalaryResult> pay(SalaryDraft draft) async {
     try {
-      final result = await _client.rpc(
-        'pay_salary',
-        params: draft.toJson(),
-      );
+      final result = await _client.rpc('pay_salary', params: draft.toJson());
       return SalaryResult.fromJson(result as Map<String, dynamic>);
     } on Object catch (error) {
       throw mapErrorToAppException(error);
@@ -60,7 +57,9 @@ class SupabaseSalaryRepository implements SalaryRepository {
   @override
   Future<List<SalaryRecord>> salaryHistory() async {
     try {
-      final rows = await _client.from('salaries').select(
+      final rows = await _client
+          .from('salaries')
+          .select(
             'id, employee_id, month, base_salary, paid, date, created_at',
           );
       return [for (final r in rows) SalaryRecord.fromJson(r)];

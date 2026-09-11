@@ -14,8 +14,8 @@ class ReminderSettings {
       ReminderSettings(
         tenantId: json['tenant_id'] as String?,
         webhookUrl: json['reminder_webhook_url'] as String?,
-        message: (json['reminder_message'] as String?) ??
-            defaultMessageTemplate,
+        message:
+            (json['reminder_message'] as String?) ?? defaultMessageTemplate,
         daysThreshold: (json['reminder_days_threshold'] as num?)?.toInt() ?? 3,
         enabled: json['reminder_enabled'] as bool? ?? true,
       );
@@ -43,9 +43,9 @@ class ReminderSettings {
   /// Payload for `PATCH tenant_settings`. A cleared webhook is sent as JSON
   /// null so PostgREST sets the column back to SQL NULL.
   Map<String, dynamic> toUpdateJson() => {
-        'reminder_webhook_url': webhookUrl,
-        'reminder_message': message,
-        'reminder_days_threshold': daysThreshold,
-        'reminder_enabled': enabled,
-      };
+    'reminder_webhook_url': webhookUrl,
+    'reminder_message': message,
+    'reminder_days_threshold': daysThreshold,
+    'reminder_enabled': enabled,
+  };
 }

@@ -14,9 +14,9 @@ class SupabaseEmployeeRepository implements EmployeeRepository {
   @override
   Future<List<Employee>> listAll({String? search}) async {
     try {
-      var query = _client.from('employees').select(
-            'id, name, job_title, phone, base_salary, created_at',
-          );
+      var query = _client
+          .from('employees')
+          .select('id, name, job_title, phone, base_salary, created_at');
 
       if (search != null && search.trim().isNotEmpty) {
         final term = search.trim();

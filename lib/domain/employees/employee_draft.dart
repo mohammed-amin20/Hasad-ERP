@@ -15,9 +15,9 @@ class EmployeeDraft {
   final int baseSalary;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'job_title': jobTitle,
-        'phone': phone,
-        'base_salary': baseSalary,
-      };
+    'name': name,
+    'job_title': jobTitle,
+    'phone': phone,
+    'base_salary': baseSalary,
+  };
 }

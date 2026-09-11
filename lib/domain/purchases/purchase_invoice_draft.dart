@@ -19,12 +19,12 @@ class NewProductDraft {
   final double? commissionRate;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'unit': unit,
-        'unit_type': unitType.dbValue,
-        'sale_price': salePrice,
-        if (commissionRate != null) 'commission_rate': commissionRate,
-      };
+    'name': name,
+    'unit': unit,
+    'unit_type': unitType.dbValue,
+    'sale_price': salePrice,
+    if (commissionRate != null) 'commission_rate': commissionRate,
+  };
 }
 
 /// A purchase line: either an existing product or an inline-created one.
@@ -42,11 +42,11 @@ class PurchaseLineDraft {
   final int? price;
 
   Map<String, dynamic> toJson() => {
-        if (productId != null) 'product_id': productId,
-        if (newProduct != null) 'new_product': newProduct!.toJson(),
-        'qty': qty,
-        if (price != null) 'price': price,
-      };
+    if (productId != null) 'product_id': productId,
+    if (newProduct != null) 'new_product': newProduct!.toJson(),
+    'qty': qty,
+    if (price != null) 'price': price,
+  };
 }
 
 /// Payload for `create_purchase_invoice`.
@@ -69,19 +69,17 @@ class PurchaseInvoiceDraft {
 
   /// Stable request id so a retried call is idempotent server-side.
   Map<String, dynamic> toJson({String? requestId}) => {
-        'p_request_id': requestId ?? const Uuid().v4(),
-        'p_supplier_id': supplierId,
-        'p_items': [
-          for (final line in lines) line.toJson(),
-        ],
-        if (date != null)
-          'p_invoice_date': date != null
-              ? '${date!.year.toString().padLeft(4, '0')}-'
-                  '${date!.month.toString().padLeft(2, '0')}-'
-                  '${date!.day.toString().padLeft(2, '0')}'
-              : null,
-        'p_paid': paid,
-        if (paymentMethod != null) 'p_payment_method': paymentMethod,
-        if (memo != null && memo!.trim().isNotEmpty) 'p_memo': memo,
-      };
+    'p_request_id': requestId ?? const Uuid().v4(),
+    'p_supplier_id': supplierId,
+    'p_items': [for (final line in lines) line.toJson()],
+    if (date != null)
+      'p_invoice_date': date != null
+          ? '${date!.year.toString().padLeft(4, '0')}-'
+                '${date!.month.toString().padLeft(2, '0')}-'
+                '${date!.day.toString().padLeft(2, '0')}'
+          : null,
+    'p_paid': paid,
+    if (paymentMethod != null) 'p_payment_method': paymentMethod,
+    if (memo != null && memo!.trim().isNotEmpty) 'p_memo': memo,
+  };
 }

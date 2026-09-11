@@ -36,10 +36,9 @@ class PurchaseInvoicesList extends _$PurchaseInvoicesList {
   @override
   Future<List<Invoice>> build() async {
     final search = ref.watch(purchaseSearchProvider);
-    return ref.watch(invoiceRepositoryProvider).list(
-          type: 'purchase',
-          search: search.isEmpty ? null : search,
-        );
+    return ref
+        .watch(invoiceRepositoryProvider)
+        .list(type: 'purchase', search: search.isEmpty ? null : search);
   }
 
   Future<void> refresh() async {

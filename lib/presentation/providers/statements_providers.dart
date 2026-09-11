@@ -28,8 +28,5 @@ Future<List<PartyBalance>> supplierDebts(Ref ref) =>
 
 /// A single party's statement, keyed by (type, id, from, to).
 @riverpod
-Future<PartyStatement> partyStatement(
-  Ref ref,
-  StatementRequest request,
-) =>
+Future<PartyStatement> partyStatement(Ref ref, StatementRequest request) =>
     ref.watch(statementRepositoryProvider).statement(request);

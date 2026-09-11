@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+
 import '../../core/utils/money.dart';
 
 /// Shared helpers for all report PDF builders.
@@ -18,8 +19,8 @@ abstract final class ReportPdfHelpers {
 
   /// Load the bundled Cairo variable font.
   static Future<pw.Font> cairoFont([Uint8List? fontBytes]) async {
-    final bytes = fontBytes ??
-        (await rootBundle.load(cairoAsset)).buffer.asUint8List();
+    final bytes =
+        fontBytes ?? (await rootBundle.load(cairoAsset)).buffer.asUint8List();
     final data = bytes.buffer.asByteData();
     return pw.Font.ttf(data);
   }
@@ -28,10 +29,7 @@ abstract final class ReportPdfHelpers {
   static Future<pw.Document> createDoc([Uint8List? fontBytes]) async {
     final font = await cairoFont(fontBytes);
     return pw.Document(
-      theme: pw.ThemeData.withFont(
-        base: font,
-        bold: font,
-      ),
+      theme: pw.ThemeData.withFont(base: font, bold: font),
     );
   }
 
@@ -81,36 +79,41 @@ abstract final class ReportPdfHelpers {
   }
 
   /// Standard table header row.
-  static pw.TableRow tableHeaderRow(List<String> headers,
-      {PdfColor color = muted}) {
-    const style = pw.TextStyle(
-      fontSize: 9,
-      fontWeight: pw.FontWeight.bold,
-    );
+  static pw.TableRow tableHeaderRow(
+    List<String> headers, {
+    PdfColor color = muted,
+  }) {
+    const style = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
     return pw.TableRow(
       children: [
         for (final header in headers)
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(vertical: 6),
-            child: pw.Text(header,
-                textAlign: pw.TextAlign.end, style: style.copyWith(color: color)),
+            child: pw.Text(
+              header,
+              textAlign: pw.TextAlign.end,
+              style: style.copyWith(color: color),
+            ),
           ),
       ],
     );
   }
 
   /// Standard table data row.
-  static pw.TableRow tableDataRow(List<String> cells,
-      {bool bold = false,
-      List<PdfColor?>? colors,
-      PdfColor defaultColor = const PdfColor.fromInt(0xFF1E293B)}) {
+  static pw.TableRow tableDataRow(
+    List<String> cells, {
+    bool bold = false,
+    List<PdfColor?>? colors,
+    PdfColor defaultColor = const PdfColor.fromInt(0xFF1E293B),
+  }) {
     final style = pw.TextStyle(
       fontSize: 9,
       fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
     );
     return pw.TableRow(
       children: List.generate(cells.length, (i) {
-        final cellColor = (colors != null && i < colors.length && colors[i] != null)
+        final cellColor =
+            (colors != null && i < colors.length && colors[i] != null)
             ? colors[i]!
             : defaultColor;
         return pw.Padding(
@@ -140,8 +143,7 @@ abstract final class ReportPdfHelpers {
             style: const pw.TextStyle(fontSize: 10, color: muted),
           ),
         ),
-        for (int i = 1; i < columnCount; i++)
-          pw.Container(),
+        for (int i = 1; i < columnCount; i++) pw.Container(),
       ],
     );
   }
@@ -189,6 +191,6 @@ abstract final class ReportPdfHelpers {
   static String formatDate(DateTime? d) => d == null
       ? ''
       : '${d.year.toString().padLeft(4, '0')}/'
-          '${d.month.toString().padLeft(2, '0')}/'
-          '${d.day.toString().padLeft(2, '0')}';
+            '${d.month.toString().padLeft(2, '0')}/'
+            '${d.day.toString().padLeft(2, '0')}';
 }

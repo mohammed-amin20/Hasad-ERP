@@ -35,10 +35,10 @@ class DebtorSummary {
   final int balance;
 
   factory DebtorSummary.fromJson(Map<String, dynamic> json) => DebtorSummary(
-        customerId: json['customer_id'] as String,
-        name: json['name'] as String? ?? 'غير معروف',
-        balance: (json['balance'] as num?)?.toInt() ?? 0,
-      );
+    customerId: json['customer_id'] as String,
+    name: json['name'] as String? ?? 'غير معروف',
+    balance: (json['balance'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// A product whose on-hand [qty] is at or below its [reorderLevel].
@@ -58,11 +58,11 @@ class LowStockItem {
   bool get outOfStock => qty <= 0;
 
   factory LowStockItem.fromJson(Map<String, dynamic> json) => LowStockItem(
-        productId: json['product_id'] as String,
-        name: json['name'] as String? ?? 'غير معروف',
-        qty: (json['qty'] as num?)?.toInt() ?? 0,
-        reorderLevel: (json['reorder_level'] as num?)?.toInt() ?? 0,
-      );
+    productId: json['product_id'] as String,
+    name: json['name'] as String? ?? 'غير معروف',
+    qty: (json['qty'] as num?)?.toInt() ?? 0,
+    reorderLevel: (json['reorder_level'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// Everything the dashboard renders, from one RPC envelope.

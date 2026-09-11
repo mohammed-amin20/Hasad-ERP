@@ -21,13 +21,13 @@ class PaymentDraft {
   final String? note;
 
   Map<String, dynamic> toJson({String? requestId}) => {
-        'p_request_id': requestId ?? const Uuid().v4(),
-        'p_invoice_id': invoiceId,
-        'p_amount': amount,
-        'p_method': method,
-        if (date != null) 'p_date': _isoDate(date!),
-        if (note != null && note!.trim().isNotEmpty) 'p_note': note,
-      };
+    'p_request_id': requestId ?? const Uuid().v4(),
+    'p_invoice_id': invoiceId,
+    'p_amount': amount,
+    'p_method': method,
+    if (date != null) 'p_date': _isoDate(date!),
+    if (note != null && note!.trim().isNotEmpty) 'p_note': note,
+  };
 }
 
 /// Bulk-settle a supplier's oldest owned invoices + commission dues via the
@@ -48,13 +48,13 @@ class SettlementDraft {
   final String? note;
 
   Map<String, dynamic> toJson({String? requestId}) => {
-        'p_request_id': requestId ?? const Uuid().v4(),
-        'p_supplier_id': supplierId,
-        'p_amount': amount,
-        'p_method': method,
-        if (date != null) 'p_date': _isoDate(date!),
-        if (note != null && note!.trim().isNotEmpty) 'p_note': note,
-      };
+    'p_request_id': requestId ?? const Uuid().v4(),
+    'p_supplier_id': supplierId,
+    'p_amount': amount,
+    'p_method': method,
+    if (date != null) 'p_date': _isoDate(date!),
+    if (note != null && note!.trim().isNotEmpty) 'p_note': note,
+  };
 }
 
 /// Result of `record_payment` (idempotent duplicates replay the same row).
@@ -83,8 +83,7 @@ class PaymentResult {
 
   factory PaymentResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;
-    final payload =
-        duplicate ? (json['payment'] as Map?) ?? const {} : json;
+    final payload = duplicate ? (json['payment'] as Map?) ?? const {} : json;
     return PaymentResult(
       duplicate: duplicate,
       paymentId: payload['payment_id'] as String?,
@@ -142,8 +141,7 @@ class SettlementResult {
 
   factory SettlementResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;
-    final payload =
-        duplicate ? (json['result'] as Map?) ?? const {} : json;
+    final payload = duplicate ? (json['result'] as Map?) ?? const {} : json;
     return SettlementResult(
       duplicate: duplicate,
       total: (payload['total'] as num?)?.toInt() ?? 0,
@@ -152,8 +150,7 @@ class SettlementResult {
       entryNo: (payload['entry_no'] as num?)?.toInt() ?? 0,
       allocations: [
         for (final a in (payload['allocations'] as List?) ?? const [])
-          if (a is Map<String, dynamic>)
-            SettlementAllocation.fromJson(a),
+          if (a is Map<String, dynamic>) SettlementAllocation.fromJson(a),
       ],
     );
   }

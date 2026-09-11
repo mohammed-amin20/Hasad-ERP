@@ -13,16 +13,16 @@ class StockAdjustDraft {
   final DateTime? date;
 
   Map<String, dynamic> toJson() => {
-        'p_product_id': productId,
-        'p_counted_qty': countedQty,
-        if (reason != null && reason!.trim().isNotEmpty) 'p_reason': reason,
-        if (date != null)
-          'p_date': date != null
-              ? '${date!.year.toString().padLeft(4, '0')}-'
-                  '${date!.month.toString().padLeft(2, '0')}-'
-                  '${date!.day.toString().padLeft(2, '0')}'
-              : null,
-      };
+    'p_product_id': productId,
+    'p_counted_qty': countedQty,
+    if (reason != null && reason!.trim().isNotEmpty) 'p_reason': reason,
+    if (date != null)
+      'p_date': date != null
+          ? '${date!.year.toString().padLeft(4, '0')}-'
+                '${date!.month.toString().padLeft(2, '0')}-'
+                '${date!.day.toString().padLeft(2, '0')}'
+          : null,
+  };
 }
 
 /// Result envelope returned by the `adjust_inventory` RPC.

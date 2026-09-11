@@ -33,8 +33,9 @@ class TenantSwitch extends _$TenantSwitch {
 
   Future<void> switchTo(String tenantId) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() =>
-        ref.read(authRepositoryProvider).switchTenant(tenantId));
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).switchTenant(tenantId),
+    );
     if (state.hasError) return;
     // Invalidate ALL data providers on successful switch
     ref.invalidate(availableTenantsProvider);

@@ -30,11 +30,7 @@ class BadgePalette {
 
 /// Pill-shaped status badge used across lists.
 class StatusBadge extends StatelessWidget {
-  const StatusBadge({
-    super.key,
-    required this.label,
-    required this.palette,
-  });
+  const StatusBadge({super.key, required this.label, required this.palette});
 
   final String label;
   final BadgePalette palette;
@@ -50,10 +46,10 @@ class StatusBadge extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: palette.foreground,
-            ),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: palette.foreground,
+        ),
       ),
     );
   }
@@ -61,16 +57,16 @@ class StatusBadge extends StatelessWidget {
 
 /// Palette for an invoice payment status.
 BadgePalette badgeForStatus(InvoiceStatus status) => switch (status) {
-      InvoiceStatus.paid => BadgePalette.paid,
-      InvoiceStatus.partial => BadgePalette.partial,
-      InvoiceStatus.unpaid => BadgePalette.unpaid,
-    };
+  InvoiceStatus.paid => BadgePalette.paid,
+  InvoiceStatus.partial => BadgePalette.partial,
+  InvoiceStatus.unpaid => BadgePalette.unpaid,
+};
 
 /// Palette for an invoice ownership badge.
 BadgePalette badgeForOwnership(InvoiceOwnership ownership) =>
     ownership == InvoiceOwnership.consignment
-        ? BadgePalette.commission
-        : const BadgePalette(
-            background: AppColors.border,
-            foreground: AppColors.textPrimary,
-          );
+    ? BadgePalette.commission
+    : const BadgePalette(
+        background: AppColors.border,
+        foreground: AppColors.textPrimary,
+      );

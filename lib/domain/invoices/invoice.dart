@@ -7,18 +7,18 @@ enum InvoiceStatus {
   unpaid;
 
   static InvoiceStatus fromDb(String value) => switch (value) {
-        'paid' => InvoiceStatus.paid,
-        'partial' => InvoiceStatus.partial,
-        _ => InvoiceStatus.unpaid,
-      };
+    'paid' => InvoiceStatus.paid,
+    'partial' => InvoiceStatus.partial,
+    _ => InvoiceStatus.unpaid,
+  };
 
   String get dbValue => name;
 
   String get label => switch (this) {
-        InvoiceStatus.paid => 'مدفوعة',
-        InvoiceStatus.partial => 'جزئية',
-        InvoiceStatus.unpaid => 'غير مدفوعة',
-      };
+    InvoiceStatus.paid => 'مدفوعة',
+    InvoiceStatus.partial => 'جزئية',
+    InvoiceStatus.unpaid => 'غير مدفوعة',
+  };
 }
 
 /// Ownership of a purchase invoice (schema `invoices.ownership`).
@@ -31,9 +31,9 @@ enum InvoiceOwnership {
       : InvoiceOwnership.owned;
 
   String get label => switch (this) {
-        InvoiceOwnership.owned => 'ملك',
-        InvoiceOwnership.consignment => 'بضاعة أمانة',
-      };
+    InvoiceOwnership.owned => 'ملك',
+    InvoiceOwnership.consignment => 'بضاعة أمانة',
+  };
 }
 
 /// An invoice header read back from the `invoices` table.
@@ -67,18 +67,18 @@ class Invoice {
   final InvoiceOwnership ownership;
 
   factory Invoice.fromJson(Map<String, dynamic> json) => Invoice(
-        id: json['id'] as String,
-        type: json['type'] as String,
-        no: json['no'] as String,
-        partyId: json['party_id'] as String,
-        date: DateTime.parse(json['date'] as String),
-        subtotal: (json['subtotal'] as num).toInt(),
-        total: (json['total'] as num).toInt(),
-        paid: (json['paid'] as num).toInt(),
-        remaining: (json['remaining'] as num).toInt(),
-        status: InvoiceStatus.fromDb(json['status'] as String),
-        ownership: InvoiceOwnership.fromDb(json['ownership'] as String),
-      );
+    id: json['id'] as String,
+    type: json['type'] as String,
+    no: json['no'] as String,
+    partyId: json['party_id'] as String,
+    date: DateTime.parse(json['date'] as String),
+    subtotal: (json['subtotal'] as num).toInt(),
+    total: (json['total'] as num).toInt(),
+    paid: (json['paid'] as num).toInt(),
+    remaining: (json['remaining'] as num).toInt(),
+    status: InvoiceStatus.fromDb(json['status'] as String),
+    ownership: InvoiceOwnership.fromDb(json['ownership'] as String),
+  );
 }
 
 /// A single line of an existing invoice (`invoice_items`).

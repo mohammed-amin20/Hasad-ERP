@@ -21,13 +21,13 @@ class LedgerLine {
   final int balance;
 
   factory LedgerLine.fromJson(Map<String, dynamic> json) => LedgerLine(
-        date: DateTime.parse(json['date'] as String),
-        entryNo: (json['entry_no'] as num).toInt(),
-        memo: json['memo'] as String? ?? '',
-        debit: (json['debit'] as num).toInt(),
-        credit: (json['credit'] as num).toInt(),
-        balance: (json['balance'] as num).toInt(),
-      );
+    date: DateTime.parse(json['date'] as String),
+    entryNo: (json['entry_no'] as num).toInt(),
+    memo: json['memo'] as String? ?? '',
+    debit: (json['debit'] as num).toInt(),
+    credit: (json['credit'] as num).toInt(),
+    balance: (json['balance'] as num).toInt(),
+  );
 }
 
 /// Full ledger extract for one account (`get_ledger`).
@@ -58,11 +58,9 @@ class LedgerStatement {
   /// Signed net (debit - credit) up to [to].
   final int closing;
 
-  int get totalDebit =>
-      lines.fold(0, (sum, l) => sum + l.debit);
+  int get totalDebit => lines.fold(0, (sum, l) => sum + l.debit);
 
-  int get totalCredit =>
-      lines.fold(0, (sum, l) => sum + l.credit);
+  int get totalCredit => lines.fold(0, (sum, l) => sum + l.credit);
 
   factory LedgerStatement.fromJson(Map<String, dynamic> json) =>
       LedgerStatement(

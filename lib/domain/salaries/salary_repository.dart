@@ -73,18 +73,18 @@ class MovementDraft {
   final DateTime? date;
 
   Map<String, dynamic> toJson({String? requestId}) => {
-        'p_request_id': requestId ?? const Uuid().v4(),
-        'p_employee_id': employeeId,
-        'p_month': _isoDate(month),
-        'p_direction': direction,
-        'p_category': category,
-        if (amount != null) 'p_amount': amount,
-        if (description != null && description!.trim().isNotEmpty)
-          'p_description': description,
-        if (productId != null) 'p_product_id': productId,
-        if (qty != null) 'p_qty': qty,
-        if (date != null) 'p_date': _isoDate(date!),
-      };
+    'p_request_id': requestId ?? const Uuid().v4(),
+    'p_employee_id': employeeId,
+    'p_month': _isoDate(month),
+    'p_direction': direction,
+    'p_category': category,
+    if (amount != null) 'p_amount': amount,
+    if (description != null && description!.trim().isNotEmpty)
+      'p_description': description,
+    if (productId != null) 'p_product_id': productId,
+    if (qty != null) 'p_qty': qty,
+    if (date != null) 'p_date': _isoDate(date!),
+  };
 }
 
 /// Result of `add_employee_movement` (idempotent duplicates replay the row).
@@ -101,8 +101,7 @@ class MovementResult {
 
   factory MovementResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;
-    final payload =
-        duplicate ? (json['movement'] as Map?) ?? const {} : json;
+    final payload = duplicate ? (json['movement'] as Map?) ?? const {} : json;
     return MovementResult(
       duplicate: duplicate,
       movementId: payload['movement_id'] as String?,
@@ -130,14 +129,14 @@ class SalaryDraft {
   final String? note;
 
   Map<String, dynamic> toJson({String? requestId}) => {
-        'p_request_id': requestId ?? const Uuid().v4(),
-        'p_employee_id': employeeId,
-        'p_month': _isoDate(month),
-        'p_paid': paid,
-        'p_method': method,
-        if (date != null) 'p_date': _isoDate(date!),
-        if (note != null && note!.trim().isNotEmpty) 'p_note': note,
-      };
+    'p_request_id': requestId ?? const Uuid().v4(),
+    'p_employee_id': employeeId,
+    'p_month': _isoDate(month),
+    'p_paid': paid,
+    'p_method': method,
+    if (date != null) 'p_date': _isoDate(date!),
+    if (note != null && note!.trim().isNotEmpty) 'p_note': note,
+  };
 }
 
 /// Result of `pay_salary` (idempotent duplicates replay the row).
@@ -206,14 +205,12 @@ class SalaryRecord {
   final DateTime? date;
 
   factory SalaryRecord.fromJson(Map<String, dynamic> json) => SalaryRecord(
-        employeeId: json['employee_id'] as String,
-        month: DateTime.parse(json['month'] as String),
-        baseSalary: (json['base_salary'] as num?)?.toInt() ?? 0,
-        paid: (json['paid'] as num?)?.toInt() ?? 0,
-        date: json['date'] != null
-            ? DateTime.parse(json['date'] as String)
-            : null,
-      );
+    employeeId: json['employee_id'] as String,
+    month: DateTime.parse(json['month'] as String),
+    baseSalary: (json['base_salary'] as num?)?.toInt() ?? 0,
+    paid: (json['paid'] as num?)?.toInt() ?? 0,
+    date: json['date'] != null ? DateTime.parse(json['date'] as String) : null,
+  );
 }
 
 /// One month's salary computation shown in an employee statement.

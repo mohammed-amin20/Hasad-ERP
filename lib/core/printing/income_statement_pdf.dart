@@ -19,11 +19,13 @@ abstract final class IncomeStatementPdf {
         icon: '▲',
         color: ReportPdfHelpers.primary,
         rows: statement.revenues
-            .map((r) => (
-                  code: r.code,
-                  name: r.name,
-                  amount: ReportPdfHelpers.formatAmount(r.amount),
-                ))
+            .map(
+              (r) => (
+                code: r.code,
+                name: r.name,
+                amount: ReportPdfHelpers.formatAmount(r.amount),
+              ),
+            )
             .toList(),
         total: ReportPdfHelpers.formatAmount(statement.revenueTotal),
         totalColor: ReportPdfHelpers.primary,
@@ -34,11 +36,13 @@ abstract final class IncomeStatementPdf {
         icon: '▼',
         color: ReportPdfHelpers.warning,
         rows: statement.expenses
-            .map((e) => (
-                  code: e.code,
-                  name: e.name,
-                  amount: ReportPdfHelpers.formatAmount(e.amount),
-                ))
+            .map(
+              (e) => (
+                code: e.code,
+                name: e.name,
+                amount: ReportPdfHelpers.formatAmount(e.amount),
+              ),
+            )
             .toList(),
         total: ReportPdfHelpers.formatAmount(statement.expenseTotal),
         totalColor: ReportPdfHelpers.warning,
@@ -50,7 +54,8 @@ abstract final class IncomeStatementPdf {
     return ReportPdfHelpers.buildReport(
       fontBytes: fontBytes,
       title: 'قائمة الدخل',
-      subtitle: 'من ${ReportPdfHelpers.formatDate(statement.from)} '
+      subtitle:
+          'من ${ReportPdfHelpers.formatDate(statement.from)} '
           'إلى ${ReportPdfHelpers.formatDate(statement.to)}',
       bodyWidgets: body,
     );
@@ -95,12 +100,12 @@ abstract final class IncomeStatementPdf {
         color: color == ReportPdfHelpers.primary
             ? const PdfColor.fromInt(0xFFEFF6FF)
             : color == ReportPdfHelpers.warning
-                ? const PdfColor.fromInt(0xFFFEF3C7)
-                : color == ReportPdfHelpers.success
-                    ? const PdfColor.fromInt(0xFFECFDF5)
-                    : color == ReportPdfHelpers.danger
-                        ? const PdfColor.fromInt(0xFFFEF2F2)
-                        : const PdfColor.fromInt(0xFFF8FAFC),
+            ? const PdfColor.fromInt(0xFFFEF3C7)
+            : color == ReportPdfHelpers.success
+            ? const PdfColor.fromInt(0xFFECFDF5)
+            : color == ReportPdfHelpers.danger
+            ? const PdfColor.fromInt(0xFFFEF2F2)
+            : const PdfColor.fromInt(0xFFF8FAFC),
         borderRadius: pw.BorderRadius.circular(6),
         border: pw.Border.all(color: color, width: 1),
       ),
@@ -109,7 +114,10 @@ abstract final class IncomeStatementPdf {
         children: [
           pw.Text(
             label,
-            style: const pw.TextStyle(fontSize: 9, color: ReportPdfHelpers.muted),
+            style: const pw.TextStyle(
+              fontSize: 9,
+              color: ReportPdfHelpers.muted,
+            ),
           ),
           pw.SizedBox(height: 2),
           pw.Text(
@@ -134,25 +142,25 @@ abstract final class IncomeStatementPdf {
     required PdfColor totalColor,
   }) {
     final tableRows = <pw.TableRow>[
-      ReportPdfHelpers.tableHeaderRow(
-        ['رقم الحساب', 'اسم الحساب', 'المبلغ'],
-      ),
+      ReportPdfHelpers.tableHeaderRow(['رقم الحساب', 'اسم الحساب', 'المبلغ']),
     ];
 
     if (rows.isEmpty) {
       tableRows.add(ReportPdfHelpers.emptyRow(3, 'لا توجد بنود'));
     } else {
       for (final row in rows) {
-        tableRows.add(ReportPdfHelpers.tableDataRow(
-          [row.code, row.name, row.amount],
-        ));
+        tableRows.add(
+          ReportPdfHelpers.tableDataRow([row.code, row.name, row.amount]),
+        );
       }
       // Total row
-      tableRows.add(ReportPdfHelpers.tableDataRow(
-        ['', 'الإجمالي', total],
-        bold: true,
-        colors: [null, totalColor, totalColor],
-      ));
+      tableRows.add(
+        ReportPdfHelpers.tableDataRow(
+          ['', 'الإجمالي', total],
+          bold: true,
+          colors: [null, totalColor, totalColor],
+        ),
+      );
     }
 
     return pw.Column(
@@ -166,8 +174,14 @@ abstract final class IncomeStatementPdf {
               width: 0.4,
               color: ReportPdfHelpers.border,
             ),
-            top: const pw.BorderSide(width: 0.8, color: ReportPdfHelpers.border),
-            bottom: const pw.BorderSide(width: 0.8, color: ReportPdfHelpers.border),
+            top: const pw.BorderSide(
+              width: 0.8,
+              color: ReportPdfHelpers.border,
+            ),
+            bottom: const pw.BorderSide(
+              width: 0.8,
+              color: ReportPdfHelpers.border,
+            ),
           ),
           columnWidths: const {
             0: pw.FlexColumnWidth(1.2),
@@ -187,14 +201,11 @@ abstract final class IncomeStatementPdf {
       color: color == ReportPdfHelpers.primary
           ? const PdfColor.fromInt(0xFFEFF6FF)
           : color == ReportPdfHelpers.warning
-              ? const PdfColor.fromInt(0xFFFEF3C7)
-              : const PdfColor.fromInt(0xFFF8FAFC),
+          ? const PdfColor.fromInt(0xFFFEF3C7)
+          : const PdfColor.fromInt(0xFFF8FAFC),
       child: pw.Row(
         children: [
-          pw.Text(
-            icon,
-            style: const pw.TextStyle(fontSize: 14),
-          ),
+          pw.Text(icon, style: const pw.TextStyle(fontSize: 14)),
           pw.SizedBox(width: 8),
           pw.Text(
             title,
@@ -215,7 +226,9 @@ abstract final class IncomeStatementPdf {
     final lightColor = isProfit
         ? const PdfColor.fromInt(0xFFECFDF5) // light green
         : const PdfColor.fromInt(0xFFFEF2F2); // light red
-    final borderColor = isProfit ? ReportPdfHelpers.success : ReportPdfHelpers.danger;
+    final borderColor = isProfit
+        ? ReportPdfHelpers.success
+        : ReportPdfHelpers.danger;
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(20),
@@ -230,7 +243,9 @@ abstract final class IncomeStatementPdf {
             isProfit ? '✓' : '✗',
             style: pw.TextStyle(
               fontSize: 24,
-              color: isProfit ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+              color: isProfit
+                  ? ReportPdfHelpers.success
+                  : ReportPdfHelpers.danger,
             ),
           ),
           pw.SizedBox(width: 16),

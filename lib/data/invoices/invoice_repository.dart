@@ -21,8 +21,10 @@ class InvoiceRepository {
     try {
       var query = _client
           .from('invoices')
-          .select('id, type, no, party_id, date, subtotal, total, paid, '
-              'remaining, status, ownership');
+          .select(
+            'id, type, no, party_id, date, subtotal, total, paid, '
+            'remaining, status, ownership',
+          );
 
       if (search != null && search.trim().isNotEmpty) {
         query = query.or('no.ilike.%${search.trim()}%');
@@ -46,7 +48,9 @@ class InvoiceRepository {
     try {
       final rows = await _client
           .from('invoice_items')
-          .select('product_id, qty, price, total, products(name, unit, unit_type)')
+          .select(
+            'product_id, qty, price, total, products(name, unit, unit_type)',
+          )
           .eq('invoice_id', invoiceId);
 
       return [

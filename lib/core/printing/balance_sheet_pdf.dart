@@ -19,11 +19,13 @@ abstract final class BalanceSheetPdf {
         icon: '[أ]',
         color: ReportPdfHelpers.success,
         rows: sheet.assets
-            .map((a) => (
-                  code: a.code,
-                  name: a.name,
-                  amount: ReportPdfHelpers.formatAmount(a.amount),
-                ))
+            .map(
+              (a) => (
+                code: a.code,
+                name: a.name,
+                amount: ReportPdfHelpers.formatAmount(a.amount),
+              ),
+            )
             .toList(),
         total: ReportPdfHelpers.formatAmount(sheet.assetsTotal),
         totalColor: ReportPdfHelpers.success,
@@ -34,11 +36,13 @@ abstract final class BalanceSheetPdf {
         icon: '[خ]',
         color: ReportPdfHelpers.danger,
         rows: sheet.liabilities
-            .map((l) => (
-                  code: l.code,
-                  name: l.name,
-                  amount: ReportPdfHelpers.formatAmount(l.amount),
-                ))
+            .map(
+              (l) => (
+                code: l.code,
+                name: l.name,
+                amount: ReportPdfHelpers.formatAmount(l.amount),
+              ),
+            )
             .toList(),
         total: ReportPdfHelpers.formatAmount(sheet.liabilitiesTotal),
         totalColor: ReportPdfHelpers.danger,
@@ -49,12 +53,13 @@ abstract final class BalanceSheetPdf {
         icon: '[ح]',
         color: ReportPdfHelpers.secondary,
         rows: [
-          ...sheet.equity
-              .map((e) => (
-                    code: e.code,
-                    name: e.name,
-                    amount: ReportPdfHelpers.formatAmount(e.amount),
-                  )),
+          ...sheet.equity.map(
+            (e) => (
+              code: e.code,
+              name: e.name,
+              amount: ReportPdfHelpers.formatAmount(e.amount),
+            ),
+          ),
           (
             code: '0001',
             name: 'صافي الدخل حتى اليوم',
@@ -113,10 +118,10 @@ abstract final class BalanceSheetPdf {
         color: color == ReportPdfHelpers.success
             ? const PdfColor.fromInt(0xFFECFDF5)
             : color == ReportPdfHelpers.danger
-                ? const PdfColor.fromInt(0xFFFEF2F2)
-                : color == ReportPdfHelpers.secondary
-                    ? const PdfColor.fromInt(0xFFF5F0FF)
-                    : const PdfColor.fromInt(0xFFF8FAFC),
+            ? const PdfColor.fromInt(0xFFFEF2F2)
+            : color == ReportPdfHelpers.secondary
+            ? const PdfColor.fromInt(0xFFF5F0FF)
+            : const PdfColor.fromInt(0xFFF8FAFC),
         borderRadius: pw.BorderRadius.circular(6),
         border: pw.Border.all(color: color, width: 1),
       ),
@@ -125,7 +130,10 @@ abstract final class BalanceSheetPdf {
         children: [
           pw.Text(
             label,
-            style: const pw.TextStyle(fontSize: 9, color: ReportPdfHelpers.muted),
+            style: const pw.TextStyle(
+              fontSize: 9,
+              color: ReportPdfHelpers.muted,
+            ),
           ),
           pw.SizedBox(height: 2),
           pw.Text(
@@ -150,25 +158,25 @@ abstract final class BalanceSheetPdf {
     required PdfColor totalColor,
   }) {
     final tableRows = <pw.TableRow>[
-      ReportPdfHelpers.tableHeaderRow(
-        ['رقم الحساب', 'اسم الحساب', 'المبلغ'],
-      ),
+      ReportPdfHelpers.tableHeaderRow(['رقم الحساب', 'اسم الحساب', 'المبلغ']),
     ];
 
     if (rows.isEmpty) {
       tableRows.add(ReportPdfHelpers.emptyRow(3, 'لا توجد بنود'));
     } else {
       for (final row in rows) {
-        tableRows.add(ReportPdfHelpers.tableDataRow(
-          [row.code, row.name, row.amount],
-        ));
+        tableRows.add(
+          ReportPdfHelpers.tableDataRow([row.code, row.name, row.amount]),
+        );
       }
       // Total row
-      tableRows.add(ReportPdfHelpers.tableDataRow(
-        ['', 'الإجمالي', total],
-        bold: true,
-        colors: [null, totalColor, totalColor],
-      ));
+      tableRows.add(
+        ReportPdfHelpers.tableDataRow(
+          ['', 'الإجمالي', total],
+          bold: true,
+          colors: [null, totalColor, totalColor],
+        ),
+      );
     }
 
     return pw.Column(
@@ -182,8 +190,14 @@ abstract final class BalanceSheetPdf {
               width: 0.4,
               color: ReportPdfHelpers.border,
             ),
-            top: const pw.BorderSide(width: 0.8, color: ReportPdfHelpers.border),
-            bottom: const pw.BorderSide(width: 0.8, color: ReportPdfHelpers.border),
+            top: const pw.BorderSide(
+              width: 0.8,
+              color: ReportPdfHelpers.border,
+            ),
+            bottom: const pw.BorderSide(
+              width: 0.8,
+              color: ReportPdfHelpers.border,
+            ),
           ),
           columnWidths: const {
             0: pw.FlexColumnWidth(1.2),
@@ -203,16 +217,13 @@ abstract final class BalanceSheetPdf {
       color: color == ReportPdfHelpers.success
           ? const PdfColor.fromInt(0xFFECFDF5)
           : color == ReportPdfHelpers.danger
-              ? const PdfColor.fromInt(0xFFFEF2F2)
-              : color == ReportPdfHelpers.secondary
-                  ? const PdfColor.fromInt(0xFFF5F0FF)
-                  : const PdfColor.fromInt(0xFFF8FAFC),
+          ? const PdfColor.fromInt(0xFFFEF2F2)
+          : color == ReportPdfHelpers.secondary
+          ? const PdfColor.fromInt(0xFFF5F0FF)
+          : const PdfColor.fromInt(0xFFF8FAFC),
       child: pw.Row(
         children: [
-          pw.Text(
-            icon,
-            style: const pw.TextStyle(fontSize: 14),
-          ),
+          pw.Text(icon, style: const pw.TextStyle(fontSize: 14)),
           pw.SizedBox(width: 8),
           pw.Text(
             title,
@@ -235,7 +246,9 @@ abstract final class BalanceSheetPdf {
         color: ReportPdfHelpers.cardBg,
         borderRadius: pw.BorderRadius.circular(12),
         border: pw.Border.all(
-          color: isBalanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+          color: isBalanced
+              ? ReportPdfHelpers.success
+              : ReportPdfHelpers.danger,
           width: 1.5,
         ),
       ),
@@ -246,7 +259,10 @@ abstract final class BalanceSheetPdf {
             children: [
               pw.Text(
                 'إجمالي الأصول',
-                style: const pw.TextStyle(fontSize: 11, color: ReportPdfHelpers.muted),
+                style: const pw.TextStyle(
+                  fontSize: 11,
+                  color: ReportPdfHelpers.muted,
+                ),
               ),
               pw.Spacer(),
               pw.Text(
@@ -264,11 +280,16 @@ abstract final class BalanceSheetPdf {
             children: [
               pw.Text(
                 'إجمالي الخصوم + حقوق الملكية',
-                style: const pw.TextStyle(fontSize: 11, color: ReportPdfHelpers.muted),
+                style: const pw.TextStyle(
+                  fontSize: 11,
+                  color: ReportPdfHelpers.muted,
+                ),
               ),
               pw.Spacer(),
               pw.Text(
-                ReportPdfHelpers.formatAmount(sheet.liabilitiesTotal + sheet.equityTotal),
+                ReportPdfHelpers.formatAmount(
+                  sheet.liabilitiesTotal + sheet.equityTotal,
+                ),
                 style: pw.TextStyle(
                   fontSize: 13,
                   fontWeight: pw.FontWeight.bold,
@@ -284,7 +305,9 @@ abstract final class BalanceSheetPdf {
                 isBalanced ? '✓' : '✗',
                 style: pw.TextStyle(
                   fontSize: 16,
-                  color: isBalanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+                  color: isBalanced
+                      ? ReportPdfHelpers.success
+                      : ReportPdfHelpers.danger,
                 ),
               ),
               pw.SizedBox(width: 8),
@@ -295,7 +318,9 @@ abstract final class BalanceSheetPdf {
                 style: pw.TextStyle(
                   fontSize: 12,
                   fontWeight: pw.FontWeight.bold,
-                  color: isBalanced ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
+                  color: isBalanced
+                      ? ReportPdfHelpers.success
+                      : ReportPdfHelpers.danger,
                 ),
               ),
             ],

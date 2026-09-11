@@ -92,7 +92,7 @@ final class ReminderSettingsControllerProvider
 }
 
 String _$reminderSettingsControllerHash() =>
-    r'bceb4340e7fa8ce50824ec226a543215b87d85ea';
+    r'638fb2b31d67f203ae1616a6823fb0bbb6a78302';
 
 /// The current tenant's reminder settings (webhook, template, threshold).
 

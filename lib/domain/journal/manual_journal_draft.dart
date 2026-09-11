@@ -11,10 +11,10 @@ class ManualJournalLineDraft {
   final int credit;
 
   Map<String, dynamic> toJson() => {
-        'account_id': accountId,
-        'debit': debit,
-        'credit': credit,
-      };
+    'account_id': accountId,
+    'debit': debit,
+    'credit': credit,
+  };
 }
 
 /// Input payload for `create_journal_entry` (source_type = manual).
@@ -43,9 +43,9 @@ class ManualJournalDraft {
       '${date.day.toString().padLeft(2, '0')}';
 
   Map<String, dynamic> toJson({required String requestId}) => {
-        'p_request_id': requestId,
-        'p_date': _isoDate,
-        'p_memo': memo,
-        'p_lines': [for (final l in lines) l.toJson()],
-      };
+    'p_request_id': requestId,
+    'p_date': _isoDate,
+    'p_memo': memo,
+    'p_lines': [for (final l in lines) l.toJson()],
+  };
 }

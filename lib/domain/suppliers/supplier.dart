@@ -31,14 +31,14 @@ class Supplier {
   final DateTime? createdAt;
 
   factory Supplier.fromJson(Map<String, dynamic> json) => Supplier(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        phone: json['phone'] as String?,
-        notes: json['notes'] as String?,
-        dealType: SupplierDealType.fromDb(json['deal_type'] as String? ?? 'direct'),
-        commissionRate: (json['commission_rate'] as num?)?.toDouble(),
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : null,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    phone: json['phone'] as String?,
+    notes: json['notes'] as String?,
+    dealType: SupplierDealType.fromDb(json['deal_type'] as String? ?? 'direct'),
+    commissionRate: (json['commission_rate'] as num?)?.toDouble(),
+    createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+  );
 }

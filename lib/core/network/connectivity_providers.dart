@@ -34,9 +34,35 @@ class ConnectivityState extends _$ConnectivityState {
   void update(List<ConnectivityResult> result) => state = result;
 }
 
-/// Convenience provider: true if device has internet connection
+/// Convenience provider: true if device has a network interface (instant, may be false positive)
 @riverpod
-bool isOnline(Ref ref) {
+bool hasInterface(Ref ref) {
   final state = ref.watch(connectivityStateProvider);
   return state.any((r) => r != ConnectivityResult.none);
+}
+
+/// Provider that emits verified online status (interface + HTTP check)
+@riverpod
+class VerifiedOnline extends _$VerifiedOnline {
+  @override
+  Future<bool> build() async {
+    final service = ref.watch(connectivityServiceProvider);
+    // Trigger initial verification
+    return service.verifyInternetConnectivity();
+  }
+
+  /// Call to manually re-verify
+  Future<void> reverify() async {
+    final service = ref.read(connectivityServiceProvider);
+    state = const AsyncLoading();
+    final result = await service.verifyInternetConnectivity();
+    state = AsyncData(result);
+  }
+}
+
+/// Convenience provider: true if verified online (interface + HTTP check)
+@riverpod
+bool isOnline(Ref ref) {
+  final async = ref.watch(verifiedOnlineProvider);
+  return async.value ?? false;
 }

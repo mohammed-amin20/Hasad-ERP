@@ -34,8 +34,7 @@ Future<List<SalaryRecord>> salaryHistory(Ref ref) async =>
 Future<EmployeeStatement> employeeStatement(
   Ref ref,
   EmployeeStatementRequest request,
-) =>
-    ref.watch(salaryRepositoryProvider).employeeStatement(request);
+) => ref.watch(salaryRepositoryProvider).employeeStatement(request);
 
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).

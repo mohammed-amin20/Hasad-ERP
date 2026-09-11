@@ -42,41 +42,24 @@ class AppTab {
   final Color? iconColor;
   final Set<AppRole> roles;
 
-  bool allowedFor(AppUser user) =>
-      !user.hasTenant || roles.contains(user.role);
+  bool allowedFor(AppUser user) => !user.hasTenant || roles.contains(user.role);
 }
 
 const List<AppTab> appTabs = [
-  AppTab(
-    title: 'لوحة التحكم',
-    icon: FontAwesomeIcons.chartPie,
-    roles: _all,
-  ),
-  AppTab(
-    title: 'المبيعات',
-    icon: FontAwesomeIcons.cashRegister,
-    roles: _all,
-  ),
+  AppTab(title: 'لوحة التحكم', icon: FontAwesomeIcons.chartPie, roles: _all),
+  AppTab(title: 'المبيعات', icon: FontAwesomeIcons.cashRegister, roles: _all),
   AppTab(
     title: 'المشتريات',
     icon: FontAwesomeIcons.truck,
     roles: _adminAccountant,
   ),
-  AppTab(
-    title: 'العملاء',
-    icon: FontAwesomeIcons.userGroup,
-    roles: _all,
-  ),
+  AppTab(title: 'العملاء', icon: FontAwesomeIcons.userGroup, roles: _all),
   AppTab(
     title: 'الموردون',
     icon: FontAwesomeIcons.warehouse,
     roles: _adminAccountant,
   ),
-  AppTab(
-    title: 'المنتجات',
-    icon: FontAwesomeIcons.boxesStacked,
-    roles: _all,
-  ),
+  AppTab(title: 'المنتجات', icon: FontAwesomeIcons.boxesStacked, roles: _all),
   AppTab(
     title: 'المخزون',
     icon: FontAwesomeIcons.clipboardList,
@@ -128,11 +111,7 @@ const List<AppTab> appTabs = [
     icon: FontAwesomeIcons.chartBar,
     roles: _adminAccountant,
   ),
-  AppTab(
-    title: 'الإعدادات',
-    icon: FontAwesomeIcons.gear,
-    roles: _admin,
-  ),
+  AppTab(title: 'الإعدادات', icon: FontAwesomeIcons.gear, roles: _admin),
 ];
 
 /// Category groups mirroring the HTML sidebar. Each entry is

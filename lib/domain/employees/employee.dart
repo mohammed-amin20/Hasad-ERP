@@ -19,13 +19,13 @@ class Employee {
   final DateTime? createdAt;
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        jobTitle: json['job_title'] as String?,
-        phone: json['phone'] as String?,
-        baseSalary: (json['base_salary'] as num?)?.toInt() ?? 0,
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : null,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    jobTitle: json['job_title'] as String?,
+    phone: json['phone'] as String?,
+    baseSalary: (json['base_salary'] as num?)?.toInt() ?? 0,
+    createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+  );
 }

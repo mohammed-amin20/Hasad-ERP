@@ -227,34 +227,36 @@ class _ProductTile extends StatelessWidget {
           ),
         ],
       ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            Money.format(product.salePrice),
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
-          ),
-          Text(
-            'الكمية: ${formatQty(product.qty, product.unitType)} '
-            '${product.unit}',
-            style: theme.textTheme.bodySmall,
-          ),
-          if (product.reorderLevel > 0)
+      trailing: Flexible(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
             Text(
-              'حد إعادة طلب: ${formatQty(product.reorderLevel, product.unitType)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textMuted,
+              Money.format(product.salePrice),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
               ),
             ),
-        ],
+            Text(
+              'الكمية: ${formatQty(product.qty, product.unitType)} '
+              '${product.unit}',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (product.reorderLevel > 0)
+              Text(
+                'حد إعادة طلب: ${formatQty(product.reorderLevel, product.unitType)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+          ],
+        ),
       ),
       onTap: onEdit,
       onLongPress: onDelete,
-      isThreeLine: true,
     );
   }
 }

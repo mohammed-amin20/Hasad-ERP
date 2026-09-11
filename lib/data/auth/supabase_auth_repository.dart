@@ -16,8 +16,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Stream<AppUser?> authStateChanges() {
-    return _client.auth
-        .onAuthStateChange
+    return _client.auth.onAuthStateChange
         .map((data) => data.session?.user)
         .asyncMap((user) => user == null ? null : _profileFor(user));
   }
@@ -28,8 +27,10 @@ class SupabaseAuthRepository implements AuthRepository {
     required String password,
   }) async {
     try {
-      final response = await _client.auth
-          .signInWithPassword(email: email, password: password);
+      final response = await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
       final user = response.user;
       return user == null ? null : await _profileFor(user);
     } on AuthException {
@@ -98,7 +99,9 @@ class SupabaseAuthRepository implements AuthRepository {
       }
 
       // Use current_tenant_id as the active tenant, fall back to tenant_id
-      final currentTenantId = (row['current_tenant_id'] as String?) ?? (row['tenant_id'] as String?);
+      final currentTenantId =
+          (row['current_tenant_id'] as String?) ??
+          (row['tenant_id'] as String?);
 
       // Fetch user's tenants
       final tenants = await getUserTenants();

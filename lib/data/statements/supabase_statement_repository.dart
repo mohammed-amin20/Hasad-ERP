@@ -34,12 +34,12 @@ class SupabaseDebtsRepository implements DebtsRepository {
 
   @override
   Future<List<PartyBalance>> customerBalances() => _partyBalances(
-        select: 'party_id, name, remaining',
-        table: 'invoices',
-        join: 'customers(name)',
-        type: 'sale',
-        partyKey: 'customers',
-      );
+    select: 'party_id, name, remaining',
+    table: 'invoices',
+    join: 'customers(name)',
+    type: 'sale',
+    partyKey: 'customers',
+  );
 
   @override
   Future<List<PartyBalance>> supplierBalances() async {
@@ -64,7 +64,10 @@ class SupabaseDebtsRepository implements DebtsRepository {
           .eq('type', 'purchase')
           .eq('ownership', 'owned')
           .eq('party_id', supplierId);
-      return rows.fold<int>(0, (sum, r) => sum + ((r['remaining'] as num?)?.toInt() ?? 0));
+      return rows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['remaining'] as num?)?.toInt() ?? 0),
+      );
     } on Object catch (error) {
       throw mapErrorToAppException(error);
     }
@@ -77,7 +80,10 @@ class SupabaseDebtsRepository implements DebtsRepository {
           .from('commission_dues')
           .select('remaining')
           .eq('supplier_id', supplierId);
-      return rows.fold<int>(0, (sum, r) => sum + ((r['remaining'] as num?)?.toInt() ?? 0));
+      return rows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['remaining'] as num?)?.toInt() ?? 0),
+      );
     } on Object catch (error) {
       throw mapErrorToAppException(error);
     }
@@ -91,8 +97,10 @@ class SupabaseDebtsRepository implements DebtsRepository {
     try {
       final rows = await _client
           .from('invoices')
-          .select('id, type, no, party_id, date, subtotal, total, paid, '
-              'remaining, status, ownership')
+          .select(
+            'id, type, no, party_id, date, subtotal, total, paid, '
+            'remaining, status, ownership',
+          )
           .eq('type', type)
           .eq('party_id', partyId)
           .order('date', ascending: false);
@@ -111,10 +119,7 @@ class SupabaseDebtsRepository implements DebtsRepository {
     bool ownedOnly = false,
   }) async {
     try {
-      var query = _client
-          .from(table)
-          .select('$select, $join')
-          .eq('type', type);
+      var query = _client.from(table).select('$select, $join').eq('type', type);
       if (ownedOnly) query = query.eq('ownership', 'owned');
       query = query.gt('remaining', 0);
       final rows = await query;

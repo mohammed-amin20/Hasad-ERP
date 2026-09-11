@@ -32,13 +32,12 @@ class JournalLine {
   int get amount => debit > 0 ? debit : credit;
 
   factory JournalLine.fromJson(Map<String, dynamic> json) => JournalLine(
-        accountCode: json['account_code'] as String? ?? '',
-        accountName: json['account_name'] as String? ?? '',
-        accountType:
-            AccountType.from(json['account_type'] as String? ?? 'asset'),
-        debit: (json['debit'] as num?)?.toInt() ?? 0,
-        credit: (json['credit'] as num?)?.toInt() ?? 0,
-      );
+    accountCode: json['account_code'] as String? ?? '',
+    accountName: json['account_name'] as String? ?? '',
+    accountType: AccountType.from(json['account_type'] as String? ?? 'asset'),
+    debit: (json['debit'] as num?)?.toInt() ?? 0,
+    credit: (json['credit'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// A posted journal entry (automatic or manual).
@@ -62,16 +61,15 @@ class JournalEntry {
   final List<JournalLine> lines;
 
   factory JournalEntry.fromJson(Map<String, dynamic> json) => JournalEntry(
-        id: json['entry_id'] as String,
-        entryNo: (json['entry_no'] as num).toInt(),
-        date: DateTime.parse(json['date'] as String),
-        memo: json['memo'] as String? ?? '',
-        sourceType:
-            JournalSourceType.from(json['source_type'] as String? ?? ''),
-        total: (json['total'] as num?)?.toInt() ?? 0,
-        lines: [
-          for (final l in (json['lines'] as List?) ?? const [])
-            if (l is Map<String, dynamic>) JournalLine.fromJson(l),
-        ],
-      );
+    id: json['entry_id'] as String,
+    entryNo: (json['entry_no'] as num).toInt(),
+    date: DateTime.parse(json['date'] as String),
+    memo: json['memo'] as String? ?? '',
+    sourceType: JournalSourceType.from(json['source_type'] as String? ?? ''),
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    lines: [
+      for (final l in (json['lines'] as List?) ?? const [])
+        if (l is Map<String, dynamic>) JournalLine.fromJson(l),
+    ],
+  );
 }

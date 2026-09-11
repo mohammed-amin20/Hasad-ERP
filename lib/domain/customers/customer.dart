@@ -15,18 +15,18 @@ class Customer {
   final DateTime? createdAt;
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        phone: json['phone'] as String?,
-        notes: json['notes'] as String?,
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : null,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    phone: json['phone'] as String?,
+    notes: json['notes'] as String?,
+    createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+  );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        if (phone != null) 'phone': phone,
-        if (notes != null) 'notes': notes,
-      };
+    'name': name,
+    if (phone != null) 'phone': phone,
+    if (notes != null) 'notes': notes,
+  };
 }

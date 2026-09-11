@@ -54,25 +54,23 @@ class BalanceSheet {
   bool get balanced => check == 0;
 
   factory BalanceSheet.fromJson(Map<String, dynamic> json) => BalanceSheet(
-        asOf: DateTime.parse(json['as_of'] as String),
-        assets: [
-          for (final r in json['assets'] as List? ?? const [])
-            if (r is Map<String, dynamic>)
-              BalanceSheetAccount.fromJson(r),
-        ],
-        liabilities: [
-          for (final r in json['liabilities'] as List? ?? const [])
-            if (r is Map<String, dynamic>)
-              BalanceSheetAccount.fromJson(r),
-        ],
-        equity: [
-          for (final r in json['equity'] as List? ?? const [])
-            if (r is Map<String, dynamic>) BalanceSheetAccount.fromJson(r),
-        ],
-        assetsTotal: (json['assets_total'] as num).toInt(),
-        liabilitiesTotal: (json['liabilities_total'] as num).toInt(),
-        equityTotal: (json['equity_total'] as num).toInt(),
-        netIncomeYtd: (json['net_income_ytd'] as num).toInt(),
-        check: (json['check'] as num).toInt(),
-      );
+    asOf: DateTime.parse(json['as_of'] as String),
+    assets: [
+      for (final r in json['assets'] as List? ?? const [])
+        if (r is Map<String, dynamic>) BalanceSheetAccount.fromJson(r),
+    ],
+    liabilities: [
+      for (final r in json['liabilities'] as List? ?? const [])
+        if (r is Map<String, dynamic>) BalanceSheetAccount.fromJson(r),
+    ],
+    equity: [
+      for (final r in json['equity'] as List? ?? const [])
+        if (r is Map<String, dynamic>) BalanceSheetAccount.fromJson(r),
+    ],
+    assetsTotal: (json['assets_total'] as num).toInt(),
+    liabilitiesTotal: (json['liabilities_total'] as num).toInt(),
+    equityTotal: (json['equity_total'] as num).toInt(),
+    netIncomeYtd: (json['net_income_ytd'] as num).toInt(),
+    check: (json['check'] as num).toInt(),
+  );
 }

@@ -20,8 +20,10 @@ abstract final class LedgerPdf {
     return ReportPdfHelpers.buildReport(
       fontBytes: fontBytes,
       title: 'الأستاذ العام',
-      subtitle: 'الحساب: ${statement.code} — ${statement.name} (${_typeLabel(statement.type)})',
-      dateRange: 'من ${ReportPdfHelpers.formatDate(statement.from)} '
+      subtitle:
+          'الحساب: ${statement.code} — ${statement.name} (${_typeLabel(statement.type)})',
+      dateRange:
+          'من ${ReportPdfHelpers.formatDate(statement.from)} '
           'إلى ${ReportPdfHelpers.formatDate(statement.to)}',
       bodyWidgets: body,
     );
@@ -46,7 +48,10 @@ abstract final class LedgerPdf {
           children: [
             pw.Text(
               'رقم الحساب: ${statement.code}',
-              style: const pw.TextStyle(fontSize: 11, color: ReportPdfHelpers.muted),
+              style: const pw.TextStyle(
+                fontSize: 11,
+                color: ReportPdfHelpers.muted,
+              ),
             ),
             pw.Text(
               'الرصيد الافتتاحي: ${ReportPdfHelpers.formatAmount(statement.opening)}',
@@ -71,54 +76,85 @@ abstract final class LedgerPdf {
       return pw.Center(
         child: pw.Text(
           'لا توجد حركات في هذه الفترة',
-          style: const pw.TextStyle(fontSize: 12, color: ReportPdfHelpers.muted),
+          style: const pw.TextStyle(
+            fontSize: 12,
+            color: ReportPdfHelpers.muted,
+          ),
         ),
       );
     }
 
     var running = statement.opening;
     final rows = <pw.TableRow>[
-      ReportPdfHelpers.tableHeaderRow(
-        ['التاريخ', 'رقم القيد', 'البيان', 'مدين', 'دائن', 'الرصيد'],
-      ),
-      ReportPdfHelpers.tableDataRow(
-        ['', '', 'رصيد سابق', '', '', ReportPdfHelpers.formatAmount(running)],
-        bold: true,
-      ),
+      ReportPdfHelpers.tableHeaderRow([
+        'التاريخ',
+        'رقم القيد',
+        'البيان',
+        'مدين',
+        'دائن',
+        'الرصيد',
+      ]),
+      ReportPdfHelpers.tableDataRow([
+        '',
+        '',
+        'رصيد سابق',
+        '',
+        '',
+        ReportPdfHelpers.formatAmount(running),
+      ], bold: true),
     ];
 
     for (final line in statement.lines) {
       running += line.debit - line.credit;
       final isDebit = line.debit > 0;
-      rows.add(ReportPdfHelpers.tableDataRow(
-        [
-          ReportPdfHelpers.formatDate(line.date),
-          line.entryNo.toString(),
-          line.memo.isEmpty ? '—' : line.memo,
-          line.debit > 0 ? ReportPdfHelpers.formatAmount(line.debit) : '',
-          line.credit > 0 ? ReportPdfHelpers.formatAmount(line.credit) : '',
-          ReportPdfHelpers.formatAmount(running),
-        ],
-        colors: [
-          null, // date
-          null, // entryNo
-          null, // memo
-          isDebit ? ReportPdfHelpers.danger : null, // debit
-          !isDebit ? ReportPdfHelpers.primary : null, // credit
-          running >= 0 ? ReportPdfHelpers.success : ReportPdfHelpers.danger, // balance
-        ],
-      ));
+      rows.add(
+        ReportPdfHelpers.tableDataRow(
+          [
+            ReportPdfHelpers.formatDate(line.date),
+            line.entryNo.toString(),
+            line.memo.isEmpty ? '—' : line.memo,
+            line.debit > 0 ? ReportPdfHelpers.formatAmount(line.debit) : '',
+            line.credit > 0 ? ReportPdfHelpers.formatAmount(line.credit) : '',
+            ReportPdfHelpers.formatAmount(running),
+          ],
+          colors: [
+            null, // date
+            null, // entryNo
+            null, // memo
+            isDebit ? ReportPdfHelpers.danger : null, // debit
+            !isDebit ? ReportPdfHelpers.primary : null, // credit
+            running >= 0
+                ? ReportPdfHelpers.success
+                : ReportPdfHelpers.danger, // balance
+          ],
+        ),
+      );
     }
 
     // Closing balance row
-    rows.add(ReportPdfHelpers.tableDataRow(
-      ['', '', 'الرصيد الختامي', '', '', ReportPdfHelpers.formatAmount(statement.closing)],
-      bold: true,
-      colors: [
-        null, null, null, null, null,
-        statement.closing >= 0 ? ReportPdfHelpers.success : ReportPdfHelpers.danger,
-      ],
-    ));
+    rows.add(
+      ReportPdfHelpers.tableDataRow(
+        [
+          '',
+          '',
+          'الرصيد الختامي',
+          '',
+          '',
+          ReportPdfHelpers.formatAmount(statement.closing),
+        ],
+        bold: true,
+        colors: [
+          null,
+          null,
+          null,
+          null,
+          null,
+          statement.closing >= 0
+              ? ReportPdfHelpers.success
+              : ReportPdfHelpers.danger,
+        ],
+      ),
+    );
 
     return pw.Table(
       border: pw.TableBorder(

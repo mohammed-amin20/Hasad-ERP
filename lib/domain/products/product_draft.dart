@@ -27,15 +27,15 @@ class ProductDraft {
   final double? commissionRate;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'barcode': barcode,
-        'unit': unit,
-        'unit_type': unitType.dbValue,
-        'sale_price': salePrice,
-        'purchase_price': purchasePrice,
-        'qty': qty,
-        'reorder_level': reorderLevel,
-        'supplier_id': supplierId,
-        'commission_rate': commissionRate,
-      };
+    'name': name,
+    'barcode': barcode,
+    'unit': unit,
+    'unit_type': unitType.dbValue,
+    'sale_price': salePrice,
+    'purchase_price': purchasePrice,
+    'qty': qty,
+    'reorder_level': reorderLevel,
+    'supplier_id': supplierId,
+    'commission_rate': commissionRate,
+  };
 }

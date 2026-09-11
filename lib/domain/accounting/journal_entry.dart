@@ -15,8 +15,8 @@ class JournalLine extends Equatable {
   final String accountId;
   final String accountCode;
   final String accountName;
-  final int debit;    // Agorot
-  final int credit;   // Agorot
+  final int debit; // Agorot
+  final int credit; // Agorot
   final String? description;
 
   bool get isDebit => debit > 0;
@@ -24,7 +24,14 @@ class JournalLine extends Equatable {
   int get amount => debit > 0 ? debit : credit;
 
   @override
-  List<Object?> get props => [accountId, accountCode, accountName, debit, credit, description];
+  List<Object?> get props => [
+    accountId,
+    accountCode,
+    accountName,
+    debit,
+    credit,
+    description,
+  ];
 
   Map<String, dynamic> toJson() => {
     'account_id': accountId,
@@ -61,8 +68,10 @@ class JournalEntry extends Equatable {
   final DateTime date;
   final String memo;
   final List<JournalLine> lines;
-  final String sourceType; // 'manual', 'sale', 'purchase', 'payment', 'salary', 'inventory'
-  final String? sourceId;  // Reference to source document (invoice_id, payment_id, etc.)
+  final String
+  sourceType; // 'manual', 'sale', 'purchase', 'payment', 'salary', 'inventory'
+  final String?
+  sourceId; // Reference to source document (invoice_id, payment_id, etc.)
   final DateTime? createdAt;
 
   int get totalDebit => lines.fold(0, (sum, l) => sum + l.debit);
@@ -71,7 +80,15 @@ class JournalEntry extends Equatable {
   int get imbalance => totalDebit - totalCredit;
 
   @override
-  List<Object?> get props => [id, date, memo, lines, sourceType, sourceId, createdAt];
+  List<Object?> get props => [
+    id,
+    date,
+    memo,
+    lines,
+    sourceType,
+    sourceId,
+    createdAt,
+  ];
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -90,7 +107,9 @@ class JournalEntry extends Equatable {
     lines: (json['lines'] as List).map((l) => JournalLine.fromJson(l)).toList(),
     sourceType: json['source_type'] as String? ?? 'manual',
     sourceId: json['source_id'] as String?,
-    createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : null,
+    createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
   );
 
   static JournalEntry create({
@@ -119,5 +138,6 @@ class UnbalancedEntryException implements Exception {
   final String message;
 
   @override
-  String toString() => 'UnbalancedEntryException: $message (debit: ${entry.totalDebit}, credit: ${entry.totalCredit})';
+  String toString() =>
+      'UnbalancedEntryException: $message (debit: ${entry.totalDebit}, credit: ${entry.totalCredit})';
 }

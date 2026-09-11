@@ -29,12 +29,19 @@ class _ConnectivityListenerState extends ConsumerState<ConnectivityListener> {
     _subscription = service.onConnectivityChanged.listen((result) {
       if (mounted) {
         ref.read(connectivityStateProvider.notifier).update(result);
+        // Trigger verification when interface comes up
+        if (result.any((r) => r != ConnectivityResult.none)) {
+          ref.read(verifiedOnlineProvider.notifier).reverify();
+        }
       }
     });
     // Initialize with current connectivity (fire-and-forget)
     service.initialize().then((_) {
       if (mounted) {
         ref.read(connectivityStateProvider.notifier).update(service.lastResult);
+        if (service.hasInterface) {
+          ref.read(verifiedOnlineProvider.notifier).reverify();
+        }
       }
     });
     // ignore: unawaited_futures

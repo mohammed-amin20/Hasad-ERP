@@ -17,8 +17,7 @@ AccountRepository accountRepository(Ref ref) =>
 @riverpod
 class ChartOfAccounts extends _$ChartOfAccounts {
   @override
-  Future<List<Account>> build() =>
-      ref.watch(accountRepositoryProvider).chart();
+  Future<List<Account>> build() => ref.watch(accountRepositoryProvider).chart();
 
   /// Create a new account, then refresh the chart.
   Future<Account> create(AccountDraft draft) async {
