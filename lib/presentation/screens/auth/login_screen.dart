@@ -370,7 +370,7 @@ class _LoginLogo extends StatelessWidget {
           colors: [Color(0xFFB45309), Color(0xFFF59E0B), Color(0xFFFBBF24)],
           stops: [0, 0.55, 1],
         ),
-        borderRadius: BorderRadius.circular(24),
+        shape: BoxShape.circle,
         boxShadow: const [
           BoxShadow(
             color: Color(0x66D97706),
@@ -384,7 +384,7 @@ class _LoginLogo extends StatelessWidget {
         FontAwesomeIcons.wheatAwn,
         color: Colors.white,
         semanticLabel: 'شعار حصاد',
-        size: 30,
+        size: 34,
       ),
     );
   }

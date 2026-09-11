@@ -16,7 +16,7 @@ class BrandLogo extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(size * 0.55),
+        shape: BoxShape.circle,
       ),
       child: FaIcon(
         FontAwesomeIcons.wheatAwn,

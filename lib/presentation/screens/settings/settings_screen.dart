@@ -84,11 +84,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       initial: settings,
                       onSave: _saveSettings,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     _SendAllCard(onSend: _sendToAll),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     const _ReminderLogCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     const _BackupCard(),
                   ],
                 ),
@@ -358,93 +358,95 @@ class _ReminderLogCard extends ConsumerWidget {
     return Semantics(
       liveRegion: true,
       child: _SectionCard(
-      icon: FontAwesomeIcons.inbox,
-      color: AppColors.info,
-      title: 'سجل الرسائل',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 96,
-                child: Text(
-                  'التاريخ',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'العميل',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 60,
-                child: Text(
-                  'المبلغ',
-                  textAlign: TextAlign.end,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 56,
-                child: Text(
-                  'الحالة',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          logAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: AppProgress()),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                e.toString(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.danger,
-                ),
-              ),
-            ),
-            data: (entries) {
-              if (entries.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(16),
+        icon: FontAwesomeIcons.inbox,
+        color: AppColors.info,
+        title: 'سجل الرسائل',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 96,
                   child: Text(
-                    'لا توجد رسائل بعد',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
+                    'التاريخ',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                ),
+                Expanded(
+                  child: Text(
+                    'العميل',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: Text(
+                    'المبلغ',
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 56,
+                  child: Text(
+                    'الحالة',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            logAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: AppProgress()),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  e.toString(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.danger,
+                  ),
+                ),
+              ),
+              data: (entries) {
+                if (entries.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'لا توجد رسائل بعد',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final entry in entries) _LogRow(entry: entry),
+                  ],
                 );
-              }
-              return Column(
-                children: [for (final entry in entries) _LogRow(entry: entry)],
-              );
-            },
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }
 

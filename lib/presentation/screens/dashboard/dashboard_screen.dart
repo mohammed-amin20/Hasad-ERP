@@ -103,7 +103,7 @@ class _DashboardBody extends ConsumerWidget {
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final statCols = _statColumns(width);
-          const gap = 20.0;
+          const gap = 16.0;
           final itemWidth = (width - gap * (statCols - 1)) / statCols;
           final sideBySide = width >= 900;
 
@@ -135,7 +135,7 @@ class _DashboardBody extends ConsumerWidget {
                 childAspectRatio: itemWidth / 116,
                 children: cards,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _SectionCard(
                 icon: FontAwesomeIcons.chartColumn,
                 iconColor: const Color(0xFF2563EB),
@@ -148,7 +148,7 @@ class _DashboardBody extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               if (sideBySide) ...[
                 Row(
                   children: [
@@ -170,7 +170,7 @@ class _DashboardBody extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: _SectionCard(
                         icon: FontAwesomeIcons.boxOpen,
@@ -206,7 +206,7 @@ class _DashboardBody extends ConsumerWidget {
                           ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _SectionCard(
                   icon: FontAwesomeIcons.boxOpen,
                   iconColor: const Color(0xFFF59E0B),
