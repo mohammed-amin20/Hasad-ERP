@@ -1,11 +1,12 @@
 ﻿# ============================================================
-# M9 FULL SUITE - PowerShell REST regression (42 assertions)
+# M9 FULL SUITE - PowerShell REST regression (47 assertions)
 #
 # Canonical successor to supabase/tests/pgtap/run_pgtap_tests_pure.sql.
 # The pgTAP runnner was abandoned: `SET request.jwt.claims = (SELECT ...)`
 # is not supported in the Supabase SQL Editor, and the users table has no
-# `email` column. This suite drives the SAME 39 scenarios over real JWT +
-# PostgREST, plus 3 gap-fillers (E1-E3) to reach plan(42):
+# `email` column. This suite drives the SAME scenarios over real JWT +
+# PostgREST. It now accepts -SupabaseUrl/-AnonKey so the SAME suite runs
+# against DEV (default) and the production project.
 #
 #   T1  Tenant isolation (RLS)           6
 #   T2  Double-entry create_sale_invoice 3
@@ -18,7 +19,8 @@
 #   T8  Idempotency (request_id)         3
 #   T9  Reminders                        4   (incl. E3)
 #   T10 Financial reports                8
-#   ----------------------------------- 42
+#   T11 Multi-business switch_tenant     5   (needs migration 0021)
+#   ----------------------------------- 47
 #
 # Every assertion is either an invariant (`balanced = true`, `check = 0`,
 # per-entity exact values on freshly created rows) or a delta over a baseline
@@ -26,8 +28,11 @@
 # IDs are threaded step-to-step (no temp tables over HTTP).
 #
 # Run:  .\m9_full_suite.ps1   (after migrations 0001-0021 in DEV SQL Editor)
+#       .\m9_full_suite.ps1 -SupabaseUrl "https://prod.supabase.co" -AnonKey "..."
 # ============================================================
 param(
+    [string]$SupabaseUrl = "https://sxasnunzspkuwbxiddqd.supabase.co",
+    [string]$AnonKey     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4YXNudW56c3BrdXdieGlkZHFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MDYyNDIsImV4cCI6MjEwNDI4MjI0Mn0.6zYdwBewK7t4P7w7w_-BYTXI1rolSeb0Zd6jteyJsUk",
     [string]$OwnerAEmail = "owner4@test.local",
     [string]$OwnerAPass  = "Test@1234567",
     [string]$OwnerBEmail = "owner2@test.local",
@@ -35,8 +40,8 @@ param(
     [string]$WebhookId   = "e25fcb29-43c1-4bc1-9f51-58e1cdab2ff7"
 )
 
-$url = "https://sxasnunzspkuwbxiddqd.supabase.co"
-$key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4YXNudW56c3BrdXdieGlkZHFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MDYyNDIsImV4cCI6MjEwNDI4MjI0Mn0.6zYdwBewK7t4P7w7w_-BYTXI1rolSeb0Zd6jteyJsUk"
+$url = $SupabaseUrl
+$key = $AnonKey
 $headers = @{ apikey = $key; "Content-Type" = "application/json" }
 
 $script:Pass = 0
@@ -136,6 +141,26 @@ function Assert-True([string]$label, $condition) {
 
 function Get-RelDate([string]$d, [int]$days) {
     return ([datetime]::ParseExact($d, 'yyyy-MM-dd', $null)).AddDays($days).ToString('yyyy-MM-dd')
+}
+
+# Inverts an Ok: passes when the scriptblock THROWS (used for expected
+# failures like switch_tenant to a forbidden business).
+function Invoke-ExpectFail([string]$label, [scriptblock]$scriptBlock) {
+    try {
+        & $scriptBlock | Out-Null
+        $script:Fail++
+        Write-Host "  FAIL: $label (expected an error, none was raised)"
+    } catch {
+        $script:Pass++
+        Write-Host "  OK: $label"
+    }
+}
+
+# Supabase Auth returns the JWT subject (the auth users.id) - the key we use
+# to look up current_tenant_id in public.users.
+function Get-MyUid([hashtable]$H) {
+    $r = Invoke-RestMethod -Method Get -Uri "$url/auth/v1/user" -Headers $H
+    return $r.id
 }
 
 # PS 5.1 returns $null for an empty JSON array body -> a count-of-$null breaks
@@ -520,6 +545,26 @@ Invoke-Ok -label "get_balance_sheet succeeds" -scriptBlock { Invoke-RPC -name "g
 $chk = $null
 if ($null -ne $bSheet.check) { $chk = $bSheet.check } elseif ($null -ne $bSheet.sheet_check) { $chk = $bSheet.sheet_check }
 Assert-Equal "balance sheet check = 0 (balanced)" 0 $chk
+
+# ---------------------------------------------------------------------------
+# T11: MULTI-BUSINESS switch_tenant (migration 0021)
+# ---------------------------------------------------------------------------
+Write-Host "`n--- T11: switch_tenant ---"
+$uidA = Get-MyUid $h4g
+Assert-True "T11: my auth uid resolves" (-not [string]::IsNullOrWhiteSpace($uidA))
+
+Invoke-Ok -label "switch_tenant(own tenant) succeeds" -scriptBlock {
+    Invoke-RPC -name "switch_tenant" -p @{ p_tenant_id = $tenantIdA }
+}
+$ct = (Invoke-RestMethod -Method Get -Uri "$url/rest/v1/users?select=current_tenant_id&auth_user_id=eq.$uidA" -Headers $h4g).current_tenant_id
+Assert-Equal "T11: users.current_tenant_id persisted = tenant A" $tenantIdA $ct
+
+$myTenant = Invoke-RPC -name "get_my_tenant_id" -p @{}
+Assert-Equal "T11: get_my_tenant_id now resolves to tenant A" $tenantIdA $myTenant
+
+Invoke-ExpectFail "T11: switch_tenant(foreign tenant) is rejected" -scriptBlock {
+    Invoke-RPC -name "switch_tenant" -p @{ p_tenant_id = [guid]::NewGuid().ToString() }
+}
 
 # ---------------------------------------------------------------------------
 Test-Summary

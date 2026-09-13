@@ -93,11 +93,15 @@ class MovementResult {
     this.duplicate = false,
     this.movementId,
     this.amount = 0,
+    this.pending = false,
   });
 
   final bool duplicate;
   final String? movementId;
   final int amount;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory MovementResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;
@@ -153,6 +157,7 @@ class SalaryResult {
     this.paid = 0,
     this.arrearsCarried = 0,
     this.entryNo = 0,
+    this.pending = false,
   });
 
   final bool duplicate;
@@ -166,6 +171,9 @@ class SalaryResult {
   final int paid;
   final int arrearsCarried;
   final int entryNo;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory SalaryResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;

@@ -1,17 +1,23 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_supplier_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../data/suppliers/supabase_supplier_repository.dart';
 import '../../domain/suppliers/supplier.dart';
 import '../../domain/suppliers/supplier_draft.dart';
 import '../../domain/suppliers/supplier_repository.dart';
+import 'auth_providers.dart';
 
 part 'suppliers_providers.g.dart';
 
-/// Concrete supplier repository wired to Supabase.
+/// Concrete supplier repository — offline-first.
 @riverpod
-SupplierRepository supplierRepository(Ref ref) =>
-    SupabaseSupplierRepository(ref.watch(supabaseClientProvider));
+SupplierRepository supplierRepository(Ref ref) => OfflineSupplierRepository(
+      SupabaseSupplierRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Current search term for the supplier list (reactive).
 @riverpod

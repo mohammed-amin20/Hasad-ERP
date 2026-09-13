@@ -8,11 +8,13 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
 import '../../../domain/journal/journal.dart';
 import '../../../domain/journal/manual_journal_draft.dart';
 import '../../providers/accounts_providers.dart';
 import '../../providers/journal_providers.dart';
+import '../../widgets/freshness_chip.dart';
 import '../../widgets/invoice_input_fields.dart';
 
 class JournalScreen extends ConsumerStatefulWidget {
@@ -70,6 +72,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       title: 'قيد اليومية',
       subtitle: 'القيود المحاسبية الآلية واليدوية',
       actions: [
+        FreshnessChip(cacheKey: journalKey(_from, _to)),
         IconButton(
           tooltip: 'تحديث',
           onPressed: () => ref.invalidate(journalListProvider),

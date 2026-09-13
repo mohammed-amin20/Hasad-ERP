@@ -8,12 +8,12 @@ part of 'report_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Report repository wired to Supabase.
+/// Report repository — offline-first (cache-last each report envelope).
 
 @ProviderFor(reportRepository)
 final reportRepositoryProvider = ReportRepositoryProvider._();
 
-/// Report repository wired to Supabase.
+/// Report repository — offline-first (cache-last each report envelope).
 
 final class ReportRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class ReportRepositoryProvider
           ReportRepository
         >
     with $Provider<ReportRepository> {
-  /// Report repository wired to Supabase.
+  /// Report repository — offline-first (cache-last each report envelope).
   ReportRepositoryProvider._()
     : super(
         from: null,
@@ -57,7 +57,7 @@ final class ReportRepositoryProvider
   }
 }
 
-String _$reportRepositoryHash() => r'e3275aa42f3c9c38375f76c2c193fcea30b2b69d';
+String _$reportRepositoryHash() => r'd2f121f1c115a0708e0012bd1be2aa5295485cf6';
 
 /// Ledger selection: account + date range (default: from first-of-month to now).
 

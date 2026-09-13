@@ -8,8 +8,10 @@ import '../../../core/printing/statement_pdf.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/route_header.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/statements/statement.dart';
 import '../../providers/statements_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
 /// Account statement for one party with a MANDATORY from/to date filter.
 class StatementScreen extends ConsumerStatefulWidget {
@@ -129,6 +131,8 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                 subtitle: 'عرض حركة الحساب وطباعتها',
                 onClose: () => Navigator.of(context).pop(),
                 actions: [
+                  if (_request != null)
+                    FreshnessChip(cacheKey: statementKey(_request!)),
                   if (statement != null)
                     IconButton(
                       onPressed: _printing ? null : () => _printPdf(statement),

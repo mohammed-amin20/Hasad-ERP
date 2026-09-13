@@ -95,7 +95,7 @@ final class InvoiceRepositoryProvider
   }
 }
 
-String _$invoiceRepositoryHash() => r'fe0ff4c62f9b1097222a9f741dfaaf3e3cfd1097';
+String _$invoiceRepositoryHash() => r'642a8ed21af58e54fbde0ab536613916043b5399';
 
 /// All customers for dropdowns, never filtered by the customers screen search.
 

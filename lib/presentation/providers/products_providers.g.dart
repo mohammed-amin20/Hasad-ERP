@@ -8,12 +8,12 @@ part of 'products_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Concrete product repository wired to Supabase.
+/// Concrete product repository — offline-first.
 
 @ProviderFor(productRepository)
 final productRepositoryProvider = ProductRepositoryProvider._();
 
-/// Concrete product repository wired to Supabase.
+/// Concrete product repository — offline-first.
 
 final class ProductRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class ProductRepositoryProvider
           ProductRepository
         >
     with $Provider<ProductRepository> {
-  /// Concrete product repository wired to Supabase.
+  /// Concrete product repository — offline-first.
   ProductRepositoryProvider._()
     : super(
         from: null,
@@ -58,7 +58,7 @@ final class ProductRepositoryProvider
   }
 }
 
-String _$productRepositoryHash() => r'3555e387cb81ed7f33aa6801a8fb0419df0d5902';
+String _$productRepositoryHash() => r'20ea9185a4f2c009e15860810332737e212b5876';
 
 /// Current search term for the product list (reactive).
 

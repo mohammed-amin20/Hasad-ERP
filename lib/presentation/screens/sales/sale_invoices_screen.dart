@@ -8,9 +8,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/route_header.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/sales/sale_invoice_draft.dart';
 import '../../providers/sales_providers.dart';
+import '../../widgets/freshness_chip.dart';
 import '../../widgets/invoice_input_fields.dart';
 import '../../widgets/invoice_list.dart';
 import '../../widgets/product_picker_sheet.dart';
@@ -59,11 +61,13 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   @override
   Widget build(BuildContext context) {
     final listAsync = ref.watch(saleInvoicesListProvider);
+    final search = ref.watch(saleSearchProvider);
 
     return PageScaffold(
       title: 'المبيعات',
       subtitle: 'إنشاء ومتابعة فواتير البيع',
       actions: [
+        FreshnessChip(cacheKey: invoiceListKey(type: 'sale', search: search)),
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
@@ -305,9 +309,9 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
     final theme = Theme.of(context);
     final customersAsync = ref.watch(allCustomersProvider);
 
-    return Container(
-      color: AppColors.background,
-      child: SafeArea(
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Form(
           key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,

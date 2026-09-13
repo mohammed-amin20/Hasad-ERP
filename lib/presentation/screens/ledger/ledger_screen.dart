@@ -6,10 +6,12 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
 import '../../../domain/reports/ledger.dart' as ledger_models;
 import '../../providers/accounts_providers.dart';
 import '../../providers/report_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
 class LedgerScreen extends ConsumerStatefulWidget {
   const LedgerScreen({super.key});
@@ -28,6 +30,14 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       title: 'الأستاذ العام',
       subtitle: 'حركات الحساب الجارية',
       actions: [
+        if (query.accountId != null)
+          FreshnessChip(
+            cacheKey: ledgerKey(
+              accountId: query.accountId!,
+              from: query.from,
+              to: query.to,
+            ),
+          ),
         IconButton(
           tooltip: 'تحديث',
           onPressed: () => ref.invalidate(ledgerStatementProvider),

@@ -9,10 +9,10 @@ class SaleInvoiceLine extends Equatable {
   });
 
   final String productId;
-  final int qty;
+  final double qty;
   final int price; // Unit price in agorot
 
-  int get lineTotal => qty * price;
+  int get lineTotal => (qty * price).round();
 
   @override
   List<Object?> get props => [productId, qty, price];
@@ -35,10 +35,10 @@ class PurchaseInvoiceLine extends Equatable {
 
   final String? productId;
   final ProductDraft? newProduct;
-  final int qty;
+  final double qty;
   final int price; // Unit price in agorot
 
-  int get lineTotal => qty * price;
+  int get lineTotal => (qty * price).round();
   bool get isNewProduct => newProduct != null;
 
   @override

@@ -8,9 +8,11 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
 import '../../../domain/accounts/account_draft.dart';
 import '../../providers/accounts_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
 class ChartOfAccountsScreen extends ConsumerStatefulWidget {
   const ChartOfAccountsScreen({super.key});
@@ -37,6 +39,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       title: 'دليل الحسابات',
       subtitle: 'شجرة الحسابات المحاسبية',
       actions: [
+        FreshnessChip(cacheKey: chartOfAccountsKey),
         IconButton(
           tooltip: 'تحديث',
           onPressed: () => ref.invalidate(chartOfAccountsProvider),

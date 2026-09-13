@@ -11,6 +11,7 @@ class SaleInvoiceResult {
     required this.remaining,
     required this.status,
     required this.entryNo,
+    this.pending = false,
   });
 
   final String invoiceId;
@@ -20,6 +21,9 @@ class SaleInvoiceResult {
   final int remaining;
   final InvoiceStatus status;
   final int entryNo;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory SaleInvoiceResult.fromJson(Map<String, dynamic> json) =>
       SaleInvoiceResult(

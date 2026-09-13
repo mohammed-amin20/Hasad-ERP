@@ -1,17 +1,23 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/employees/supabase_employee_repository.dart';
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_employee_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/employees/employee.dart';
 import '../../domain/employees/employee_draft.dart';
 import '../../domain/employees/employee_repository.dart';
+import 'auth_providers.dart';
 
 part 'employees_providers.g.dart';
 
-/// Concrete employee repository wired to Supabase.
+/// Concrete employee repository — offline-first.
 @riverpod
-EmployeeRepository employeeRepository(Ref ref) =>
-    SupabaseEmployeeRepository(ref.watch(supabaseClientProvider));
+EmployeeRepository employeeRepository(Ref ref) => OfflineEmployeeRepository(
+      SupabaseEmployeeRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Current search term for the employee list (reactive).
 @riverpod

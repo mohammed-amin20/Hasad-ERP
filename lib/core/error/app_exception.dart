@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Unified error type surfaced to the UI.
@@ -42,7 +43,9 @@ AppException mapErrorToAppException(Object error) {
   if (error is AppException) return error;
   if (error is PostgrestException) return ValidationException(error.message);
   if (error is AuthException) return ValidationException(error.message);
-  if (error is SocketException || error is TimeoutException) {
+  if (error is SocketException ||
+      error is TimeoutException ||
+      error is http.ClientException) {
     return const NetworkException();
   }
   return const UnknownException();

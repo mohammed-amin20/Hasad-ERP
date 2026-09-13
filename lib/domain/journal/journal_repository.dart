@@ -7,11 +7,15 @@ class JournalEntryResult {
     required this.entryId,
     required this.entryNo,
     required this.total,
+    this.pending = false,
   });
 
   final String entryId;
   final int entryNo;
   final int total;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory JournalEntryResult.fromJson(Map<String, dynamic> json) =>
       JournalEntryResult(

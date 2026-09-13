@@ -8,12 +8,14 @@ part of 'customers_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Concrete customer repository wired to Supabase.
+/// Concrete customer repository — offline-first (mirrors while online,
+/// serves the local mirror when offline).
 
 @ProviderFor(customerRepository)
 final customerRepositoryProvider = CustomerRepositoryProvider._();
 
-/// Concrete customer repository wired to Supabase.
+/// Concrete customer repository — offline-first (mirrors while online,
+/// serves the local mirror when offline).
 
 final class CustomerRepositoryProvider
     extends
@@ -23,7 +25,8 @@ final class CustomerRepositoryProvider
           CustomerRepository
         >
     with $Provider<CustomerRepository> {
-  /// Concrete customer repository wired to Supabase.
+  /// Concrete customer repository — offline-first (mirrors while online,
+  /// serves the local mirror when offline).
   CustomerRepositoryProvider._()
     : super(
         from: null,
@@ -59,7 +62,7 @@ final class CustomerRepositoryProvider
 }
 
 String _$customerRepositoryHash() =>
-    r'b9a2bb94e5f42f0ac8b8b9ddb8fff08e6ecc9f0b';
+    r'257c7c1f88c83bb0e1bfef7a637cdc0eeb111a2e';
 
 /// Current search term for the customer list (reactive).
 

@@ -8,12 +8,12 @@ part of 'journal_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Journal repository wired to Supabase.
+/// Journal repository — offline-first (cache-last per date range).
 
 @ProviderFor(journalRepository)
 final journalRepositoryProvider = JournalRepositoryProvider._();
 
-/// Journal repository wired to Supabase.
+/// Journal repository — offline-first (cache-last per date range).
 
 final class JournalRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class JournalRepositoryProvider
           JournalRepository
         >
     with $Provider<JournalRepository> {
-  /// Journal repository wired to Supabase.
+  /// Journal repository — offline-first (cache-last per date range).
   JournalRepositoryProvider._()
     : super(
         from: null,
@@ -58,7 +58,7 @@ final class JournalRepositoryProvider
   }
 }
 
-String _$journalRepositoryHash() => r'c73cb21d441c6bb96798d539617adfe4cd033391';
+String _$journalRepositoryHash() => r'c3f34afe699b0d88f0ce41141f01d06c78fa39fa';
 
 /// Current journal date range (first day of the month → today by default).
 

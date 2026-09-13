@@ -11,18 +11,21 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/stat_card.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/dashboard/dashboard.dart';
 import '../../providers/dashboard_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const PageScaffold(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PageScaffold(
       title: 'لوحة التحكم',
       subtitle: 'مرحباً، نظرة شاملة على أداء الشركة',
-      child: _DashboardBody(),
+      actions: const [FreshnessChip(cacheKey: dashboardKey)],
+      child: const _DashboardBody(),
     );
   }
 }

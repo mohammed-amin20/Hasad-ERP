@@ -125,6 +125,7 @@ class AsyncOperationWrapper<T> extends ConsumerWidget {
     final isNetwork =
         error.toString().contains('SocketException') ||
         error.toString().contains('TimeoutException') ||
+        error.toString().contains('ClientException') ||
         error.toString().contains('NetworkException');
 
     return Center(
@@ -186,6 +187,7 @@ mixin RetryableProviderMixin<T> {
       final isNetworkError =
           e.toString().contains('SocketException') ||
           e.toString().contains('TimeoutException') ||
+          e.toString().contains('ClientException') ||
           e.toString().contains('NetworkException');
 
       if (!isNetworkError) rethrow;

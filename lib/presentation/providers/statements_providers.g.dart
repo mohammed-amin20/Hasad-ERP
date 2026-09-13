@@ -55,7 +55,7 @@ final class StatementRepositoryProvider
 }
 
 String _$statementRepositoryHash() =>
-    r'1a714986d5b7d9a70b0a566e7241ac9cac42fcd9';
+    r'1e57843a1afa6b8ea326c60795227c8edde7c6d4';
 
 @ProviderFor(debtsRepository)
 final debtsRepositoryProvider = DebtsRepositoryProvider._();
@@ -97,7 +97,7 @@ final class DebtsRepositoryProvider
   }
 }
 
-String _$debtsRepositoryHash() => r'a5e5067152cd04ebb26f6688ff3eb01828cfc509';
+String _$debtsRepositoryHash() => r'fcb152b9e2f3680ea499d3c650233657e717196a';
 
 /// Customer outstanding balances (what customers owe us).
 

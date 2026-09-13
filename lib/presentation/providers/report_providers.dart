@@ -1,5 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_report_repository.dart';
 import '../../data/reports/supabase_report_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/reports/balance_sheet.dart' as sheet_models;
@@ -7,13 +9,17 @@ import '../../domain/reports/income_statement.dart' as pnl_models;
 import '../../domain/reports/ledger.dart' as ledger_models;
 import '../../domain/reports/report_repository.dart';
 import '../../domain/reports/trial_balance.dart' as tb_models;
+import 'auth_providers.dart';
 
 part 'report_providers.g.dart';
 
-/// Report repository wired to Supabase.
+/// Report repository — offline-first (cache-last each report envelope).
 @riverpod
-ReportRepository reportRepository(Ref ref) =>
-    SupabaseReportRepository(ref.watch(supabaseClientProvider));
+ReportRepository reportRepository(Ref ref) => OfflineReportRepository(
+      SupabaseReportRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Ledger selection: account + date range (default: from first-of-month to now).
 @riverpod

@@ -84,9 +84,16 @@ Daily/weekly/monthly operational procedures for the production environment.
 - [ ] **Full Backup Restore Test**: Restore last month's backup to a test project
   1. Create temporary Supabase project
   2. Apply migrations (0001-0021, e.g. paste `production/prod_schema.sql`)
-  3. Restore backup
-  4. Run `reports.ps1` against restored data
-  5. Verify all 5 cases pass
+  3. Run the backup restore (gunzip the `.gz` from `backup.ps1`, then `psql -f`)
+  4. Run `m9_full_suite.ps1` (supabase/tests, **47/47**, needs `owner4@test.local`/`owner2@test.local`
+     created via Auth → Users) and `sample_month.ps1` against the restored data
+  5. Verify all reconciliation/statement checks pass (no financial drift)
+
+- [ ] **Security Audit** (`verify_security.sql`, postgres role):
+  - RLS enabled + FORCED on every tenant table
+  - No direct DML grants to `authenticated` on financial tables
+  - No `anon` privileges; business RPCs not anon-executable
+  - `SECURITY DEFINER` functions only the 7-name allowlist
 
 - [ ] **Index Usage**: Check for unused indexes
   ```sql
@@ -98,10 +105,7 @@ Daily/weekly/monthly operational procedures for the production environment.
 
 - [ ] **Slow Queries**: Supabase Dashboard → Logs → filter by duration > 1s
 
-- [ ] **Security Audit**: 
-  - Review `pg_roles` for unexpected members
-  - Verify no `SECURITY DEFINER` functions except `register_tenant`
-  - Check `grants` on financial tables (should be SELECT only for authenticated)
+- [ ] **Grant/Policy drift**: re-verify no unexpected `pg_roles` members
 
 ---
 
@@ -166,6 +170,10 @@ SELECT register_tenant(
 ```
 
 Returns: `tenant_id`, `user_id`
+
+> **Onboarding smoke test:** `supabase/tests/sample_month.ps1` automates the whole flow
+> (new auth user → signup → `register_tenant` → full month of books → reconciliation).
+> Run it once per environment to prove onboarding works before doing it manually.
 
 ### Post-Creation Steps
 

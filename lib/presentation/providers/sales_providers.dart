@@ -1,11 +1,14 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/invoices/invoice_repository.dart';
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_invoice_repository.dart';
 import '../../data/sales/supabase_sale_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/customers/customer.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/sales/sale_repository.dart';
+import 'auth_providers.dart';
 import 'customers_providers.dart';
 
 part 'sales_providers.g.dart';
@@ -15,8 +18,11 @@ SaleRepository saleRepository(Ref ref) =>
     SupabaseSaleRepository(ref.watch(supabaseClientProvider));
 
 @riverpod
-InvoiceRepository invoiceRepository(Ref ref) =>
-    InvoiceRepository(ref.watch(supabaseClientProvider));
+InvoiceRepository invoiceRepository(Ref ref) => OfflineInvoiceRepository(
+      InvoiceRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// All customers for dropdowns, never filtered by the customers screen search.
 @riverpod

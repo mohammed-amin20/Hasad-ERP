@@ -28,6 +28,16 @@ The combined file `prod_schema.sql` in this folder concatenates `0001–0021` in
 
 **Important**: Extensions `pg_cron` and `pg_net` are allowlisted by Supabase but must be enabled; the script runs `create extension if not exists` which activates them. For `0013_reminder.sql` and `0020_reminders_to_all.sql`, cron jobs are created but **won't fire** until the n8n webhook is configured (see §3 below).
 
+### Post-Paste Hardening (MANDATORY — S5)
+
+After the combined paste **succeeds**, run these three scripts in the SQL Editor **in this order**, as role `postgres`:
+
+1. `reapply_rls.sql` — `ENABLE` + **`FORCE`** row level security on all tenant tables and drop/recreate every isolation policy. Without it the DEV/prod databases behave as if RLS were off anytime a migration's `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` ran before the tables' rows existed. No grant changes (preserves the invoker-RPC model).
+2. `reapply_reminder_rpcs.sql` — drops **ALL** `_fire_reminder` / `send_due_reminders` / `send_reminder_now` / `send_reminders_to_all` overloads by name, then recreates them verbatim from the repo (numeric `_fire_reminder.p_amount`, grants, and the daily `send-due-reminders-daily` cron `'0 9 * * *'`). Removes the risk of stale pre-M9 function bodies (the DEV 400 `column "company_name" does not exist` failure).
+3. `verify_security.sql` — the §6 security checklist as runnable SQL. Green = 0 rows returned except the two informational blocks and the 7-name `SECURITY DEFINER` allowlist.
+
+Then verify the verification queries baked into `0019_reports.sql` (table/function/cron counts) and run `supabase/tests/m9_full_suite.ps1` (see §4 below) against the new project.
+
 ### Apply Migrations (per-file fallback)
 
 If the combined script fails, paste each file individually in order from `../migrations/`:
@@ -175,7 +185,37 @@ The n8n workflow should:
 
 ---
 
-## 4. Flutter Production Build
+## 4. Regression After Setup
+
+Run the full backend suite against the **new** project (the same script used on DEV — it is
+parameterized for target URL + anon key, defaults to DEV):
+
+```powershell
+# Need two test users in prod FIRST: create owner4@test.local and owner2@test.local
+# via Authentication -> Users -> Add user (password Test@1234567 / Test@654321).
+.\supabase\tests\m9_full_suite.ps1 `
+  -SupabaseUrl "https://YOURPROJECT.supabase.co" `
+  -AnonKey "eyJ...anon-key..."
+```
+
+Expect **47/47 green** (T11 `switch_tenant` needs migration `0021`, which `prod_schema.sql` includes).
+
+Then run the realistic full-month scenario + reconciliation (M9 output #4, also the S4
+tenant-onboarding smoke test):
+
+```powershell
+.\supabase\tests\sample_month.ps1 `
+  -SupabaseUrl "https://YOURPROJECT.supabase.co" `
+  -AnonKey "eyJ...anon-key..."
+```
+
+It signs up a brand-new auth user, registers a fresh tenant via `register_tenant`, books one
+complete past month (capital, purchases, consignment, sales, payments, expenses, salary) and
+reconciles every account/stock/commission/statement to hand-computed values.
+
+---
+
+## 5. Flutter Production Build
 
 ### Environment Variables
 
@@ -223,7 +263,7 @@ await Supabase.initialize(
 
 ---
 
-## 5. Backup & Restore
+## 6. Backup & Restore
 
 ### Automated Backup (Supabase Built-in)
 
@@ -231,16 +271,24 @@ Supabase Pro+ plans include **Point-in-Time Recovery (PITR)** and daily backups.
 
 ### Manual pg_dump (for extra safety)
 
-```bash
-# Full backup
-pg_dump -h db.xxxxx.supabase.co -U postgres -d postgres \
-  --no-owner --no-privileges --clean --if-exists \
-  > hasad_prod_backup_$(date +%F).sql
+```powershell
+# Full backup (real .gz via backup.ps1)
+.\backup.ps1 -SupabaseHost "db.xxxxx.supabase.co" -Password "xxx"
 
-# Restore
-psql -h db.xxxxx.supabase.co -U postgres -d postgres \
-  -f hasad_prod_backup_2026-09-09.sql
+# Tenant-scoped backup (idempotent data-only inserts - safe to restore over a LIVE db)
+.\backup.ps1 -SupabaseHost "db.xxxxx.supabase.co" -Password "xxx" -TenantId "uuid-here"
+
+# Restore a full backup into a fresh project
+pg_restore ... # or: psql -f hasad_prod_backup_<date>.sql.gz  (gunzip first)
 ```
+
+**`backup.ps1` guarantees (fixed in the S5 pass):**
+- `PGPASSWORD` is set correctly on the process (older drafts passed an empty password).
+- The `.gz` file is **real gzip** (`GZipStream`), not a ZIP misnamed `.gz`.
+- Tenant-scoped dumps are **data-only + `ON CONFLICT DO NOTHING`** and never pass
+  `--clean`/`--if-exists` — restoring a tenant backup cannot drop or touch other
+  tenants' tables or rows. Requires pg_dump ≥ 15 (the script retries without the
+  flag on older clients).
 
 ### Tenant-Scoped Backup (for multi-tenant)
 
@@ -259,22 +307,25 @@ pg_dump -h db.xxxxx.supabase.co -U postgres -d postgres \
 
 ---
 
-## 6. Security Checklist (Run Before Go-Live)
+## 7. Security Checklist (Run Before Go-Live)
 
-- [ ] RLS enabled on **every table** (verify via `SELECT * FROM pg_tables WHERE rowsecurity = false;`)
-- [ ] All policies use `tenant_id = get_my_tenant_id()`
-- [ ] `GRANT SELECT/INSERT/UPDATE/DELETE` only to `authenticated` on master tables
-- [ ] Financial tables (`invoices`, `journal_entries`, `payments`, `commission_dues`, `salaries`, `employee_movements`, `stock_moves`) have **no direct write grants** — only via RPC
-- [ ] All write RPCs are `SECURITY INVOKER`
-- [ ] `register_tenant` is `SECURITY DEFINER` with ownership validation
+Run `verify_security.sql` (postgres role, SQL Editor) and review every block:
+
+- [ ] **RLS enabled on every table** (check #1) — `SELECT * FROM pg_tables WHERE rowsecurity = false;`
+- [ ] **RLS FORCED** on every tenant table (check #2, done by `reapply_rls.sql`)
+- [ ] At least one RLS policy per table (check #3)
+- [ ] Financial tables have **no direct INSERT/UPDATE/DELETE** for `authenticated` (check #4) — writes via RPC only
+- [ ] No privileges granted to `anon` (check #5)
+- [ ] `SECURITY DEFINER` functions are only the 7-name allowlist (check #6: `get_my_tenant_id`, `seed_chart_of_accounts`, `register_tenant`, `seed_tenant_settings`, `_fire_reminder`, `send_due_reminders`, `switch_tenant`)
+- [ ] Business RPCs are **not** executable by `anon` (check #7)
+- [ ] `pg_cron` jobs only call `SECURITY INVOKER`/internal definer functions (check #8)
 - [ ] `service_role` key never exposed to client
-- [ ] `pg_cron` jobs only call `SECURITY INVOKER` functions
 - [ ] n8n webhook validates `tenant_id` against known tenants
 - [ ] SMS provider API keys stored in n8n credentials (not in workflow JSON)
 
 ---
 
-## 7. Go-Live Checklist
+## 8. Go-Live Checklist
 
 - [ ] Production Supabase project created, migrations applied
 - [ ] n8n deployed, SMS workflow tested with real provider
@@ -282,15 +333,17 @@ pg_dump -h db.xxxxx.supabase.co -U postgres -d postgres \
 - [ ] Flutter production build compiled with `--dart-define=use_arabic=true`
 - [ ] App hosted (Firebase Hosting / Vercel / Netlify / self-hosted)
 - [ ] Custom domain configured with SSL
-- [ ] Test accounts created (admin, accountant, sales)
-- [ ] Full regression: sale → payment → statement → PDF → reminder
+- [ ] Test accounts created (admin, accountant, sales) + the two suite users (`owner4@test.local`/`owner2@test.local`)
+- [ ] Full regression: `m9_full_suite.ps1` **47/47** against prod (§4)
+- [ ] `sample_month.ps1` full-month reconciliation green against prod (§4)
+- [ ] `verify_security.sql` audit green (§7)
 - [ ] Backup script scheduled (cron/GitHub Actions)
 - [ ] Monitoring: Supabase logs, n8n execution logs, `reminder_log` table
 - [ ] Runbook documented (this file + `OPERATIONS.md`)
 
 ---
 
-## 8. Files in This Folder
+## 9. Files in This Folder
 
 | File | Purpose |
 |------|---------|
@@ -298,7 +351,10 @@ pg_dump -h db.xxxxx.supabase.co -U postgres -d postgres \
 | `docker-compose.yml` | n8n + PostgreSQL for VPS |
 | `.env.example` | Template for n8n environment |
 | `prod_schema.sql` | Combined 0001–0021 migration script (single SQL Editor paste) |
-| `apply_migrations.ps1` | PowerShell script to apply all migrations to production |
+| `reapply_rls.sql` | **Post-paste hardening:** ENABLE+FORCE RLS + recreate isolation policies (no grant changes) |
+| `reapply_reminder_rpcs.sql` | **Post-paste hardening:** drop-all + recreate reminder RPCs (numeric `_fire_reminder`), grants, daily cron |
+| `verify_security.sql` | Runnable §7 security audit (postgres role) |
+| `apply_migrations.ps1` | PowerShell script to apply all migrations to production (note: `exec_sql` RPC may 404 — SQL Editor paste is the verified path) |
 | `sms-reminder.json` | n8n workflow template (SMS credential = placeholder, wire provider when decided) |
-| `backup.ps1` | pg_dump backup script |
+| `backup.ps1` | pg_dump backup script (real gzip; tenant dumps safe to restore over live DB) |
 | `OPERATIONS.md` | Runbook for daily operations |

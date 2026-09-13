@@ -1,17 +1,24 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/customers/supabase_customer_repository.dart';
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_customer_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/customers/customer.dart';
 import '../../domain/customers/customer_draft.dart';
 import '../../domain/customers/customer_repository.dart';
+import 'auth_providers.dart';
 
 part 'customers_providers.g.dart';
 
-/// Concrete customer repository wired to Supabase.
+/// Concrete customer repository — offline-first (mirrors while online,
+/// serves the local mirror when offline).
 @riverpod
-CustomerRepository customerRepository(Ref ref) =>
-    SupabaseCustomerRepository(ref.watch(supabaseClientProvider));
+CustomerRepository customerRepository(Ref ref) => OfflineCustomerRepository(
+      SupabaseCustomerRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Current search term for the customer list (reactive).
 @riverpod

@@ -1,17 +1,23 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_product_repository.dart';
 import '../../data/products/supabase_product_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/products/product.dart';
 import '../../domain/products/product_draft.dart';
 import '../../domain/products/product_repository.dart';
+import 'auth_providers.dart';
 
 part 'products_providers.g.dart';
 
-/// Concrete product repository wired to Supabase.
+/// Concrete product repository — offline-first.
 @riverpod
-ProductRepository productRepository(Ref ref) =>
-    SupabaseProductRepository(ref.watch(supabaseClientProvider));
+ProductRepository productRepository(Ref ref) => OfflineProductRepository(
+      SupabaseProductRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Current search term for the product list (reactive).
 @riverpod

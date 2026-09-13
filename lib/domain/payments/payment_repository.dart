@@ -69,6 +69,7 @@ class PaymentResult {
     this.remaining = 0,
     this.status = '',
     this.entryNo = 0,
+    this.pending = false,
   });
 
   final bool duplicate;
@@ -80,6 +81,9 @@ class PaymentResult {
   final int remaining;
   final String status;
   final int entryNo;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory PaymentResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;
@@ -130,6 +134,7 @@ class SettlementResult {
     this.duesCount = 0,
     this.entryNo = 0,
     this.allocations = const [],
+    this.pending = false,
   });
 
   final bool duplicate;
@@ -138,6 +143,9 @@ class SettlementResult {
   final int duesCount;
   final int entryNo;
   final List<SettlementAllocation> allocations;
+
+  /// True when this result came from a queued offline write awaiting sync.
+  final bool pending;
 
   factory SettlementResult.fromJson(Map<String, dynamic> json) {
     final duplicate = json['duplicate'] == true;

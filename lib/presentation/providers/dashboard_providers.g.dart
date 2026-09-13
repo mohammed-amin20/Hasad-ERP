@@ -8,12 +8,14 @@ part of 'dashboard_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Reads the dashboard summary from Supabase. Override in tests with a fake.
+/// Reads the dashboard summary — offline-first (cache-last the KPI envelope).
+/// Override in tests with a fake.
 
 @ProviderFor(dashboardRepository)
 final dashboardRepositoryProvider = DashboardRepositoryProvider._();
 
-/// Reads the dashboard summary from Supabase. Override in tests with a fake.
+/// Reads the dashboard summary — offline-first (cache-last the KPI envelope).
+/// Override in tests with a fake.
 
 final class DashboardRepositoryProvider
     extends
@@ -23,7 +25,8 @@ final class DashboardRepositoryProvider
           DashboardRepository
         >
     with $Provider<DashboardRepository> {
-  /// Reads the dashboard summary from Supabase. Override in tests with a fake.
+  /// Reads the dashboard summary — offline-first (cache-last the KPI envelope).
+  /// Override in tests with a fake.
   DashboardRepositoryProvider._()
     : super(
         from: null,
@@ -59,7 +62,7 @@ final class DashboardRepositoryProvider
 }
 
 String _$dashboardRepositoryHash() =>
-    r'5007b1317808745a70e27da7bd60efde526d5d08';
+    r'f465977a8b6754c62cfc7f228848cbefe1c65d6a';
 
 /// Fetches the dashboard summary once. Invalidate to reload.
 

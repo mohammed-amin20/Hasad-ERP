@@ -6,9 +6,11 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/reports/balance_sheet.dart' as sheet_models;
 import '../../../domain/reports/income_statement.dart' as pnl_models;
 import '../../providers/report_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
 class FinancialStatementsScreen extends ConsumerStatefulWidget {
   const FinancialStatementsScreen({super.key});
@@ -27,11 +29,15 @@ class _FinancialStatementsScreenState
     final reportAsync = _showBalanceSheet
         ? ref.watch(balanceSheetProvider)
         : ref.watch(incomeStatementProvider);
+    final range = ref.watch(incomeRangeProvider);
+    final asOf = ref.watch(asOfDateProvider);
+    final cacheKey = _showBalanceSheet ? balanceKey(asOf) : incomeKey(range.from, range.to);
 
     return PageScaffold(
       title: 'القوائم المالية',
       subtitle: 'قائمة الدخل والميزانية العمومية',
       actions: [
+        FreshnessChip(cacheKey: cacheKey),
         IconButton(
           tooltip: 'تحديث',
           onPressed: () => ref.invalidate(

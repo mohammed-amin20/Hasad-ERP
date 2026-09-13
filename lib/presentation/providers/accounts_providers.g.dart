@@ -8,12 +8,12 @@ part of 'accounts_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Chart-of-accounts repository wired to Supabase.
+/// Chart-of-accounts repository — offline-first (cache-last the RPC envelope).
 
 @ProviderFor(accountRepository)
 final accountRepositoryProvider = AccountRepositoryProvider._();
 
-/// Chart-of-accounts repository wired to Supabase.
+/// Chart-of-accounts repository — offline-first (cache-last the RPC envelope).
 
 final class AccountRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class AccountRepositoryProvider
           AccountRepository
         >
     with $Provider<AccountRepository> {
-  /// Chart-of-accounts repository wired to Supabase.
+  /// Chart-of-accounts repository — offline-first (cache-last the RPC envelope).
   AccountRepositoryProvider._()
     : super(
         from: null,
@@ -58,7 +58,7 @@ final class AccountRepositoryProvider
   }
 }
 
-String _$accountRepositoryHash() => r'05e743d79dd8d787997d9ffca0862f0faf8627b9';
+String _$accountRepositoryHash() => r'0e75e05f9d4c4660ef702d15512242afc82ad9bd';
 
 /// The tenant's chart of accounts.
 

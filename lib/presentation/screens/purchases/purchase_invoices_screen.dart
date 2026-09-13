@@ -9,10 +9,12 @@ import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/route_header.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/purchases/purchase_invoice_draft.dart';
 import '../../../domain/suppliers/supplier.dart';
 import '../../providers/purchases_providers.dart';
+import '../../widgets/freshness_chip.dart';
 import '../../widgets/invoice_input_fields.dart';
 import '../../widgets/invoice_list.dart';
 import '../../widgets/new_product_sheet.dart';
@@ -64,11 +66,15 @@ class _PurchaseInvoicesScreenState
   @override
   Widget build(BuildContext context) {
     final listAsync = ref.watch(purchaseInvoicesListProvider);
+    final search = ref.watch(purchaseSearchProvider);
 
     return PageScaffold(
       title: 'المشتريات',
       subtitle: 'استلام مباشر وبالعمولة (بضاعة أمانة)',
       actions: [
+        FreshnessChip(
+          cacheKey: invoiceListKey(type: 'purchase', search: search),
+        ),
         IconButton(
           tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
           onPressed: _toggleSearch,
@@ -373,9 +379,9 @@ class _NewPurchaseInvoicePageState
     final theme = Theme.of(context);
     final suppliersAsync = ref.watch(allSuppliersProvider);
 
-    return Container(
-      color: AppColors.background,
-      child: SafeArea(
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Form(
           key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -383,8 +389,8 @@ class _NewPurchaseInvoicePageState
             padding: const EdgeInsets.all(24),
             children: [
               RouteHeader(
-                title: '������ ���� �����',
-                subtitle: '����� ������ ������� �� ������',
+                title: 'فاتورة شراء جديدة',
+                subtitle: 'إدخال فاتورة شراء من المورد',
                 onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 16),

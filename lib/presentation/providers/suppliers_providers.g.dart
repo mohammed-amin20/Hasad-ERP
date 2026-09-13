@@ -8,12 +8,12 @@ part of 'suppliers_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Concrete supplier repository wired to Supabase.
+/// Concrete supplier repository — offline-first.
 
 @ProviderFor(supplierRepository)
 final supplierRepositoryProvider = SupplierRepositoryProvider._();
 
-/// Concrete supplier repository wired to Supabase.
+/// Concrete supplier repository — offline-first.
 
 final class SupplierRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class SupplierRepositoryProvider
           SupplierRepository
         >
     with $Provider<SupplierRepository> {
-  /// Concrete supplier repository wired to Supabase.
+  /// Concrete supplier repository — offline-first.
   SupplierRepositoryProvider._()
     : super(
         from: null,
@@ -59,7 +59,7 @@ final class SupplierRepositoryProvider
 }
 
 String _$supplierRepositoryHash() =>
-    r'0f886d11c58b122dcc414d3b0c8f8f4dcda8aacf';
+    r'32ca8fa535978f962320aa090acd2a04f1811253';
 
 /// Current search term for the supplier list (reactive).
 

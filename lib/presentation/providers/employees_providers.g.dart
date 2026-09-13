@@ -8,12 +8,12 @@ part of 'employees_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Concrete employee repository wired to Supabase.
+/// Concrete employee repository — offline-first.
 
 @ProviderFor(employeeRepository)
 final employeeRepositoryProvider = EmployeeRepositoryProvider._();
 
-/// Concrete employee repository wired to Supabase.
+/// Concrete employee repository — offline-first.
 
 final class EmployeeRepositoryProvider
     extends
@@ -23,7 +23,7 @@ final class EmployeeRepositoryProvider
           EmployeeRepository
         >
     with $Provider<EmployeeRepository> {
-  /// Concrete employee repository wired to Supabase.
+  /// Concrete employee repository — offline-first.
   EmployeeRepositoryProvider._()
     : super(
         from: null,
@@ -59,7 +59,7 @@ final class EmployeeRepositoryProvider
 }
 
 String _$employeeRepositoryHash() =>
-    r'317ef563a4e1ad7058384bd86c8bdb24d2c7f572';
+    r'5cb8feb3ca58ad5e7da860d5bb20741136e74975';
 
 /// Current search term for the employee list (reactive).
 

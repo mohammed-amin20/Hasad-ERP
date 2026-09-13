@@ -1,17 +1,23 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/journal/supabase_journal_repository.dart';
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_journal_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/journal/journal.dart';
 import '../../domain/journal/journal_repository.dart';
 import '../../domain/journal/manual_journal_draft.dart';
+import 'auth_providers.dart';
 
 part 'journal_providers.g.dart';
 
-/// Journal repository wired to Supabase.
+/// Journal repository — offline-first (cache-last per date range).
 @riverpod
-JournalRepository journalRepository(Ref ref) =>
-    SupabaseJournalRepository(ref.watch(supabaseClientProvider));
+JournalRepository journalRepository(Ref ref) => OfflineJournalRepository(
+      SupabaseJournalRepository(ref.watch(supabaseClientProvider)),
+      store: ref.watch(localStoreProvider).value,
+      tenantId: ref.watch(authStateProvider).value?.tenantId,
+    );
 
 /// Current journal date range (first day of the month → today by default).
 @riverpod

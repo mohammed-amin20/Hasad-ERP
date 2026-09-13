@@ -6,8 +6,10 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../data/offline/report_keys.dart';
 import '../../../domain/reports/trial_balance.dart';
 import '../../providers/report_providers.dart';
+import '../../widgets/freshness_chip.dart';
 
 class TrialBalanceScreen extends ConsumerStatefulWidget {
   const TrialBalanceScreen({super.key});
@@ -38,6 +40,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
       title: 'ميزان المراجعة',
       subtitle: 'مطابقة المدين والدائن',
       actions: [
+        FreshnessChip(cacheKey: trialKey(asOf)),
         IconButton(
           tooltip: 'تحديث',
           onPressed: () => ref.invalidate(trialBalanceProvider),

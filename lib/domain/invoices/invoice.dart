@@ -71,6 +71,7 @@ class Invoice {
     type: json['type'] as String,
     no: json['no'] as String,
     partyId: json['party_id'] as String,
+    partyName: json['party_name'] as String?,
     date: DateTime.parse(json['date'] as String),
     subtotal: (json['subtotal'] as num).toInt(),
     total: (json['total'] as num).toInt(),
