@@ -58,9 +58,11 @@ void main() {
       await store.mirrorCustomers(tenant, [
         LocalCustomerRow(
           id: 'c1', tenantId: tenant, name: 'أحمد', phone: '0599', notes: null,
+          synced: true,
         ),
         LocalCustomerRow(
           id: 'c2', tenantId: tenant, name: 'سارة', phone: '0500', notes: null,
+          synced: true,
         ),
       ]);
       final repo = OfflineCustomerRepository(

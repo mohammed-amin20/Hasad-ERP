@@ -48,35 +48,37 @@ void main() {
 
     await store.upsertCustomer(LocalCustomerRow(
       id: 'c1', tenantId: tenant, name: 'عميل', phone: '0599111222',
-      notes: null, createdAt: DateTime(2026, 1, 1),
+      notes: null, createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
     await store.upsertSupplier(LocalSupplierRow(
       id: 's1', tenantId: tenant, name: 'مورد مباشر', phone: null, notes: null,
       dealType: 'direct', commissionRate: null, createdAt: DateTime(2026, 1, 1),
+      synced: false,
     ));
     await store.upsertSupplier(LocalSupplierRow(
       id: 's2', tenantId: tenant, name: 'مورد أمانة', phone: null, notes: null,
       dealType: 'commission', commissionRate: 20,
-      createdAt: DateTime(2026, 1, 1),
+      createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
     await store.upsertProduct(LocalProductRow(
       id: 'p1', tenantId: tenant, name: 'سلعة مباشرة', barcode: null,
       unit: 'قطعة', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
-      qty: 100, reorderLevel: 10, supplierId: null, commissionRate: null,
-      createdAt: DateTime(2026, 1, 1),
+      qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
+      createdAt: DateTime(2026, 1, 1), synced: false,
     ));
     await store.upsertProduct(LocalProductRow(
       id: 'p2', tenantId: tenant, name: 'سلعة أمانة', barcode: null,
       unit: 'قطعة', unitType: 'count', salePrice: 15000, purchasePrice: 8000,
-      qty: 50, reorderLevel: 5, supplierId: 's2', commissionRate: null,
-      createdAt: DateTime(2026, 1, 1),
+      qty: 50, reorderLevel: 5, supplierId: 's2', commissionRate: 20,
+      createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
     await store.upsertEmployee(LocalEmployeeRow(
       id: 'e1', tenantId: tenant, name: 'موظف', jobTitle: 'sales',
       phone: null, baseSalary: 500000, createdAt: DateTime(2026, 1, 1),
+      synced: false,
     ));
   }
 

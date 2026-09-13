@@ -67,6 +67,19 @@ class $LocalCustomersTable extends LocalCustomers
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
+  @override
+  late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
+    'synced',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("synced" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -75,6 +88,7 @@ class $LocalCustomersTable extends LocalCustomers
     phone,
     notes,
     createdAt,
+    synced,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -127,6 +141,12 @@ class $LocalCustomersTable extends LocalCustomers
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('synced')) {
+      context.handle(
+        _syncedMeta,
+        synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
+      );
+    }
     return context;
   }
 
@@ -160,6 +180,10 @@ class $LocalCustomersTable extends LocalCustomers
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       ),
+      synced: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}synced'],
+      )!,
     );
   }
 
@@ -177,6 +201,7 @@ class LocalCustomerRow extends DataClass
   final String? phone;
   final String? notes;
   final DateTime? createdAt;
+  final bool synced;
   const LocalCustomerRow({
     required this.id,
     required this.tenantId,
@@ -184,6 +209,7 @@ class LocalCustomerRow extends DataClass
     this.phone,
     this.notes,
     this.createdAt,
+    required this.synced,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -200,6 +226,7 @@ class LocalCustomerRow extends DataClass
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
     }
+    map['synced'] = Variable<bool>(synced);
     return map;
   }
 
@@ -217,6 +244,7 @@ class LocalCustomerRow extends DataClass
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      synced: Value(synced),
     );
   }
 
@@ -232,6 +260,7 @@ class LocalCustomerRow extends DataClass
       phone: serializer.fromJson<String?>(json['phone']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      synced: serializer.fromJson<bool>(json['synced']),
     );
   }
   @override
@@ -244,6 +273,7 @@ class LocalCustomerRow extends DataClass
       'phone': serializer.toJson<String?>(phone),
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'synced': serializer.toJson<bool>(synced),
     };
   }
 
@@ -254,6 +284,7 @@ class LocalCustomerRow extends DataClass
     Value<String?> phone = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<DateTime?> createdAt = const Value.absent(),
+    bool? synced,
   }) => LocalCustomerRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -261,6 +292,7 @@ class LocalCustomerRow extends DataClass
     phone: phone.present ? phone.value : this.phone,
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    synced: synced ?? this.synced,
   );
   LocalCustomerRow copyWithCompanion(LocalCustomersCompanion data) {
     return LocalCustomerRow(
@@ -270,6 +302,7 @@ class LocalCustomerRow extends DataClass
       phone: data.phone.present ? data.phone.value : this.phone,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      synced: data.synced.present ? data.synced.value : this.synced,
     );
   }
 
@@ -281,13 +314,15 @@ class LocalCustomerRow extends DataClass
           ..write('name: $name, ')
           ..write('phone: $phone, ')
           ..write('notes: $notes, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, tenantId, name, phone, notes, createdAt);
+  int get hashCode =>
+      Object.hash(id, tenantId, name, phone, notes, createdAt, synced);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -297,7 +332,8 @@ class LocalCustomerRow extends DataClass
           other.name == this.name &&
           other.phone == this.phone &&
           other.notes == this.notes &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.synced == this.synced);
 }
 
 class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
@@ -307,6 +343,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
   final Value<String?> phone;
   final Value<String?> notes;
   final Value<DateTime?> createdAt;
+  final Value<bool> synced;
   final Value<int> rowid;
   const LocalCustomersCompanion({
     this.id = const Value.absent(),
@@ -315,6 +352,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
     this.phone = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalCustomersCompanion.insert({
@@ -324,6 +362,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
     this.phone = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -335,6 +374,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
     Expression<String>? phone,
     Expression<String>? notes,
     Expression<DateTime>? createdAt,
+    Expression<bool>? synced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -344,6 +384,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
       if (phone != null) 'phone': phone,
       if (notes != null) 'notes': notes,
       if (createdAt != null) 'created_at': createdAt,
+      if (synced != null) 'synced': synced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -355,6 +396,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
     Value<String?>? phone,
     Value<String?>? notes,
     Value<DateTime?>? createdAt,
+    Value<bool>? synced,
     Value<int>? rowid,
   }) {
     return LocalCustomersCompanion(
@@ -364,6 +406,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
       phone: phone ?? this.phone,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
+      synced: synced ?? this.synced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -389,6 +432,9 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (synced.present) {
+      map['synced'] = Variable<bool>(synced.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -404,6 +450,7 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomerRow> {
           ..write('phone: $phone, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -497,6 +544,19 @@ class $LocalSuppliersTable extends LocalSuppliers
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
+  @override
+  late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
+    'synced',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("synced" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -507,6 +567,7 @@ class $LocalSuppliersTable extends LocalSuppliers
     dealType,
     commissionRate,
     createdAt,
+    synced,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -574,6 +635,12 @@ class $LocalSuppliersTable extends LocalSuppliers
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('synced')) {
+      context.handle(
+        _syncedMeta,
+        synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
+      );
+    }
     return context;
   }
 
@@ -615,6 +682,10 @@ class $LocalSuppliersTable extends LocalSuppliers
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       ),
+      synced: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}synced'],
+      )!,
     );
   }
 
@@ -634,6 +705,7 @@ class LocalSupplierRow extends DataClass
   final String dealType;
   final double? commissionRate;
   final DateTime? createdAt;
+  final bool synced;
   const LocalSupplierRow({
     required this.id,
     required this.tenantId,
@@ -643,6 +715,7 @@ class LocalSupplierRow extends DataClass
     required this.dealType,
     this.commissionRate,
     this.createdAt,
+    required this.synced,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -663,6 +736,7 @@ class LocalSupplierRow extends DataClass
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
     }
+    map['synced'] = Variable<bool>(synced);
     return map;
   }
 
@@ -684,6 +758,7 @@ class LocalSupplierRow extends DataClass
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      synced: Value(synced),
     );
   }
 
@@ -701,6 +776,7 @@ class LocalSupplierRow extends DataClass
       dealType: serializer.fromJson<String>(json['dealType']),
       commissionRate: serializer.fromJson<double?>(json['commissionRate']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      synced: serializer.fromJson<bool>(json['synced']),
     );
   }
   @override
@@ -715,6 +791,7 @@ class LocalSupplierRow extends DataClass
       'dealType': serializer.toJson<String>(dealType),
       'commissionRate': serializer.toJson<double?>(commissionRate),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'synced': serializer.toJson<bool>(synced),
     };
   }
 
@@ -727,6 +804,7 @@ class LocalSupplierRow extends DataClass
     String? dealType,
     Value<double?> commissionRate = const Value.absent(),
     Value<DateTime?> createdAt = const Value.absent(),
+    bool? synced,
   }) => LocalSupplierRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -738,6 +816,7 @@ class LocalSupplierRow extends DataClass
         ? commissionRate.value
         : this.commissionRate,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    synced: synced ?? this.synced,
   );
   LocalSupplierRow copyWithCompanion(LocalSuppliersCompanion data) {
     return LocalSupplierRow(
@@ -751,6 +830,7 @@ class LocalSupplierRow extends DataClass
           ? data.commissionRate.value
           : this.commissionRate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      synced: data.synced.present ? data.synced.value : this.synced,
     );
   }
 
@@ -764,7 +844,8 @@ class LocalSupplierRow extends DataClass
           ..write('notes: $notes, ')
           ..write('dealType: $dealType, ')
           ..write('commissionRate: $commissionRate, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced')
           ..write(')'))
         .toString();
   }
@@ -779,6 +860,7 @@ class LocalSupplierRow extends DataClass
     dealType,
     commissionRate,
     createdAt,
+    synced,
   );
   @override
   bool operator ==(Object other) =>
@@ -791,7 +873,8 @@ class LocalSupplierRow extends DataClass
           other.notes == this.notes &&
           other.dealType == this.dealType &&
           other.commissionRate == this.commissionRate &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.synced == this.synced);
 }
 
 class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
@@ -803,6 +886,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
   final Value<String> dealType;
   final Value<double?> commissionRate;
   final Value<DateTime?> createdAt;
+  final Value<bool> synced;
   final Value<int> rowid;
   const LocalSuppliersCompanion({
     this.id = const Value.absent(),
@@ -813,6 +897,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
     this.dealType = const Value.absent(),
     this.commissionRate = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalSuppliersCompanion.insert({
@@ -824,6 +909,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
     this.dealType = const Value.absent(),
     this.commissionRate = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -837,6 +923,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
     Expression<String>? dealType,
     Expression<double>? commissionRate,
     Expression<DateTime>? createdAt,
+    Expression<bool>? synced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -848,6 +935,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
       if (dealType != null) 'deal_type': dealType,
       if (commissionRate != null) 'commission_rate': commissionRate,
       if (createdAt != null) 'created_at': createdAt,
+      if (synced != null) 'synced': synced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -861,6 +949,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
     Value<String>? dealType,
     Value<double?>? commissionRate,
     Value<DateTime?>? createdAt,
+    Value<bool>? synced,
     Value<int>? rowid,
   }) {
     return LocalSuppliersCompanion(
@@ -872,6 +961,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
       dealType: dealType ?? this.dealType,
       commissionRate: commissionRate ?? this.commissionRate,
       createdAt: createdAt ?? this.createdAt,
+      synced: synced ?? this.synced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -903,6 +993,9 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (synced.present) {
+      map['synced'] = Variable<bool>(synced.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -920,6 +1013,7 @@ class LocalSuppliersCompanion extends UpdateCompanion<LocalSupplierRow> {
           ..write('dealType: $dealType, ')
           ..write('commissionRate: $commissionRate, ')
           ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1070,6 +1164,19 @@ class $LocalProductsTable extends LocalProducts
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
+  @override
+  late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
+    'synced',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("synced" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1085,6 +1192,7 @@ class $LocalProductsTable extends LocalProducts
     supplierId,
     commissionRate,
     createdAt,
+    synced,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1194,6 +1302,12 @@ class $LocalProductsTable extends LocalProducts
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('synced')) {
+      context.handle(
+        _syncedMeta,
+        synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
+      );
+    }
     return context;
   }
 
@@ -1255,6 +1369,10 @@ class $LocalProductsTable extends LocalProducts
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       ),
+      synced: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}synced'],
+      )!,
     );
   }
 
@@ -1278,6 +1396,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
   final String? supplierId;
   final double? commissionRate;
   final DateTime? createdAt;
+  final bool synced;
   const LocalProductRow({
     required this.id,
     required this.tenantId,
@@ -1292,6 +1411,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
     this.supplierId,
     this.commissionRate,
     this.createdAt,
+    required this.synced,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1317,6 +1437,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
     }
+    map['synced'] = Variable<bool>(synced);
     return map;
   }
 
@@ -1343,6 +1464,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      synced: Value(synced),
     );
   }
 
@@ -1365,6 +1487,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
       supplierId: serializer.fromJson<String?>(json['supplierId']),
       commissionRate: serializer.fromJson<double?>(json['commissionRate']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      synced: serializer.fromJson<bool>(json['synced']),
     );
   }
   @override
@@ -1384,6 +1507,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
       'supplierId': serializer.toJson<String?>(supplierId),
       'commissionRate': serializer.toJson<double?>(commissionRate),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'synced': serializer.toJson<bool>(synced),
     };
   }
 
@@ -1401,6 +1525,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
     Value<String?> supplierId = const Value.absent(),
     Value<double?> commissionRate = const Value.absent(),
     Value<DateTime?> createdAt = const Value.absent(),
+    bool? synced,
   }) => LocalProductRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -1417,6 +1542,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
         ? commissionRate.value
         : this.commissionRate,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    synced: synced ?? this.synced,
   );
   LocalProductRow copyWithCompanion(LocalProductsCompanion data) {
     return LocalProductRow(
@@ -1441,6 +1567,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
           ? data.commissionRate.value
           : this.commissionRate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      synced: data.synced.present ? data.synced.value : this.synced,
     );
   }
 
@@ -1459,7 +1586,8 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
           ..write('reorderLevel: $reorderLevel, ')
           ..write('supplierId: $supplierId, ')
           ..write('commissionRate: $commissionRate, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced')
           ..write(')'))
         .toString();
   }
@@ -1479,6 +1607,7 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
     supplierId,
     commissionRate,
     createdAt,
+    synced,
   );
   @override
   bool operator ==(Object other) =>
@@ -1496,7 +1625,8 @@ class LocalProductRow extends DataClass implements Insertable<LocalProductRow> {
           other.reorderLevel == this.reorderLevel &&
           other.supplierId == this.supplierId &&
           other.commissionRate == this.commissionRate &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.synced == this.synced);
 }
 
 class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
@@ -1513,6 +1643,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
   final Value<String?> supplierId;
   final Value<double?> commissionRate;
   final Value<DateTime?> createdAt;
+  final Value<bool> synced;
   final Value<int> rowid;
   const LocalProductsCompanion({
     this.id = const Value.absent(),
@@ -1528,6 +1659,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
     this.supplierId = const Value.absent(),
     this.commissionRate = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalProductsCompanion.insert({
@@ -1544,6 +1676,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
     this.supplierId = const Value.absent(),
     this.commissionRate = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -1565,6 +1698,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
     Expression<String>? supplierId,
     Expression<double>? commissionRate,
     Expression<DateTime>? createdAt,
+    Expression<bool>? synced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1581,6 +1715,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
       if (supplierId != null) 'supplier_id': supplierId,
       if (commissionRate != null) 'commission_rate': commissionRate,
       if (createdAt != null) 'created_at': createdAt,
+      if (synced != null) 'synced': synced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1599,6 +1734,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
     Value<String?>? supplierId,
     Value<double?>? commissionRate,
     Value<DateTime?>? createdAt,
+    Value<bool>? synced,
     Value<int>? rowid,
   }) {
     return LocalProductsCompanion(
@@ -1615,6 +1751,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
       supplierId: supplierId ?? this.supplierId,
       commissionRate: commissionRate ?? this.commissionRate,
       createdAt: createdAt ?? this.createdAt,
+      synced: synced ?? this.synced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1661,6 +1798,9 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (synced.present) {
+      map['synced'] = Variable<bool>(synced.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1683,6 +1823,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProductRow> {
           ..write('supplierId: $supplierId, ')
           ..write('commissionRate: $commissionRate, ')
           ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1767,6 +1908,19 @@ class $LocalEmployeesTable extends LocalEmployees
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
+  @override
+  late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
+    'synced',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("synced" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1776,6 +1930,7 @@ class $LocalEmployeesTable extends LocalEmployees
     phone,
     baseSalary,
     createdAt,
+    synced,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1834,6 +1989,12 @@ class $LocalEmployeesTable extends LocalEmployees
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('synced')) {
+      context.handle(
+        _syncedMeta,
+        synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
+      );
+    }
     return context;
   }
 
@@ -1871,6 +2032,10 @@ class $LocalEmployeesTable extends LocalEmployees
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       ),
+      synced: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}synced'],
+      )!,
     );
   }
 
@@ -1889,6 +2054,7 @@ class LocalEmployeeRow extends DataClass
   final String? phone;
   final int baseSalary;
   final DateTime? createdAt;
+  final bool synced;
   const LocalEmployeeRow({
     required this.id,
     required this.tenantId,
@@ -1897,6 +2063,7 @@ class LocalEmployeeRow extends DataClass
     this.phone,
     required this.baseSalary,
     this.createdAt,
+    required this.synced,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1914,6 +2081,7 @@ class LocalEmployeeRow extends DataClass
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
     }
+    map['synced'] = Variable<bool>(synced);
     return map;
   }
 
@@ -1932,6 +2100,7 @@ class LocalEmployeeRow extends DataClass
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      synced: Value(synced),
     );
   }
 
@@ -1948,6 +2117,7 @@ class LocalEmployeeRow extends DataClass
       phone: serializer.fromJson<String?>(json['phone']),
       baseSalary: serializer.fromJson<int>(json['baseSalary']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      synced: serializer.fromJson<bool>(json['synced']),
     );
   }
   @override
@@ -1961,6 +2131,7 @@ class LocalEmployeeRow extends DataClass
       'phone': serializer.toJson<String?>(phone),
       'baseSalary': serializer.toJson<int>(baseSalary),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'synced': serializer.toJson<bool>(synced),
     };
   }
 
@@ -1972,6 +2143,7 @@ class LocalEmployeeRow extends DataClass
     Value<String?> phone = const Value.absent(),
     int? baseSalary,
     Value<DateTime?> createdAt = const Value.absent(),
+    bool? synced,
   }) => LocalEmployeeRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -1980,6 +2152,7 @@ class LocalEmployeeRow extends DataClass
     phone: phone.present ? phone.value : this.phone,
     baseSalary: baseSalary ?? this.baseSalary,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    synced: synced ?? this.synced,
   );
   LocalEmployeeRow copyWithCompanion(LocalEmployeesCompanion data) {
     return LocalEmployeeRow(
@@ -1992,6 +2165,7 @@ class LocalEmployeeRow extends DataClass
           ? data.baseSalary.value
           : this.baseSalary,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      synced: data.synced.present ? data.synced.value : this.synced,
     );
   }
 
@@ -2004,14 +2178,23 @@ class LocalEmployeeRow extends DataClass
           ..write('jobTitle: $jobTitle, ')
           ..write('phone: $phone, ')
           ..write('baseSalary: $baseSalary, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, tenantId, name, jobTitle, phone, baseSalary, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    tenantId,
+    name,
+    jobTitle,
+    phone,
+    baseSalary,
+    createdAt,
+    synced,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2022,7 +2205,8 @@ class LocalEmployeeRow extends DataClass
           other.jobTitle == this.jobTitle &&
           other.phone == this.phone &&
           other.baseSalary == this.baseSalary &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.synced == this.synced);
 }
 
 class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
@@ -2033,6 +2217,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
   final Value<String?> phone;
   final Value<int> baseSalary;
   final Value<DateTime?> createdAt;
+  final Value<bool> synced;
   final Value<int> rowid;
   const LocalEmployeesCompanion({
     this.id = const Value.absent(),
@@ -2042,6 +2227,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
     this.phone = const Value.absent(),
     this.baseSalary = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalEmployeesCompanion.insert({
@@ -2052,6 +2238,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
     this.phone = const Value.absent(),
     this.baseSalary = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.synced = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -2064,6 +2251,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
     Expression<String>? phone,
     Expression<int>? baseSalary,
     Expression<DateTime>? createdAt,
+    Expression<bool>? synced,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2074,6 +2262,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
       if (phone != null) 'phone': phone,
       if (baseSalary != null) 'base_salary': baseSalary,
       if (createdAt != null) 'created_at': createdAt,
+      if (synced != null) 'synced': synced,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2086,6 +2275,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
     Value<String?>? phone,
     Value<int>? baseSalary,
     Value<DateTime?>? createdAt,
+    Value<bool>? synced,
     Value<int>? rowid,
   }) {
     return LocalEmployeesCompanion(
@@ -2096,6 +2286,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
       phone: phone ?? this.phone,
       baseSalary: baseSalary ?? this.baseSalary,
       createdAt: createdAt ?? this.createdAt,
+      synced: synced ?? this.synced,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2124,6 +2315,9 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (synced.present) {
+      map['synced'] = Variable<bool>(synced.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2140,6 +2334,7 @@ class LocalEmployeesCompanion extends UpdateCompanion<LocalEmployeeRow> {
           ..write('phone: $phone, ')
           ..write('baseSalary: $baseSalary, ')
           ..write('createdAt: $createdAt, ')
+          ..write('synced: $synced, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8825,6 +9020,7 @@ typedef $$LocalCustomersTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<String?> notes,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 typedef $$LocalCustomersTableUpdateCompanionBuilder =
@@ -8835,6 +9031,7 @@ typedef $$LocalCustomersTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<String?> notes,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 
@@ -8874,6 +9071,11 @@ class $$LocalCustomersTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get synced => $composableBuilder(
+    column: $table.synced,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8916,6 +9118,11 @@ class $$LocalCustomersTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get synced => $composableBuilder(
+    column: $table.synced,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalCustomersTableAnnotationComposer
@@ -8944,6 +9151,9 @@ class $$LocalCustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get synced =>
+      $composableBuilder(column: $table.synced, builder: (column) => column);
 }
 
 class $$LocalCustomersTableTableManager
@@ -8989,6 +9199,7 @@ class $$LocalCustomersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalCustomersCompanion(
                 id: id,
@@ -8997,6 +9208,7 @@ class $$LocalCustomersTableTableManager
                 phone: phone,
                 notes: notes,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9007,6 +9219,7 @@ class $$LocalCustomersTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalCustomersCompanion.insert(
                 id: id,
@@ -9015,6 +9228,7 @@ class $$LocalCustomersTableTableManager
                 phone: phone,
                 notes: notes,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -9061,6 +9275,7 @@ typedef $$LocalSuppliersTableCreateCompanionBuilder =
       Value<String> dealType,
       Value<double?> commissionRate,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 typedef $$LocalSuppliersTableUpdateCompanionBuilder =
@@ -9073,6 +9288,7 @@ typedef $$LocalSuppliersTableUpdateCompanionBuilder =
       Value<String> dealType,
       Value<double?> commissionRate,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 
@@ -9122,6 +9338,11 @@ class $$LocalSuppliersTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get synced => $composableBuilder(
+    column: $table.synced,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9174,6 +9395,11 @@ class $$LocalSuppliersTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get synced => $composableBuilder(
+    column: $table.synced,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalSuppliersTableAnnotationComposer
@@ -9210,6 +9436,9 @@ class $$LocalSuppliersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get synced =>
+      $composableBuilder(column: $table.synced, builder: (column) => column);
 }
 
 class $$LocalSuppliersTableTableManager
@@ -9257,6 +9486,7 @@ class $$LocalSuppliersTableTableManager
                 Value<String> dealType = const Value.absent(),
                 Value<double?> commissionRate = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalSuppliersCompanion(
                 id: id,
@@ -9267,6 +9497,7 @@ class $$LocalSuppliersTableTableManager
                 dealType: dealType,
                 commissionRate: commissionRate,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9279,6 +9510,7 @@ class $$LocalSuppliersTableTableManager
                 Value<String> dealType = const Value.absent(),
                 Value<double?> commissionRate = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalSuppliersCompanion.insert(
                 id: id,
@@ -9289,6 +9521,7 @@ class $$LocalSuppliersTableTableManager
                 dealType: dealType,
                 commissionRate: commissionRate,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -9340,6 +9573,7 @@ typedef $$LocalProductsTableCreateCompanionBuilder =
       Value<String?> supplierId,
       Value<double?> commissionRate,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 typedef $$LocalProductsTableUpdateCompanionBuilder =
@@ -9357,6 +9591,7 @@ typedef $$LocalProductsTableUpdateCompanionBuilder =
       Value<String?> supplierId,
       Value<double?> commissionRate,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 
@@ -9431,6 +9666,11 @@ class $$LocalProductsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get synced => $composableBuilder(
+    column: $table.synced,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9508,6 +9748,11 @@ class $$LocalProductsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get synced => $composableBuilder(
+    column: $table.synced,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalProductsTableAnnotationComposer
@@ -9565,6 +9810,9 @@ class $$LocalProductsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get synced =>
+      $composableBuilder(column: $table.synced, builder: (column) => column);
 }
 
 class $$LocalProductsTableTableManager
@@ -9611,6 +9859,7 @@ class $$LocalProductsTableTableManager
                 Value<String?> supplierId = const Value.absent(),
                 Value<double?> commissionRate = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalProductsCompanion(
                 id: id,
@@ -9626,6 +9875,7 @@ class $$LocalProductsTableTableManager
                 supplierId: supplierId,
                 commissionRate: commissionRate,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9643,6 +9893,7 @@ class $$LocalProductsTableTableManager
                 Value<String?> supplierId = const Value.absent(),
                 Value<double?> commissionRate = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalProductsCompanion.insert(
                 id: id,
@@ -9658,6 +9909,7 @@ class $$LocalProductsTableTableManager
                 supplierId: supplierId,
                 commissionRate: commissionRate,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -9703,6 +9955,7 @@ typedef $$LocalEmployeesTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<int> baseSalary,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 typedef $$LocalEmployeesTableUpdateCompanionBuilder =
@@ -9714,6 +9967,7 @@ typedef $$LocalEmployeesTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<int> baseSalary,
       Value<DateTime?> createdAt,
+      Value<bool> synced,
       Value<int> rowid,
     });
 
@@ -9758,6 +10012,11 @@ class $$LocalEmployeesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get synced => $composableBuilder(
+    column: $table.synced,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9805,6 +10064,11 @@ class $$LocalEmployeesTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get synced => $composableBuilder(
+    column: $table.synced,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalEmployeesTableAnnotationComposer
@@ -9838,6 +10102,9 @@ class $$LocalEmployeesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get synced =>
+      $composableBuilder(column: $table.synced, builder: (column) => column);
 }
 
 class $$LocalEmployeesTableTableManager
@@ -9884,6 +10151,7 @@ class $$LocalEmployeesTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<int> baseSalary = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEmployeesCompanion(
                 id: id,
@@ -9893,6 +10161,7 @@ class $$LocalEmployeesTableTableManager
                 phone: phone,
                 baseSalary: baseSalary,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9904,6 +10173,7 @@ class $$LocalEmployeesTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<int> baseSalary = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<bool> synced = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEmployeesCompanion.insert(
                 id: id,
@@ -9913,6 +10183,7 @@ class $$LocalEmployeesTableTableManager
                 phone: phone,
                 baseSalary: baseSalary,
                 createdAt: createdAt,
+                synced: synced,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

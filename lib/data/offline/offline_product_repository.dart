@@ -112,6 +112,7 @@ class OfflineProductRepository implements ProductRepository {
         supplierId: p.supplierId,
         commissionRate: p.commissionRate,
         createdAt: null,
+        synced: true,
       );
 
   static Product _fromRow(LocalProductRow r) => Product(

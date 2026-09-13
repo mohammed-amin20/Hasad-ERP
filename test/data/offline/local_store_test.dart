@@ -24,6 +24,7 @@ void main() {
         phone: '0599$id',
         notes: null,
         createdAt: DateTime(2026, 1, 1),
+        synced: false,
       );
 
   test('store reports availability and exposes the database', () {
@@ -44,17 +45,20 @@ void main() {
 
   test('master data upserts and reads for each entity', () async {
     await store.upsertSupplier(LocalSupplierRow(
-      id: 's1', tenantId: tenantA, name: 'مورد', phone: null, notes: null,
-      dealType: 'commission', commissionRate: 20, createdAt: null,
+      id: 's1', tenantId: tenantA, name: 'مورد1', phone: null, notes: null,
+      dealType: 'commission', commissionRate: 20, createdAt: DateTime(2026, 1, 1),
+      synced: false,
     ));
     await store.upsertProduct(LocalProductRow(
-      id: 'p1', tenantId: tenantA, name: 'سلعة', barcode: null, unit: 'قطعة',
-      unitType: 'count', salePrice: 100, purchasePrice: 50, qty: 10,
+      id: 'p1', tenantId: tenantA, name: 'سلعة1', barcode: null, unit: 'قطعة',
+      unitType: 'count', salePrice: 10000, purchasePrice: 6000, qty: 10,
       reorderLevel: 1, supplierId: 's1', commissionRate: 20, createdAt: null,
+      synced: false,
     ));
     await store.upsertEmployee(LocalEmployeeRow(
-      id: 'e1', tenantId: tenantA, name: 'موظف', jobTitle: null, phone: null,
-      baseSalary: 500_00, createdAt: null,
+      id: 'e1', tenantId: tenantA, name: 'موظف1', jobTitle: null, phone: null,
+      baseSalary: 500_00, createdAt: DateTime(2026, 1, 1),
+      synced: false,
     ));
     await store.upsertAccount(LocalAccountRow(
       id: 'a1', tenantId: tenantA, code: '1010', name: 'نقدية',
@@ -69,7 +73,7 @@ void main() {
     await store.mirrorSuppliers(tenantA, [
       LocalSupplierRow(
         id: 's2', tenantId: tenantA, name: 'مورد2', phone: null, notes: null,
-        dealType: 'direct', commissionRate: null, createdAt: null,
+        dealType: 'direct', commissionRate: null, createdAt: null, synced: true,
       ),
     ]);
     expect((await store.suppliers(tenantA)).single.id, 's2');

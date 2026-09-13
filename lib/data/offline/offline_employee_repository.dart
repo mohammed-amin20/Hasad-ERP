@@ -107,6 +107,7 @@ class OfflineEmployeeRepository implements EmployeeRepository {
         phone: e.phone,
         baseSalary: e.baseSalary,
         createdAt: e.createdAt,
+        synced: true,
       );
 
   static Employee _fromRow(LocalEmployeeRow r) => Employee(

@@ -10,6 +10,7 @@ class LocalCustomers extends Table {
   TextColumn get phone => text().nullable()();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime().nullable()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -25,6 +26,7 @@ class LocalSuppliers extends Table {
   TextColumn get dealType => text().withDefault(const Constant('direct'))();
   RealColumn get commissionRate => real().nullable()();
   DateTimeColumn get createdAt => dateTime().nullable()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -45,6 +47,7 @@ class LocalProducts extends Table {
   TextColumn get supplierId => text().nullable()();
   RealColumn get commissionRate => real().nullable()();
   DateTimeColumn get createdAt => dateTime().nullable()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -59,6 +62,7 @@ class LocalEmployees extends Table {
   TextColumn get phone => text().nullable()();
   IntColumn get baseSalary => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().nullable()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -288,10 +292,20 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) => m.createAll(),
+    // Schema 2 adds the offline-create `synced` marker to the three master
+    // mirror tables that lacked it. LocalCustomers.synced ships in v1, so the
+    // migration only touches suppliers/products/employees.
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        await m.addColumn(localSuppliers, localSuppliers.synced);
+        await m.addColumn(localProducts, localProducts.synced);
+        await m.addColumn(localEmployees, localEmployees.synced);
+      }
+    },
   );
 }

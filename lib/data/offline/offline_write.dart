@@ -954,9 +954,10 @@ class OfflineWriteCoordinator {
           qty: p.qty,
           reorderLevel: p.reorderLevel,
           supplierId: p.supplierId,
-          commissionRate: p.commissionRate,
-          createdAt: null,
-        );
+        commissionRate: p.commissionRate,
+        createdAt: null,
+        synced: false,
+      );
 
   static acc.AccountType _accType(String name) => acc.AccountType.values
       .firstWhere((t) => t.name == name, orElse: () => acc.AccountType.asset);

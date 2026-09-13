@@ -108,6 +108,7 @@ class OfflineSupplierRepository implements SupplierRepository {
         dealType: s.dealType.dbValue,
         commissionRate: s.commissionRate,
         createdAt: s.createdAt,
+        synced: true,
       );
 
   static Supplier _fromRow(LocalSupplierRow r) => Supplier(

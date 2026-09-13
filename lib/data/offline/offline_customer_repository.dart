@@ -108,6 +108,7 @@ class OfflineCustomerRepository implements CustomerRepository {
         phone: c.phone,
         notes: c.notes,
         createdAt: c.createdAt,
+        synced: true,
       );
 
   static Customer _fromRow(LocalCustomerRow r) => Customer(
