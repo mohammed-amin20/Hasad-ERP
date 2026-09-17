@@ -6,9 +6,12 @@ import 'package:hasad_erp/core/error/app_exception.dart';
 import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
+import 'package:hasad_erp/domain/employees/employee_draft.dart';
 import 'package:hasad_erp/domain/invoices/invoice.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/payments/payment_repository.dart';
+import 'package:hasad_erp/domain/products/product.dart';
+import 'package:hasad_erp/domain/products/product_draft.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
@@ -518,6 +521,162 @@ void main() {
       final queued = (await store.pendingSync(tenant)).single;
       expect(queued.rpc, 'create_journal_entry');
       expect(queued.localId, result.entryId);
+    });
+  });
+
+  group('master writes (product/employee table_crud)', () {
+    test('writeProduct mirrors synced:false and enqueues a table_crud upsert',
+        () async {
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة جديدة',
+        barcode: 'BAR-1',
+        unit: 'كيلو',
+        unitType: ProductUnitType.weight,
+        salePrice: 25000,
+        purchasePrice: 15000,
+        qty: 12,
+        reorderLevel: 3,
+        supplierId: 's1',
+        commissionRate: 10,
+      ));
+
+      final row = (await store.products(tenant)).single;
+      expect(row.synced, isFalse);
+      expect(row.name, 'سلعة جديدة');
+      expect(row.unitType, 'weight');
+      expect(row.qty, 12);
+      expect(product.id, row.id);
+      expect(product.salePrice, 25000);
+      expect(product.purchasePrice, 15000);
+
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:products');
+      expect(queued.op, 'table_crud');
+      expect(queued.entity, 'products');
+      expect(queued.localId, product.id);
+      final params = jsonDecode(queued.params) as Map<String, dynamic>;
+      expect(params['name'], 'سلعة جديدة');
+      expect(params['unit_type'], 'weight');
+      expect(params['supplier_id'], 's1');
+    });
+
+    test('updateProduct rewires the mirror and enqueues a table_crud update',
+        () async {
+      await seed();
+      await writer.updateProduct(
+        'p1',
+        const ProductDraft(
+          name: 'سلعة محدثة',
+          unit: 'قطعة',
+          unitType: ProductUnitType.count,
+          salePrice: 22000,
+          purchasePrice: 12000,
+          qty: 5,
+          reorderLevel: 2,
+        ),
+      );
+
+      final row =
+          (await store.products(tenant)).firstWhere((r) => r.id == 'p1');
+      expect(row.synced, isFalse);
+      expect(row.name, 'سلعة محدثة');
+      expect(row.salePrice, 22000);
+
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:products');
+      expect(queued.op, 'table_crud');
+      expect(queued.localId, 'p1');
+      final params = jsonDecode(queued.params) as Map<String, dynamic>;
+      expect(params['id'], 'p1');
+      expect((params['row'] as Map<String, dynamic>)['name'], 'سلعة محدثة');
+    });
+
+    test('deleteProduct enqueues a table_crud delete without a store delete',
+        () async {
+      await seed();
+      await writer.deleteProduct('p1');
+
+      // No soft-delete exists on LocalStore; the mirror row stays put until
+      // the queue is flushed and the server delete is replayed.
+      expect(
+        (await store.products(tenant)).any((r) => r.id == 'p1'),
+        isTrue,
+      );
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:products');
+      expect(queued.op, 'table_crud');
+      expect(queued.entity, 'products');
+      expect(queued.localId, 'p1');
+      expect(jsonDecode(queued.params), {'id': 'p1'});
+    });
+
+    test('writeEmployee mirrors synced:false and enqueues a table_crud upsert',
+        () async {
+      final employee = await writer.writeEmployee(const EmployeeDraft(
+        name: 'موظف جديد',
+        jobTitle: 'محاسب',
+        phone: '0599222333',
+        baseSalary: 800000,
+      ));
+
+      final row = (await store.employees(tenant)).single;
+      expect(row.synced, isFalse);
+      expect(row.name, 'موظف جديد');
+      expect(row.jobTitle, 'محاسب');
+      expect(row.baseSalary, 800000);
+      expect(employee.id, row.id);
+
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:employees');
+      expect(queued.op, 'table_crud');
+      expect(queued.entity, 'employees');
+      expect(queued.localId, employee.id);
+      final params = jsonDecode(queued.params) as Map<String, dynamic>;
+      expect(params['base_salary'], 800000);
+      expect(params['job_title'], 'محاسب');
+    });
+
+    test('updateEmployee rewires the mirror and enqueues a table_crud update',
+        () async {
+      await seed();
+      await writer.updateEmployee(
+        'e1',
+        const EmployeeDraft(
+          name: 'موظف محدث',
+          jobTitle: 'sales',
+          phone: '0599000111',
+          baseSalary: 900000,
+        ),
+      );
+
+      final row = (await store.employees(tenant)).single;
+      expect(row.synced, isFalse);
+      expect(row.name, 'موظف محدث');
+      expect(row.baseSalary, 900000);
+
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:employees');
+      expect(queued.op, 'table_crud');
+      expect(queued.localId, 'e1');
+      final params = jsonDecode(queued.params) as Map<String, dynamic>;
+      expect(params['id'], 'e1');
+      expect((params['row'] as Map<String, dynamic>)['name'], 'موظف محدث');
+    });
+
+    test('deleteEmployee enqueues a table_crud delete without a store delete',
+        () async {
+      await seed();
+      await writer.deleteEmployee('e1');
+
+      expect(
+        (await store.employees(tenant)).any((r) => r.id == 'e1'),
+        isTrue,
+      );
+      final queued = (await store.pendingSync(tenant)).single;
+      expect(queued.rpc, 'table:employees');
+      expect(queued.op, 'table_crud');
+      expect(queued.localId, 'e1');
+      expect(jsonDecode(queued.params), {'id': 'e1'});
     });
   });
 }

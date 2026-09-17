@@ -218,6 +218,7 @@ class SyncQueueItems extends Table {
   TextColumn get id => text()(); // uuid
   TextColumn get tenantId => text()();
   TextColumn get rpc => text()(); // rpc name, or 'table:customers' for masters
+  TextColumn get op => text().withDefault(const Constant('rpc'))(); // 'rpc' | 'table_crud'
   TextColumn get params => text()(); // JSON params for .rpc() / .from()
   TextColumn get requestId => text().nullable()();
   TextColumn get entity => text().nullable()(); // e.g. 'invoices', 'customers'

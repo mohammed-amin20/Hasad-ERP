@@ -140,7 +140,8 @@ void main() {
 
   test('sync queue is ordered, counted and transitions status', () async {
     Future<void> enqueue(String id, DateTime at) => store.enqueue(SyncQueueRow(
-          id: id, tenantId: tenantA, rpc: 'create_sale_invoice', params: '{}',
+          id: id, tenantId: tenantA, rpc: 'create_sale_invoice', op: 'rpc',
+          params: '{}',
           requestId: 'req-$id', entity: 'invoices', localId: 'i-$id',
           status: 'pending', attempts: 0, lastError: null,
           createdAt: at, updatedAt: at,
@@ -199,7 +200,8 @@ void main() {
     expect(none.isAvailable, isFalse);
     expect(await none.customers(tenantA), isEmpty);
     await none.enqueue(SyncQueueRow(
-      id: 'q', tenantId: tenantA, rpc: 'x', params: '{}', requestId: null,
+      id: 'q', tenantId: tenantA, rpc: 'x', op: 'rpc', params: '{}',
+      requestId: null,
       entity: null, localId: null, status: 'pending', attempts: 0,
       lastError: null, createdAt: DateTime(2026), updatedAt: DateTime(2026),
     ));

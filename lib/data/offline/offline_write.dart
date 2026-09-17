@@ -5,23 +5,27 @@ import 'package:uuid/uuid.dart';
 import '../../core/error/app_exception.dart';
 import '../../domain/accounting/account.dart' as acc;
 import '../../domain/accounting/double_entry_engine.dart';
-import '../../domain/accounting/invoice_lines.dart';
+import '../../domain/accounting/invoice_lines.dart' hide ProductDraft;
 import '../../domain/accounting/journal_entry.dart'
     as ae
     show JournalEntry, UnbalancedEntryException;
 import '../../domain/customers/customer.dart';
+import '../../domain/customers/customer_draft.dart';
 import '../../domain/employees/employee.dart';
+import '../../domain/employees/employee_draft.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/journal/journal_repository.dart' show JournalEntryResult;
 import '../../domain/journal/manual_journal_draft.dart';
 import '../../domain/payments/payment_repository.dart';
 import '../../domain/products/product.dart';
+import '../../domain/products/product_draft.dart';
 import '../../domain/purchases/purchase_invoice_draft.dart';
 import '../../domain/purchases/purchase_repository.dart';
 import '../../domain/salaries/salary_repository.dart';
 import '../../domain/sales/sale_invoice_draft.dart';
 import '../../domain/sales/sale_repository.dart';
 import '../../domain/suppliers/supplier.dart';
+import '../../domain/suppliers/supplier_draft.dart';
 import 'local_database.dart';
 import 'local_store.dart';
 
@@ -709,6 +713,319 @@ class OfflineWriteCoordinator {
       });
 
   // -------------------------------------------------------------------------
+  // master write legs (op: table_crud — replayed against `.from(<entity>)` by
+  // OfflineFlushService; masters are domain-Direct so the leg returns the
+  // domain entity, unlike the RPC legs that return transaction envelopes)
+  // -------------------------------------------------------------------------
+
+  /// Mirrors a customer create locally (synced:false) and enqueues a
+  /// `table_crud` upsert for replay. Returns the customer directly.
+  Future<Customer> writeCustomer(CustomerDraft draft) => _guard(() async {
+        final requestId = _uuid.v4();
+        final customer = Customer(
+          id: requestId,
+          name: draft.name,
+          phone: draft.phone,
+          notes: draft.notes,
+          createdAt: DateTime.now(),
+        );
+        await _store.upsertCustomer(
+          LocalCustomerRow(
+            id: customer.id,
+            tenantId: _tenantId,
+            name: customer.name,
+            phone: customer.phone,
+            notes: customer.notes,
+            synced: false,
+            createdAt: customer.createdAt!,
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:customers',
+          params: customer.toJson(),
+          requestId: requestId,
+          entity: 'customers',
+          localId: requestId,
+          op: 'table_crud',
+        );
+        return customer;
+      });
+
+  /// Rewires customer update through the coordinator: mirrors the updated row
+  /// (synced:false) and enqueues a `table_crud` update for replay.
+  Future<void> updateCustomer(
+    String id,
+    CustomerDraft draft,
+  ) =>
+      _guard(() async {
+        await _store.upsertCustomer(
+          LocalCustomerRow(
+            id: id,
+            tenantId: _tenantId,
+            name: draft.name,
+            phone: draft.phone,
+            notes: draft.notes,
+            synced: false,
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:customers',
+          params: {'id': id, 'row': draft.toJson()},
+          requestId: _uuid.v4(),
+          entity: 'customers',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Rewires customer delete through the coordinator: mirrors removal and
+  /// enqueues a `table_crud` delete for replay.
+  Future<void> deleteCustomer(String id) => _guard(() async {
+        await _enqueueWrite(
+          rpc: 'table:customers',
+          params: {'id': id},
+          requestId: _uuid.v4(),
+          entity: 'customers',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Mirrors a supplier create locally (synced:false) and enqueues a
+  /// `table_crud` upsert for replay. Returns the supplier directly.
+  Future<Supplier> writeSupplier(SupplierDraft draft) => _guard(() async {
+        final requestId = _uuid.v4();
+        final supplier = Supplier(
+          id: requestId,
+          name: draft.name,
+          dealType: draft.dealType,
+          phone: draft.phone,
+          notes: draft.notes,
+          createdAt: DateTime.now(),
+        );
+        await _store.upsertSupplier(
+          LocalSupplierRow(
+            id: supplier.id,
+            tenantId: _tenantId,
+            name: supplier.name,
+            dealType: supplier.dealType.dbValue,
+            phone: supplier.phone,
+            notes: supplier.notes,
+            synced: false,
+            createdAt: supplier.createdAt!,
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:suppliers',
+          params: draft.toJson(),
+          requestId: requestId,
+          entity: 'suppliers',
+          localId: requestId,
+          op: 'table_crud',
+        );
+        return supplier;
+      });
+
+  /// Rewires supplier update through the coordinator.
+  Future<void> updateSupplier(String id, SupplierDraft draft) =>
+      _guard(() async {
+        await _store.upsertSupplier(
+          LocalSupplierRow(
+            id: id,
+            tenantId: _tenantId,
+            name: draft.name,
+            dealType: draft.dealType.dbValue,
+            phone: draft.phone,
+            notes: draft.notes,
+            synced: false,
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:suppliers',
+          params: {'id': id, 'row': draft.toJson()},
+          requestId: _uuid.v4(),
+          entity: 'suppliers',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Rewires supplier delete through the coordinator.
+  Future<void> deleteSupplier(String id) => _guard(() async {
+        await _enqueueWrite(
+          rpc: 'table:suppliers',
+          params: {'id': id},
+          requestId: _uuid.v4(),
+          entity: 'suppliers',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Mirrors a product create locally (synced:false) and enqueues a
+  /// `table_crud` upsert for replay. Returns the product directly.
+  Future<Product> writeProduct(ProductDraft draft) => _guard(() async {
+        final requestId = _uuid.v4();
+        final product = Product(
+          id: requestId,
+          name: draft.name,
+          barcode: draft.barcode,
+          unit: draft.unit,
+          unitType: draft.unitType,
+          salePrice: draft.salePrice,
+          purchasePrice: draft.purchasePrice,
+          qty: draft.qty,
+          reorderLevel: draft.reorderLevel,
+          supplierId: draft.supplierId,
+          commissionRate: draft.commissionRate,
+        );
+        await _store.upsertProduct(
+          LocalProductRow(
+            id: product.id,
+            tenantId: _tenantId,
+            name: product.name,
+            barcode: product.barcode,
+            unit: product.unit,
+            unitType: product.unitType.dbValue,
+            salePrice: product.salePrice,
+            purchasePrice: product.purchasePrice,
+            qty: product.qty,
+            reorderLevel: product.reorderLevel,
+            supplierId: product.supplierId,
+            commissionRate: product.commissionRate,
+            synced: false,
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:products',
+          params: draft.toJson(),
+          requestId: requestId,
+          entity: 'products',
+          localId: requestId,
+          op: 'table_crud',
+        );
+        return product;
+      });
+
+  /// Rewires product update through the coordinator.
+  Future<void> updateProduct(String id, ProductDraft draft) =>
+      _guard(() async {
+        await _store.upsertProduct(
+          LocalProductRow(
+            id: id,
+            tenantId: _tenantId,
+            name: draft.name,
+            barcode: draft.barcode,
+            unit: draft.unit,
+            unitType: draft.unitType.dbValue,
+            salePrice: draft.salePrice,
+            purchasePrice: draft.purchasePrice,
+            qty: draft.qty,
+            reorderLevel: draft.reorderLevel,
+            supplierId: draft.supplierId,
+            commissionRate: draft.commissionRate,
+            synced: false,
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:products',
+          params: {'id': id, 'row': draft.toJson()},
+          requestId: _uuid.v4(),
+          entity: 'products',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Rewires product delete through the coordinator.
+  Future<void> deleteProduct(String id) => _guard(() async {
+        await _enqueueWrite(
+          rpc: 'table:products',
+          params: {'id': id},
+          requestId: _uuid.v4(),
+          entity: 'products',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Mirrors an employee create locally (synced:false) and enqueues a
+  /// `table_crud` upsert for replay. Returns the employee directly.
+  Future<Employee> writeEmployee(EmployeeDraft draft) => _guard(() async {
+        final requestId = _uuid.v4();
+        final employee = Employee(
+          id: requestId,
+          name: draft.name,
+          jobTitle: draft.jobTitle,
+          phone: draft.phone,
+          baseSalary: draft.baseSalary,
+          createdAt: DateTime.now(),
+        );
+        await _store.upsertEmployee(
+          LocalEmployeeRow(
+            id: employee.id,
+            tenantId: _tenantId,
+            name: employee.name,
+            jobTitle: employee.jobTitle,
+            phone: employee.phone,
+            baseSalary: employee.baseSalary,
+            synced: false,
+            createdAt: employee.createdAt,
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:employees',
+          params: draft.toJson(),
+          requestId: requestId,
+          entity: 'employees',
+          localId: requestId,
+          op: 'table_crud',
+        );
+        return employee;
+      });
+
+  /// Rewires employee update through the coordinator.
+  Future<void> updateEmployee(String id, EmployeeDraft draft) =>
+      _guard(() async {
+        await _store.upsertEmployee(
+          LocalEmployeeRow(
+            id: id,
+            tenantId: _tenantId,
+            name: draft.name,
+            jobTitle: draft.jobTitle,
+            phone: draft.phone,
+            baseSalary: draft.baseSalary,
+            synced: false,
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _enqueueWrite(
+          rpc: 'table:employees',
+          params: {'id': id, 'row': draft.toJson()},
+          requestId: _uuid.v4(),
+          entity: 'employees',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  /// Rewires employee delete through the coordinator.
+  Future<void> deleteEmployee(String id) => _guard(() async {
+        await _enqueueWrite(
+          rpc: 'table:employees',
+          params: {'id': id},
+          requestId: _uuid.v4(),
+          entity: 'employees',
+          localId: id,
+          op: 'table_crud',
+        );
+      });
+
+  // -------------------------------------------------------------------------
   // helpers
   // -------------------------------------------------------------------------
 
@@ -738,6 +1055,37 @@ class OfflineWriteCoordinator {
         id: _uuid.v4(),
         tenantId: _tenantId,
         rpc: rpc,
+        op: 'rpc',
+        params: jsonEncode(params),
+        requestId: requestId,
+        entity: entity,
+        localId: localId,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Queues a master-table write for replay against `.from(<entity>)` with
+  /// `op: 'table_crud'` (mirrors `_enqueueRpc` but tags the row as table_crud
+  /// so the flush service replays it as a direct table upsert).
+  Future<void> _enqueueWrite({
+    required String rpc,
+    required Map<String, dynamic> params,
+    String? requestId,
+    String? entity,
+    String? localId,
+    required String op,
+  }) async {
+    await _store.enqueue(
+      SyncQueueRow(
+        id: _uuid.v4(),
+        tenantId: _tenantId,
+        rpc: rpc,
+        op: op,
         params: jsonEncode(params),
         requestId: requestId,
         entity: entity,

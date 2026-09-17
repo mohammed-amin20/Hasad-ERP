@@ -7372,6 +7372,16 @@ class $SyncQueueItemsTable extends SyncQueueItems
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _opMeta = const VerificationMeta('op');
+  @override
+  late final GeneratedColumn<String> op = GeneratedColumn<String>(
+    'op',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('rpc'),
+  );
   static const VerificationMeta _paramsMeta = const VerificationMeta('params');
   @override
   late final GeneratedColumn<String> params = GeneratedColumn<String>(
@@ -7474,6 +7484,7 @@ class $SyncQueueItemsTable extends SyncQueueItems
     id,
     tenantId,
     rpc,
+    op,
     params,
     requestId,
     entity,
@@ -7516,6 +7527,9 @@ class $SyncQueueItemsTable extends SyncQueueItems
       );
     } else if (isInserting) {
       context.missing(_rpcMeta);
+    }
+    if (data.containsKey('op')) {
+      context.handle(_opMeta, op.isAcceptableOrUnknown(data['op']!, _opMeta));
     }
     if (data.containsKey('params')) {
       context.handle(
@@ -7594,6 +7608,10 @@ class $SyncQueueItemsTable extends SyncQueueItems
         DriftSqlType.string,
         data['${effectivePrefix}rpc'],
       )!,
+      op: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}op'],
+      )!,
       params: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}params'],
@@ -7643,6 +7661,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
   final String id;
   final String tenantId;
   final String rpc;
+  final String op;
   final String params;
   final String? requestId;
   final String? entity;
@@ -7656,6 +7675,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     required this.id,
     required this.tenantId,
     required this.rpc,
+    required this.op,
     required this.params,
     this.requestId,
     this.entity,
@@ -7672,6 +7692,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     map['id'] = Variable<String>(id);
     map['tenant_id'] = Variable<String>(tenantId);
     map['rpc'] = Variable<String>(rpc);
+    map['op'] = Variable<String>(op);
     map['params'] = Variable<String>(params);
     if (!nullToAbsent || requestId != null) {
       map['request_id'] = Variable<String>(requestId);
@@ -7697,6 +7718,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       id: Value(id),
       tenantId: Value(tenantId),
       rpc: Value(rpc),
+      op: Value(op),
       params: Value(params),
       requestId: requestId == null && nullToAbsent
           ? const Value.absent()
@@ -7726,6 +7748,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       id: serializer.fromJson<String>(json['id']),
       tenantId: serializer.fromJson<String>(json['tenantId']),
       rpc: serializer.fromJson<String>(json['rpc']),
+      op: serializer.fromJson<String>(json['op']),
       params: serializer.fromJson<String>(json['params']),
       requestId: serializer.fromJson<String?>(json['requestId']),
       entity: serializer.fromJson<String?>(json['entity']),
@@ -7744,6 +7767,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       'id': serializer.toJson<String>(id),
       'tenantId': serializer.toJson<String>(tenantId),
       'rpc': serializer.toJson<String>(rpc),
+      'op': serializer.toJson<String>(op),
       'params': serializer.toJson<String>(params),
       'requestId': serializer.toJson<String?>(requestId),
       'entity': serializer.toJson<String?>(entity),
@@ -7760,6 +7784,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     String? id,
     String? tenantId,
     String? rpc,
+    String? op,
     String? params,
     Value<String?> requestId = const Value.absent(),
     Value<String?> entity = const Value.absent(),
@@ -7773,6 +7798,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
     rpc: rpc ?? this.rpc,
+    op: op ?? this.op,
     params: params ?? this.params,
     requestId: requestId.present ? requestId.value : this.requestId,
     entity: entity.present ? entity.value : this.entity,
@@ -7788,6 +7814,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       id: data.id.present ? data.id.value : this.id,
       tenantId: data.tenantId.present ? data.tenantId.value : this.tenantId,
       rpc: data.rpc.present ? data.rpc.value : this.rpc,
+      op: data.op.present ? data.op.value : this.op,
       params: data.params.present ? data.params.value : this.params,
       requestId: data.requestId.present ? data.requestId.value : this.requestId,
       entity: data.entity.present ? data.entity.value : this.entity,
@@ -7806,6 +7833,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           ..write('id: $id, ')
           ..write('tenantId: $tenantId, ')
           ..write('rpc: $rpc, ')
+          ..write('op: $op, ')
           ..write('params: $params, ')
           ..write('requestId: $requestId, ')
           ..write('entity: $entity, ')
@@ -7824,6 +7852,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     id,
     tenantId,
     rpc,
+    op,
     params,
     requestId,
     entity,
@@ -7841,6 +7870,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           other.id == this.id &&
           other.tenantId == this.tenantId &&
           other.rpc == this.rpc &&
+          other.op == this.op &&
           other.params == this.params &&
           other.requestId == this.requestId &&
           other.entity == this.entity &&
@@ -7856,6 +7886,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
   final Value<String> id;
   final Value<String> tenantId;
   final Value<String> rpc;
+  final Value<String> op;
   final Value<String> params;
   final Value<String?> requestId;
   final Value<String?> entity;
@@ -7870,6 +7901,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.id = const Value.absent(),
     this.tenantId = const Value.absent(),
     this.rpc = const Value.absent(),
+    this.op = const Value.absent(),
     this.params = const Value.absent(),
     this.requestId = const Value.absent(),
     this.entity = const Value.absent(),
@@ -7885,6 +7917,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     required String id,
     required String tenantId,
     required String rpc,
+    this.op = const Value.absent(),
     required String params,
     this.requestId = const Value.absent(),
     this.entity = const Value.absent(),
@@ -7903,6 +7936,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Expression<String>? id,
     Expression<String>? tenantId,
     Expression<String>? rpc,
+    Expression<String>? op,
     Expression<String>? params,
     Expression<String>? requestId,
     Expression<String>? entity,
@@ -7918,6 +7952,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       if (id != null) 'id': id,
       if (tenantId != null) 'tenant_id': tenantId,
       if (rpc != null) 'rpc': rpc,
+      if (op != null) 'op': op,
       if (params != null) 'params': params,
       if (requestId != null) 'request_id': requestId,
       if (entity != null) 'entity': entity,
@@ -7935,6 +7970,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Value<String>? id,
     Value<String>? tenantId,
     Value<String>? rpc,
+    Value<String>? op,
     Value<String>? params,
     Value<String?>? requestId,
     Value<String?>? entity,
@@ -7950,6 +7986,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       id: id ?? this.id,
       tenantId: tenantId ?? this.tenantId,
       rpc: rpc ?? this.rpc,
+      op: op ?? this.op,
       params: params ?? this.params,
       requestId: requestId ?? this.requestId,
       entity: entity ?? this.entity,
@@ -7974,6 +8011,9 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     }
     if (rpc.present) {
       map['rpc'] = Variable<String>(rpc.value);
+    }
+    if (op.present) {
+      map['op'] = Variable<String>(op.value);
     }
     if (params.present) {
       map['params'] = Variable<String>(params.value);
@@ -8014,6 +8054,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
           ..write('id: $id, ')
           ..write('tenantId: $tenantId, ')
           ..write('rpc: $rpc, ')
+          ..write('op: $op, ')
           ..write('params: $params, ')
           ..write('requestId: $requestId, ')
           ..write('entity: $entity, ')
@@ -12803,6 +12844,7 @@ typedef $$SyncQueueItemsTableCreateCompanionBuilder =
       required String id,
       required String tenantId,
       required String rpc,
+      Value<String> op,
       required String params,
       Value<String?> requestId,
       Value<String?> entity,
@@ -12819,6 +12861,7 @@ typedef $$SyncQueueItemsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> tenantId,
       Value<String> rpc,
+      Value<String> op,
       Value<String> params,
       Value<String?> requestId,
       Value<String?> entity,
@@ -12852,6 +12895,11 @@ class $$SyncQueueItemsTableFilterComposer
 
   ColumnFilters<String> get rpc => $composableBuilder(
     column: $table.rpc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get op => $composableBuilder(
+    column: $table.op,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12925,6 +12973,11 @@ class $$SyncQueueItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get op => $composableBuilder(
+    column: $table.op,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get params => $composableBuilder(
     column: $table.params,
     builder: (column) => ColumnOrderings(column),
@@ -12988,6 +13041,9 @@ class $$SyncQueueItemsTableAnnotationComposer
 
   GeneratedColumn<String> get rpc =>
       $composableBuilder(column: $table.rpc, builder: (column) => column);
+
+  GeneratedColumn<String> get op =>
+      $composableBuilder(column: $table.op, builder: (column) => column);
 
   GeneratedColumn<String> get params =>
       $composableBuilder(column: $table.params, builder: (column) => column);
@@ -13053,6 +13109,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> tenantId = const Value.absent(),
                 Value<String> rpc = const Value.absent(),
+                Value<String> op = const Value.absent(),
                 Value<String> params = const Value.absent(),
                 Value<String?> requestId = const Value.absent(),
                 Value<String?> entity = const Value.absent(),
@@ -13067,6 +13124,7 @@ class $$SyncQueueItemsTableTableManager
                 id: id,
                 tenantId: tenantId,
                 rpc: rpc,
+                op: op,
                 params: params,
                 requestId: requestId,
                 entity: entity,
@@ -13083,6 +13141,7 @@ class $$SyncQueueItemsTableTableManager
                 required String id,
                 required String tenantId,
                 required String rpc,
+                Value<String> op = const Value.absent(),
                 required String params,
                 Value<String?> requestId = const Value.absent(),
                 Value<String?> entity = const Value.absent(),
@@ -13097,6 +13156,7 @@ class $$SyncQueueItemsTableTableManager
                 id: id,
                 tenantId: tenantId,
                 rpc: rpc,
+                op: op,
                 params: params,
                 requestId: requestId,
                 entity: entity,
