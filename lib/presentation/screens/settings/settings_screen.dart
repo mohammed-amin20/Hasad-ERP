@@ -10,6 +10,8 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../domain/reminders/reminder_log_entry.dart';
 import '../../../domain/reminders/reminder_settings.dart';
 import '../../providers/reminders_providers.dart';
+import '../../providers/offline_sync_providers.dart'
+    show manualSyncNowProvider, pendingSyncCountProvider;
 
 /// Reminder automation + company settings (admin-only tab).
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -90,6 +92,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const _ReminderLogCard(),
                     const SizedBox(height: 16),
                     const _BackupCard(),
+                    const SizedBox(height: 16),
+                    const _SyncStatusCard(),
                   ],
                 ),
               ),
@@ -556,14 +560,17 @@ class _SectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            textDirection: TextDirection.rtl,
             children: [
               FaIcon(icon, size: 16, color: color),
               const SizedBox(width: 10),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w800,
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -571,6 +578,41 @@ class _SectionCard extends StatelessWidget {
           const SizedBox(height: 16),
           child,
         ],
+      ),
+    );
+  }
+}
+
+/// Live offline-sync status card: shows how many offline legs are still queued
+/// for the current tenant (via [pendingSyncCountProvider]) and lets the user
+/// force a flush pass (via [manualSyncNowProvider]).
+class _SyncStatusCard extends ConsumerWidget {
+  const _SyncStatusCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pending = ref.watch(pendingSyncCountProvider).value ?? 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          textDirection: TextDirection.rtl,
+          children: [
+            const FaIcon(FontAwesomeIcons.arrowsRotate, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(pending > 0 ? '$pending عمليات معلقة' : 'الكل متزامِن'),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 120,
+              child: ElevatedButton(
+                onPressed: () => ref.read(manualSyncNowProvider),
+                child: const Text('مزامنة الآن'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
