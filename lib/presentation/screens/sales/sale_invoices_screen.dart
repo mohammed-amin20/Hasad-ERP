@@ -27,11 +27,66 @@ class SaleInvoicesScreen extends ConsumerStatefulWidget {
 class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   final _searchCtrl = TextEditingController();
   bool _searchOpen = false;
+  bool _rangeOpen = true;
+  late DateTime _from;
+  late DateTime _to;
+
+  @override
+  void initState() {
+    super.initState();
+    final fiso = ref.read(saleFromProvider);
+    final tiso = ref.read(saleToProvider);
+    if (fiso == null && tiso == null) {
+      final now = DateTime.now();
+      _from = now;
+      _to = now;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final iso = _saleIso(now);
+        ref.read(saleFromProvider.notifier).update(iso);
+        ref.read(saleToProvider.notifier).update(iso);
+      });
+    } else {
+      _from = fiso == null ? DateTime(2000) : DateTime.parse(fiso);
+      _to = tiso == null ? DateTime(2100) : DateTime.parse(tiso);
+    }
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _toggleRange() {
+    setState(() => _rangeOpen = !_rangeOpen);
+  }
+
+  Future<void> _pickFrom() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _from,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() => _from = picked);
+      final iso = _saleIso(picked);
+      ref.read(saleFromProvider.notifier).update(iso);
+    }
+  }
+
+  Future<void> _pickTo() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _to,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() => _to = picked);
+      final iso = _saleIso(picked);
+      ref.read(saleToProvider.notifier).update(iso);
+    }
   }
 
   void _toggleSearch() {
@@ -77,11 +132,25 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
                 : FontAwesomeIcons.magnifyingGlass,
           ),
         ),
+        IconButton(
+          tooltip: _rangeOpen ? 'إخفاء التاريخ' : 'إظهار التاريخ',
+          onPressed: _toggleRange,
+          icon: const FaIcon(FontAwesomeIcons.calendarDays),
+        ),
       ],
       child: Stack(
         children: [
           Column(
             children: [
+              if (_rangeOpen) ...[
+                _RangeBar(
+                  from: _from,
+                  to: _to,
+                  onFromTap: _pickFrom,
+                  onToTap: _pickTo,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_searchOpen)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -118,7 +187,8 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
                   data: (invoices) {
                     if (invoices.isEmpty) {
                       return const _EmptyState();
-                    }
+}
+
                     return InvoiceListView(
                       invoices: invoices,
                       onTap: (invoice) => showModalBottomSheet<void>(
@@ -419,7 +489,8 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                         if (text.isEmpty) return null;
                         if (double.tryParse(text) == null) {
                           return 'قيمة غير صالحة';
-                        }
+}
+
                         return null;
                       },
                     ),
@@ -624,3 +695,76 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
+
+class _RangeBar extends StatelessWidget {
+  const _RangeBar({
+    required this.from,
+    required this.to,
+    required this.onFromTap,
+    required this.onToTap,
+  });
+
+  final DateTime from;
+  final DateTime to;
+  final VoidCallback onFromTap;
+  final VoidCallback onToTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _DateChip(label: 'من', date: from, onTap: onFromTap)),
+        const SizedBox(width: 12),
+        Expanded(child: _DateChip(label: 'إلى', date: to, onTap: onToTap)),
+      ],
+    );
+  }
+}
+
+class _DateChip extends StatelessWidget {
+  const _DateChip({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime date;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const FaIcon(
+              FontAwesomeIcons.calendarDay,
+              size: 16,
+              color: AppColors.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$label: ${_fmtDate(date)}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _fmtDate(DateTime d) =>
+    "${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}";
+
+String _saleIso(DateTime d) =>
+    "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
