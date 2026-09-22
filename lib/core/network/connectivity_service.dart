@@ -5,6 +5,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
+import 'web_online.dart';
+
 /// Service that monitors network connectivity changes.
 class ConnectivityService {
   ConnectivityService(this._connectivity);
@@ -54,15 +56,25 @@ class ConnectivityService {
   void _startPeriodicVerification() {
     _verificationTimer?.cancel();
     _verificationTimer = Timer.periodic(_verificationInterval, (_) {
-      if (_lastResult.any((r) => r != ConnectivityResult.none)) {
-        unawaited(verifyInternetConnectivity());
-      }
+      // No `!= none` gate: a persistent-offline state must still be re-probed
+      // so the verdict can self-heal. On native the probe fails fast when
+      // truly offline; on web the navigator.onLine fast-path makes it instant.
+      unawaited(verifyInternetConnectivity());
     });
   }
 
   Future<bool> verifyInternetConnectivity() async {
     try {
       if (kIsWeb) {
+        // The browser's `navigator.onLine` is the authoritative, instant
+        // offline signal on web (no HTTP wait). When it reports offline the
+        // verdict flips to `false` immediately; otherwise fall through to the
+        // HTTP 204/200 probe which is authoritative for a browser that reports
+        // an interface but has no real internet access.
+        if (!webNavigatorOnLine()) {
+          _verifiedOnline = false;
+          return _verifiedOnline;
+        }
         // `dart:io` HttpClient is unavailable at runtime on Flutter web, and
         // the browser's connectivity events only reflect network interfaces.
         // Verify real internet access via an HTTP 204/200 endpoint instead.
