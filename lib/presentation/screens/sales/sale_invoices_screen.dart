@@ -28,27 +28,18 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   final _searchCtrl = TextEditingController();
   bool _searchOpen = false;
   bool _rangeOpen = true;
-  late DateTime _from;
-  late DateTime _to;
+  DateTime? _from;
+  DateTime? _to;
 
   @override
   void initState() {
     super.initState();
     final fiso = ref.read(saleFromProvider);
     final tiso = ref.read(saleToProvider);
-    if (fiso == null && tiso == null) {
-      final now = DateTime.now();
-      _from = now;
-      _to = now;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final iso = _saleIso(now);
-        ref.read(saleFromProvider.notifier).update(iso);
-        ref.read(saleToProvider.notifier).update(iso);
-      });
-    } else {
-      _from = fiso == null ? DateTime(2000) : DateTime.parse(fiso);
-      _to = tiso == null ? DateTime(2100) : DateTime.parse(tiso);
-    }
+    // Nothing pre-set: show ALL sales (null = no bounds); never default the
+    // list to today-only.
+    _from = fiso == null ? null : DateTime.parse(fiso);
+    _to = tiso == null ? null : DateTime.parse(tiso);
   }
 
   @override
@@ -64,7 +55,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   Future<void> _pickFrom() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _from,
+      initialDate: _from ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -78,7 +69,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   Future<void> _pickTo() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _to,
+      initialDate: _to ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -87,6 +78,15 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
       final iso = _saleIso(picked);
       ref.read(saleToProvider.notifier).update(iso);
     }
+  }
+
+  void _resetRange() {
+    setState(() {
+      _from = null;
+      _to = null;
+    });
+    ref.read(saleFromProvider.notifier).update(null);
+    ref.read(saleToProvider.notifier).update(null);
   }
 
   void _toggleSearch() {
@@ -148,6 +148,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
                   to: _to,
                   onFromTap: _pickFrom,
                   onToTap: _pickTo,
+                  onReset: _resetRange,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -702,12 +703,14 @@ class _RangeBar extends StatelessWidget {
     required this.to,
     required this.onFromTap,
     required this.onToTap,
+    required this.onReset,
   });
 
-  final DateTime from;
-  final DateTime to;
+  final DateTime? from;
+  final DateTime? to;
   final VoidCallback onFromTap;
   final VoidCallback onToTap;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -716,6 +719,12 @@ class _RangeBar extends StatelessWidget {
         Expanded(child: _DateChip(label: 'من', date: from, onTap: onFromTap)),
         const SizedBox(width: 12),
         Expanded(child: _DateChip(label: 'إلى', date: to, onTap: onToTap)),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'إظهار الكل',
+          onPressed: onReset,
+          icon: const FaIcon(FontAwesomeIcons.xmark),
+        ),
       ],
     );
   }
@@ -729,11 +738,12 @@ class _DateChip extends StatelessWidget {
   });
 
   final String label;
-  final DateTime date;
+  final DateTime? date;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final text = date == null ? 'الكل' : _fmtDate(date!);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -753,7 +763,7 @@ class _DateChip extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              '$label: ${_fmtDate(date)}',
+              '$label: $text',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],

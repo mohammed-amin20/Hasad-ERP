@@ -58,13 +58,16 @@ void main() {
     expect(side.color, AppColors.primaryDark);
   });
 
-  testWidgets('icon buttons keep a 48x48 minimum touch target',
+  testWidgets('icon buttons use compact 40x40 sizing and 18px icons',
       (tester) async {
     await tester.pumpWidget(
       wrap(IconButton(onPressed: () {}, icon: const Icon(Icons.add))),
     );
     final size = themeOf(tester, IconButton).iconButtonTheme.style!
         .minimumSize!.resolve({});
-    expect(size, const Size(48, 48));
+    expect(size, const Size(40, 40));
+    final iconSize = themeOf(tester, IconButton).iconButtonTheme.style!
+        .iconSize!.resolve({});
+    expect(iconSize, 18);
   });
 }

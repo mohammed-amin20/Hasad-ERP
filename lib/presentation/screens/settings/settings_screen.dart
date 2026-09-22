@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/time_format.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../domain/reminders/reminder_log_entry.dart';
@@ -656,5 +657,4 @@ class _ErrorState extends StatelessWidget {
 
 String _fmtDateTime(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
-    '${d.day.toString().padLeft(2, '0')} '
-    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    '${d.day.toString().padLeft(2, '0')} ${TimeFormat.hour12(d)}';

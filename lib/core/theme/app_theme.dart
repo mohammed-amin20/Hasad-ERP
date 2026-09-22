@@ -165,8 +165,9 @@ abstract final class AppTheme {
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.all(12),
+        iconSize: 18,
+        minimumSize: const Size(40, 40),
+        padding: const EdgeInsets.all(6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ).copyWith(overlayColor: _buttonOverlay()),
     ),

@@ -100,9 +100,44 @@ void main() {
     expect(find.text('فاتورة شراء جديدة'), findsOneWidget);
     expect(find.text('إدخال فاتورة شراء من المورد'), findsOneWidget);
   });
+
+  testWidgets('sales list defaults to ALL sales (no date bounds)', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final invoices = _FakeInvoiceRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => Stream.value(user)),
+          invoiceRepositoryProvider.overrideWithValue(invoices),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: const Scaffold(body: SaleInvoicesScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // No date is forced: both range chips read as "الكل" and the underlying
+    // query goes out bounds-free.
+    expect(find.text('من: الكل'), findsOneWidget);
+    expect(find.text('إلى: الكل'), findsOneWidget);
+    expect(invoices.lastType, 'sale');
+    expect(invoices.lastFrom, isNull);
+    expect(invoices.lastTo, isNull);
+  });
 }
 
 class _FakeInvoiceRepository implements InvoiceRepository {
+  String? lastType;
+  String? lastSearch;
+  DateTime? lastFrom;
+  DateTime? lastTo;
+
   @override
   Future<List<Invoice>> list({
     required String type,
@@ -110,6 +145,10 @@ class _FakeInvoiceRepository implements InvoiceRepository {
     DateTime? from,
     DateTime? to,
   }) async {
+    lastType = type;
+    lastSearch = search;
+    lastFrom = from;
+    lastTo = to;
     return <Invoice>[];
   }
 

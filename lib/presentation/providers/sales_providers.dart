@@ -1,4 +1,4 @@
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+﻿import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/invoices/invoice_repository.dart';
 import '../../data/offline/local_store.dart';
@@ -40,18 +40,41 @@ class SaleSearch extends _$SaleSearch {
   void update(String term) => state = term;
 }
 
+/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+@riverpod
+class SaleFrom extends _$SaleFrom {
+  @override
+  String? build() => null;
+
+  void update(String? iso) => state = iso;
+}
+
+/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+@riverpod
+class SaleTo extends _$SaleTo {
+  @override
+  String? build() => null;
+
+  void update(String? iso) => state = iso;
+}
+
 /// Reactive list of sale invoices.
 @riverpod
 class SaleInvoicesList extends _$SaleInvoicesList {
   @override
+    @override
   Future<List<Invoice>> build() async {
     final search = ref.watch(saleSearchProvider);
-    return ref
-        .watch(invoiceRepositoryProvider)
-        .list(type: 'sale', search: search.isEmpty ? null : search);
+    final from = ref.watch(saleFromProvider);
+    final to = ref.watch(saleToProvider);
+    return ref.watch(invoiceRepositoryProvider).list(
+          type: 'sale',
+          search: search.isEmpty ? null : search,
+          from: from == null ? null : DateTime.parse(from),
+          to: to == null ? null : DateTime.parse(to),
+        );
   }
-
-  Future<void> refresh() async {
+Future<void> refresh() async {
     ref.invalidateSelf();
   }
 

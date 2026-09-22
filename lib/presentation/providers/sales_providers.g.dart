@@ -95,7 +95,7 @@ final class InvoiceRepositoryProvider
   }
 }
 
-String _$invoiceRepositoryHash() => r'642a8ed21af58e54fbde0ab536613916043b5399';
+String _$invoiceRepositoryHash() => r'f497a4ac45f2ff16ecba977ee9a7f211bee836b0';
 
 /// All customers for dropdowns, never filtered by the customers screen search.
 
@@ -198,6 +198,120 @@ abstract class _$SaleSearch extends $Notifier<String> {
   }
 }
 
+/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+
+@ProviderFor(SaleFrom)
+final saleFromProvider = SaleFromProvider._();
+
+/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+final class SaleFromProvider extends $NotifierProvider<SaleFrom, String?> {
+  /// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+  SaleFromProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'saleFromProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$saleFromHash();
+
+  @$internal
+  @override
+  SaleFrom create() => SaleFrom();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String?>(value),
+    );
+  }
+}
+
+String _$saleFromHash() => r'994ec39d58bf4be5946fe60d5274b7a427fe25ab';
+
+/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+
+abstract class _$SaleFrom extends $Notifier<String?> {
+  String? build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<String?, String?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String?, String?>,
+              String?,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+
+@ProviderFor(SaleTo)
+final saleToProvider = SaleToProvider._();
+
+/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+final class SaleToProvider extends $NotifierProvider<SaleTo, String?> {
+  /// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+  SaleToProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'saleToProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$saleToHash();
+
+  @$internal
+  @override
+  SaleTo create() => SaleTo();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String?>(value),
+    );
+  }
+}
+
+String _$saleToHash() => r'85ff5c52ce9c3e2e217c458084b4a053ff814967';
+
+/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
+
+abstract class _$SaleTo extends $Notifier<String?> {
+  String? build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<String?, String?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String?, String?>,
+              String?,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 /// Reactive list of sale invoices.
 
 @ProviderFor(SaleInvoicesList)
@@ -226,7 +340,7 @@ final class SaleInvoicesListProvider
   SaleInvoicesList create() => SaleInvoicesList();
 }
 
-String _$saleInvoicesListHash() => r'eed8c9b3c82b42587ac430575a7a8f18a747b568';
+String _$saleInvoicesListHash() => r'6df8448857d0542d305f929e0581c44b53b05b33';
 
 /// Reactive list of sale invoices.
 

@@ -62,7 +62,41 @@ class PageScaffold extends StatelessWidget {
                   ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final showDate = constraints.maxWidth >= 700;
+                      final wide = constraints.maxWidth >= 700;
+                      if (!wide) {
+                        final acts = actions ?? const <Widget>[];
+                        return Row(
+                          children: [
+                            SizedBox(
+                              width: constraints.maxWidth / 2,
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Text(
+                                  title,
+                                  style: theme.textTheme.headlineMedium,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (var i = 0; i < acts.length; i++) ...[
+                                      if (i > 0) const SizedBox(width: 2),
+                                      acts[i],
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
                       return Row(
                         children: [
                           Expanded(
@@ -91,7 +125,7 @@ class PageScaffold extends StatelessWidget {
                             ],
                           if (actions != null && actions!.isNotEmpty)
                             const SizedBox(width: 8),
-                          UserCorner(showDate: showDate),
+                          const UserCorner(showDate: true),
                         ],
                       );
                     },
