@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/widgets/app_progress.dart';
+import '../../core/widgets/skip_link.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/skip_link.dart';
+import '../../core/widgets/brand_logo.dart';
 import '../../domain/auth/app_role.dart';
 import '../../domain/auth/app_user.dart';
 import '../providers/auth_providers.dart';
@@ -157,7 +158,14 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
         onPressed: onOpenDrawer,
         icon: const Icon(Icons.menu),
       ),
-      title: const Text('حصاد'),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const BrandLogo(size: 20),
+          const SizedBox(width: 8),
+          const Text('حصاد'),
+        ],
+      ),
       centerTitle: true,
       titleTextStyle: isSmallMobile
           ? Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 16)

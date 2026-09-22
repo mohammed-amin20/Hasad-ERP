@@ -118,7 +118,7 @@ class _Header extends ConsumerWidget {
           showLabel
               ? Row(
                   children: [
-                    const BrandLogo(size: 32),
+                    const BrandLogo(size: 32, variant: BrandMarkVariant.amber),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

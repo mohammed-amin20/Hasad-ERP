@@ -1,8 +1,11 @@
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/widgets/app_progress.dart';
+import '../../../core/widgets/brand_lockup.dart';
+import '../../../core/widgets/brand_logo.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -98,6 +101,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ),
+            Positioned(
+              bottom: 36,
+              right: 36,
+              width: 220,
+              height: 190,
+              child: Opacity(
+                opacity: 0.07,
+                child: ColorFiltered(
+                  colorFilter: const ColorFilter.mode(
+                    Colors.white,
+                    BlendMode.srcIn,
+                  ),
+                  child: SvgPicture.asset(
+                    BrandAssets.mono,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
@@ -181,32 +203,8 @@ class _LoginCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Center(child: _LoginLogo()),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  'حصاد',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF1F2937),
-                  ),
-                ),
-                Text(
-                  ' Hasad',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            const Center(child: BrandLockup(width: 200)),
+            const SizedBox(height: 20),
             Text(
               'منصة إدارة الأعمال والمحاسبة الذكية',
               textAlign: TextAlign.center,
@@ -361,49 +359,6 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LoginLogo extends StatelessWidget {
-  const _LoginLogo();
-
-  /// Optical compensation for FontAwesome's `wheatAwn` glyph, whose visual
-  /// mass sits toward the top-right of its em-square. Tunable to taste.
-  static const Offset _wheatShift = Offset(-1, 2);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 76,
-      height: 76,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFB45309), Color(0xFFF59E0B), Color(0xFFFBBF24)],
-          stops: [0, 0.55, 1],
-        ),
-        shape: BoxShape.circle,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66D97706),
-            blurRadius: 28,
-            offset: Offset(0, 12),
-          ),
-          BoxShadow(color: Color(0x59FFFFFF), offset: Offset(0, -1)),
-        ],
-      ),
-      child: Transform.translate(
-        offset: _wheatShift,
-        child: const FaIcon(
-          FontAwesomeIcons.wheatAwn,
-          color: Colors.white,
-          semanticLabel: 'شعار حصاد',
-          size: 34,
         ),
       ),
     );

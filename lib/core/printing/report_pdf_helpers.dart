@@ -7,6 +7,7 @@ import '../../core/utils/money.dart';
 /// Shared helpers for all report PDF builders.
 abstract final class ReportPdfHelpers {
   static const cairoAsset = 'assets/fonts/Cairo-Variable.ttf';
+  static const logoAsset = 'assets/logos/hasad-logo-mark.png';
   static const primary = PdfColor.fromInt(0xFF2563EB);
   static const success = PdfColor.fromInt(0xFF16A34A);
   static const danger = PdfColor.fromInt(0xFFDC2626);
@@ -34,11 +35,22 @@ abstract final class ReportPdfHelpers {
   }
 
   /// Common header for all reports.
+  ///
+  /// [logoBytes] is the rasterized brand mark PNG; when present the mark is
+  /// shown to the right of the حصاد wordmark (mirrors the app's brand lockup).
   static pw.Widget buildHeader({
     required String title,
     required String subtitle,
     String? dateRange,
+    Uint8List? logoBytes,
   }) {
+    final mark = logoBytes == null
+        ? null
+        : pw.Image(
+            pw.MemoryImage(logoBytes),
+            height: 13,
+            width: 13,
+          );
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -53,9 +65,15 @@ abstract final class ReportPdfHelpers {
                 color: primary,
               ),
             ),
-            pw.Text(
-              'حصاد',
-              style: const pw.TextStyle(fontSize: 14, color: muted),
+            pw.Row(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                if (mark != null) ...[mark, pw.SizedBox(width: 4)],
+                pw.Text(
+                  'حصاد',
+                  style: const pw.TextStyle(fontSize: 14, color: muted),
+                ),
+              ],
             ),
           ],
         ),
@@ -98,6 +116,21 @@ abstract final class ReportPdfHelpers {
       ],
     );
   }
+
+  /// Load the small brand mark PNG bundled for the PDF header lockup.
+  static Future<Uint8List> loadLogo([Uint8List? logoBytes]) async {
+    final bytes = logoBytes ??
+        (await rootBundle.load(logoAsset)).buffer.asUint8List();
+    return bytes;
+  }
+
+  /// A compact [pw.Image] of the brand mark at report-header size (non-JPEG,
+  /// lossless PNG so the gold stays crisp).
+  static pw.Image headerMark(Uint8List bytes) => pw.Image(
+        pw.MemoryImage(bytes),
+        height: 14,
+        width: 14,
+      );
 
   /// Standard table data row.
   static pw.TableRow tableDataRow(
