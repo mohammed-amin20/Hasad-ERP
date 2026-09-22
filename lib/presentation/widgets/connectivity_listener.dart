@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../core/network/connectivity_providers.dart';
+import '../providers/offline_sync_providers.dart';
 
 /// A widget that listens to connectivity changes and updates the [ConnectivityState] provider.
 /// Place this at the root of your widget tree (e.g., inside AppShell or MaterialApp).
@@ -29,10 +30,11 @@ class _ConnectivityListenerState extends ConsumerState<ConnectivityListener> {
     _subscription = service.onConnectivityChanged.listen((result) {
       if (mounted) {
         ref.read(connectivityStateProvider.notifier).update(result);
-        // Trigger verification when interface comes up
-        if (result.any((r) => r != ConnectivityResult.none)) {
-          ref.read(verifiedOnlineProvider.notifier).reverify();
-        }
+        // Trigger verification on ANY change (including full offline) — the
+        // browser's instant navigator.onLine fast-path inside
+        // verifyInternetConnectivity flips the mood offline immediately
+        // instead of waiting for the next 30s periodic probe.
+        ref.read(verifiedOnlineProvider.notifier).reverify();
       }
     });
     // Initialize with current connectivity (fire-and-forget)
@@ -54,5 +56,16 @@ class _ConnectivityListenerState extends ConsumerState<ConnectivityListener> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<bool>>(verifiedOnlineProvider, (previous, next) {
+      final wasOnline = previous?.value ?? false;
+      final isOnline = next.value ?? false;
+      if (isOnline && !wasOnline) {
+        // Edge back online: drain the tenant's pending queue (with backoff)
+        // without waiting for a manual tap.
+        unawaited(ref.read(autoSyncRunnerProvider).kick());
+      }
+    });
+    return widget.child;
+  }
 }

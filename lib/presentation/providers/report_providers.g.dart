@@ -57,7 +57,7 @@ final class ReportRepositoryProvider
   }
 }
 
-String _$reportRepositoryHash() => r'd2f121f1c115a0708e0012bd1be2aa5295485cf6';
+String _$reportRepositoryHash() => r'4c2030c4c76d8d16d1cbcc2584c0cc26070634ee';
 
 /// Ledger selection: account + date range (default: from first-of-month to now).
 

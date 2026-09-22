@@ -58,7 +58,7 @@ final class JournalRepositoryProvider
   }
 }
 
-String _$journalRepositoryHash() => r'c3f34afe699b0d88f0ce41141f01d06c78fa39fa';
+String _$journalRepositoryHash() => r'e47a499c5710b019faa9d13abbfade06e44dd128';
 
 /// Current journal date range (first day of the month → today by default).
 

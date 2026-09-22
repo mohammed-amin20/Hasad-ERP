@@ -59,7 +59,7 @@ final class EmployeeRepositoryProvider
 }
 
 String _$employeeRepositoryHash() =>
-    r'5cb8feb3ca58ad5e7da860d5bb20741136e74975';
+    r'209912dce0a4ebf3101f1366e42f9c467f05daf3';
 
 /// Current search term for the employee list (reactive).
 

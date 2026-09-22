@@ -59,7 +59,7 @@ final class SupplierRepositoryProvider
 }
 
 String _$supplierRepositoryHash() =>
-    r'32ca8fa535978f962320aa090acd2a04f1811253';
+    r'613519713afdf2c4f35e222ded0b8476595e806c';
 
 /// Current search term for the supplier list (reactive).
 

@@ -1,5 +1,6 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/connectivity_providers.dart';
 import '../../../data/offline/local_store.dart';
 import '../../../data/offline/offline_sync.dart';
 import '../../../data/offline/supabase_sync_target.dart';
@@ -42,4 +43,26 @@ final FutureProvider<SyncFlushSummary> manualSyncNowProvider =
   final summary = await flusher.flush();
   ref.invalidate(pendingSyncCountProvider);
   return summary;
+});
+
+/// Auto-sync-on-reconnect runner bound to the tenant's [SyncFlusher]. Kick it
+/// from the offline→online edge ([AutoSyncRunner.kick]); while the queue keeps
+/// draining it paces follow-up passes with the [kSyncBackoffSeconds] ladder.
+/// Single-flight: a kick while one is running is ignored, and the loop stops
+/// once the queue drains or connectivity drops.
+final Provider<AutoSyncRunner> autoSyncRunnerProvider =
+    Provider<AutoSyncRunner>((ref) {
+  return AutoSyncRunner(
+    flush: () async {
+      final flusher = await ref.read(syncFlusherProvider.future);
+      final summary = await flusher.flush();
+      ref.invalidate(pendingSyncCountProvider);
+      return summary;
+    },
+    pendingCount: () async {
+      final flusher = await ref.read(syncFlusherProvider.future);
+      return flusher.pendingCount();
+    },
+    isOnline: () => ref.read(verifiedOnlineProvider).value ?? false,
+  );
 });

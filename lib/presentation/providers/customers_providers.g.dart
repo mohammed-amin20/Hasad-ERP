@@ -62,7 +62,7 @@ final class CustomerRepositoryProvider
 }
 
 String _$customerRepositoryHash() =>
-    r'257c7c1f88c83bb0e1bfef7a637cdc0eeb111a2e';
+    r'76a8463aad8543e64c2729447ec780e5f50a4eb1';
 
 /// Current search term for the customer list (reactive).
 

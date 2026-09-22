@@ -58,7 +58,7 @@ final class AccountRepositoryProvider
   }
 }
 
-String _$accountRepositoryHash() => r'0e75e05f9d4c4660ef702d15512242afc82ad9bd';
+String _$accountRepositoryHash() => r'452df7d0f2c15669d90bc9d5db448cb3cc233f2f';
 
 /// The tenant's chart of accounts.
 

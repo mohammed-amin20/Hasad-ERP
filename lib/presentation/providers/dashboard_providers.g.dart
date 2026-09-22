@@ -62,7 +62,7 @@ final class DashboardRepositoryProvider
 }
 
 String _$dashboardRepositoryHash() =>
-    r'f465977a8b6754c62cfc7f228848cbefe1c65d6a';
+    r'6a7e6d8bbe08e6b62f468470b81bea1f6c898a66';
 
 /// Fetches the dashboard summary once. Invalidate to reload.
 

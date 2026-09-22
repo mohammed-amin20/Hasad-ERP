@@ -79,6 +79,23 @@ abstract class LocalStore {
   Future<void> markSynced(String id);
   Future<void> markFailed(String id, String error);
 
+  /// Re-queues a leg that failed transiently as `pending` again after bumping
+  /// [attempts], so the next flush pass can retry it (bounded by
+  /// [kSyncMaxAttempts]). Mirrors [markFailed] but leaves the leg in the queue.
+  Future<void> requeueRetry(String id, String error, int attempts);
+
+  /// Applies the result of a successful replay to the local mirror: marks the
+  /// mirrored row for [entity] at [localId] as `synced`, records the
+  /// local→server mapping when a [serverId] was returned, and (for invoices) a
+  /// dopt the official [officialNo] from the RPC envelope so the real number
+  /// shows instead of the temporary `D-…`.
+  Future<void> markReplaySynced({
+    required String entity,
+    required String localId,
+    String? serverId,
+    String? officialNo,
+  });
+
   Future<String?> serverIdFor(String entity, String localId);
   Future<String?> localIdFor(String entity, String serverId);
   Future<void> putMapping({
@@ -225,6 +242,17 @@ class NullLocalStore implements LocalStore {
 
   @override
   Future<void> markFailed(String id, String error) async {}
+
+  @override
+  Future<void> requeueRetry(String id, String error, int attempts) async {}
+
+  @override
+  Future<void> markReplaySynced({
+    required String entity,
+    required String localId,
+    String? serverId,
+    String? officialNo,
+  }) async {}
 
   @override
   Future<String?> serverIdFor(String entity, String localId) async => localId;
@@ -542,6 +570,89 @@ class DriftLocalStore implements LocalStore {
           lastError: Value(error),
           updatedAt: Value(DateTime.now()),
         ));
+  }
+
+  @override
+  Future<void> requeueRetry(String id, String error, int attempts) async {
+    await (_db.update(_db.syncQueueItems)
+          ..where((r) => r.id.equals(id)))
+        .write(SyncQueueItemsCompanion(
+          status: const Value('pending'),
+          attempts: Value(attempts),
+          lastError: Value(error),
+          updatedAt: Value(DateTime.now()),
+        ));
+  }
+
+  @override
+  Future<void> markReplaySynced({
+    required String entity,
+    required String localId,
+    String? serverId,
+    String? officialNo,
+  }) async {
+    final finalServerId = serverId ?? localId;
+    if (finalServerId != localId) {
+      await putMapping(
+        entity: entity,
+        localId: localId,
+        serverId: finalServerId,
+      );
+    }
+    switch (entity) {
+      case 'invoices':
+        await (_db.update(_db.localInvoices)
+              ..where((r) => r.id.equals(localId)))
+            .write(
+          LocalInvoicesCompanion(
+            no: officialNo == null ? const Value.absent() : Value(officialNo),
+            synced: const Value(true),
+          ),
+        );
+        break;
+      case 'payments':
+        await (_db.update(_db.localPayments)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalPaymentsCompanion(synced: const Value(true)));
+        break;
+      case 'journal_entries':
+        await (_db.update(_db.localJournalEntries)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalJournalEntriesCompanion(synced: const Value(true)));
+        break;
+      case 'employee_movements':
+        await (_db.update(_db.localEmployeeMovements)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalEmployeeMovementsCompanion(synced: const Value(true)));
+        break;
+      case 'salaries':
+        await (_db.update(_db.localSalaries)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalSalariesCompanion(synced: const Value(true)));
+        break;
+      case 'customers':
+        await (_db.update(_db.localCustomers)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalCustomersCompanion(synced: const Value(true)));
+        break;
+      case 'suppliers':
+        await (_db.update(_db.localSuppliers)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalSuppliersCompanion(synced: const Value(true)));
+        break;
+      case 'products':
+        await (_db.update(_db.localProducts)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalProductsCompanion(synced: const Value(true)));
+        break;
+      case 'employees':
+        await (_db.update(_db.localEmployees)
+              ..where((r) => r.id.equals(localId)))
+            .write(LocalEmployeesCompanion(synced: const Value(true)));
+        break;
+      default:
+        break;
+    }
   }
 
   @override

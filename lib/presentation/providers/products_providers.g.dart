@@ -58,7 +58,7 @@ final class ProductRepositoryProvider
   }
 }
 
-String _$productRepositoryHash() => r'20ea9185a4f2c009e15860810332737e212b5876';
+String _$productRepositoryHash() => r'df05a4c58789629aac08bb205a4768e051c3219b';
 
 /// Current search term for the product list (reactive).
 
