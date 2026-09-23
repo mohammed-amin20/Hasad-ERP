@@ -48,7 +48,7 @@ final class SaleRepositoryProvider
   }
 }
 
-String _$saleRepositoryHash() => r'2d56d75f04d03a124bc0d043befd68fa7ccb4899';
+String _$saleRepositoryHash() => r'3feed26b76fdf3a2617ccd61d5f86633c8bdd0b1';
 
 @ProviderFor(invoiceRepository)
 final invoiceRepositoryProvider = InvoiceRepositoryProvider._();
@@ -97,12 +97,8 @@ final class InvoiceRepositoryProvider
 
 String _$invoiceRepositoryHash() => r'f497a4ac45f2ff16ecba977ee9a7f211bee836b0';
 
-/// All customers for dropdowns, never filtered by the customers screen search.
-
 @ProviderFor(allCustomers)
 final allCustomersProvider = AllCustomersProvider._();
-
-/// All customers for dropdowns, never filtered by the customers screen search.
 
 final class AllCustomersProvider
     extends
@@ -112,7 +108,6 @@ final class AllCustomersProvider
           FutureOr<List<Customer>>
         >
     with $FutureModifier<List<Customer>>, $FutureProvider<List<Customer>> {
-  /// All customers for dropdowns, never filtered by the customers screen search.
   AllCustomersProvider._()
     : super(
         from: null,
@@ -139,16 +134,12 @@ final class AllCustomersProvider
   }
 }
 
-String _$allCustomersHash() => r'6278163e05b67746d636d44600cfed0c2d07e32f';
-
-/// Current search term for the sale invoice list (reactive).
+String _$allCustomersHash() => r'ae3059c7cf0f713f825129c31fd64d8df2970b96';
 
 @ProviderFor(SaleSearch)
 final saleSearchProvider = SaleSearchProvider._();
 
-/// Current search term for the sale invoice list (reactive).
 final class SaleSearchProvider extends $NotifierProvider<SaleSearch, String> {
-  /// Current search term for the sale invoice list (reactive).
   SaleSearchProvider._()
     : super(
         from: null,
@@ -178,8 +169,6 @@ final class SaleSearchProvider extends $NotifierProvider<SaleSearch, String> {
 
 String _$saleSearchHash() => r'33f8e441e731438659d3896aa202e112c6c5831e';
 
-/// Current search term for the sale invoice list (reactive).
-
 abstract class _$SaleSearch extends $Notifier<String> {
   String build();
   @$mustCallSuper
@@ -198,14 +187,10 @@ abstract class _$SaleSearch extends $Notifier<String> {
   }
 }
 
-/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
-
 @ProviderFor(SaleFrom)
 final saleFromProvider = SaleFromProvider._();
 
-/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
 final class SaleFromProvider extends $NotifierProvider<SaleFrom, String?> {
-  /// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
   SaleFromProvider._()
     : super(
         from: null,
@@ -235,8 +220,6 @@ final class SaleFromProvider extends $NotifierProvider<SaleFrom, String?> {
 
 String _$saleFromHash() => r'994ec39d58bf4be5946fe60d5274b7a427fe25ab';
 
-/// From-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
-
 abstract class _$SaleFrom extends $Notifier<String?> {
   String? build();
   @$mustCallSuper
@@ -255,14 +238,10 @@ abstract class _$SaleFrom extends $Notifier<String?> {
   }
 }
 
-/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
-
 @ProviderFor(SaleTo)
 final saleToProvider = SaleToProvider._();
 
-/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
 final class SaleToProvider extends $NotifierProvider<SaleTo, String?> {
-  /// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
   SaleToProvider._()
     : super(
         from: null,
@@ -292,8 +271,6 @@ final class SaleToProvider extends $NotifierProvider<SaleTo, String?> {
 
 String _$saleToHash() => r'85ff5c52ce9c3e2e217c458084b4a053ff814967';
 
-/// To-date bound (ISO yyyy-MM-dd) for the sale invoice list; null = none.
-
 abstract class _$SaleTo extends $Notifier<String?> {
   String? build();
   @$mustCallSuper
@@ -312,15 +289,11 @@ abstract class _$SaleTo extends $Notifier<String?> {
   }
 }
 
-/// Reactive list of sale invoices.
-
 @ProviderFor(SaleInvoicesList)
 final saleInvoicesListProvider = SaleInvoicesListProvider._();
 
-/// Reactive list of sale invoices.
 final class SaleInvoicesListProvider
     extends $AsyncNotifierProvider<SaleInvoicesList, List<Invoice>> {
-  /// Reactive list of sale invoices.
   SaleInvoicesListProvider._()
     : super(
         from: null,
@@ -340,9 +313,7 @@ final class SaleInvoicesListProvider
   SaleInvoicesList create() => SaleInvoicesList();
 }
 
-String _$saleInvoicesListHash() => r'6df8448857d0542d305f929e0581c44b53b05b33';
-
-/// Reactive list of sale invoices.
+String _$saleInvoicesListHash() => r'0309612c1dc137b1101527b5439b54ad287ab484';
 
 abstract class _$SaleInvoicesList extends $AsyncNotifier<List<Invoice>> {
   FutureOr<List<Invoice>> build();
