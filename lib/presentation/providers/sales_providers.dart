@@ -11,6 +11,7 @@ import '../../data/supabase_client.dart';
 import '../../domain/customers/customer.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/sales/sale_repository.dart';
+import 'accounts_providers.dart';
 import 'auth_providers.dart';
 import 'customers_providers.dart';
 
@@ -24,7 +25,11 @@ SaleRepository saleRepository(Ref ref) {
   if (store == null || tenantId == null) return supabase;
   return OfflineAwareSaleRepository(
     supabase,
-    OfflineWriteCoordinator(store, tenantId),
+    OfflineWriteCoordinator(
+      store,
+      tenantId,
+      () => ref.read(accountRepositoryProvider).chart(),
+    ),
     () => ref.read(isOnlineProvider),
   );
 }

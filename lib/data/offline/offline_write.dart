@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import '../../core/error/app_exception.dart';
+import '../../domain/accounts/account.dart' as ch;
 import '../../domain/accounting/account.dart' as acc;
 import '../../domain/accounting/double_entry_engine.dart';
 import '../../domain/accounting/invoice_lines.dart' hide ProductDraft;
@@ -38,10 +39,18 @@ import 'local_store.dart';
 /// no-journal movements/adjustments, arrears salary payments). Every failure
 /// surfaces as an [AppException] so callers never leak raw engine errors.
 class OfflineWriteCoordinator {
-  OfflineWriteCoordinator(this._store, this._tenantId);
+  OfflineWriteCoordinator(this._store, this._tenantId, [this._seedChart]);
 
   final LocalStore _store;
   final String _tenantId;
+
+  /// One-time chart seed used when the local mirror is empty and the device
+  /// can still reach the chart (through the offline-aware account read seam,
+  /// which rehydrates from `report_cache` when offline). Best-effort: a seed
+  /// failure never fails the write — it falls through to the honest local-only
+  /// error.
+  final Future<List<ch.Account>> Function()? _seedChart;
+
   static final _uuid = Uuid();
 
   /// Queues a sale invoice mirroring `create_sale_invoice` (revenue-only).
@@ -1142,9 +1151,34 @@ class OfflineWriteCoordinator {
   }
 
   Future<Map<String, acc.Account>> _chart() async {
-    final rows = await _store.accounts(_tenantId);
+    var rows = await _store.accounts(_tenantId);
+    if (rows.isEmpty && _seedChart != null) {
+      try {
+        final seed = await _seedChart();
+        if (seed.isNotEmpty) {
+          await _store.mirrorAccounts(
+            _tenantId,
+            [
+              for (final a in seed)
+                LocalAccountRow(
+                  id: a.id,
+                  tenantId: _tenantId,
+                  code: a.code,
+                  name: a.name,
+                  type: a.type.apiValue,
+                  parentCode: a.parentCode,
+                ),
+            ],
+          );
+        }
+      } on Object {
+        // Best-effort seed: a seed failure must never fail the leg — it just
+        // falls through to the honest local-only error below.
+      }
+      rows = await _store.accounts(_tenantId);
+    }
     if (rows.isEmpty) {
-      throw ValidationException('دليل الحسابات غير متوفر محلياً');
+      throw ValidationException('دليل الحسابات غير متوفر محليا');
     }
     return {
       for (final r in rows)

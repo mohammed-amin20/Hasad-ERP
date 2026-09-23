@@ -6,6 +6,7 @@ import 'package:hasad_erp/core/error/app_exception.dart';
 import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
+import 'package:hasad_erp/domain/accounts/account.dart' as ch;
 import 'package:hasad_erp/domain/employees/employee_draft.dart';
 import 'package:hasad_erp/domain/invoices/invoice.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
@@ -677,6 +678,73 @@ void main() {
       expect(queued.op, 'table_crud');
       expect(queued.localId, 'e1');
       expect(jsonDecode(queued.params), {'id': 'e1'});
+    });
+  });
+
+  group('writeSale on empty chart mirror seeds via _chart', () {
+    test('fresh device sale leg succeeds after one-off chart seed', () async {
+      await store.upsertCustomer(LocalCustomerRow(
+        id: 'c1', tenantId: tenant, name: '�?�?�?�?', phone: '0599111222',
+        notes: null, createdAt: DateTime(2026, 1, 1), synced: false,
+      ));
+      await store.upsertProduct(LocalProductRow(
+        id: 'p1', tenantId: tenant, name: '�?�?�?�? �?�?�?�?�?', barcode: null,
+        unit: '�?���?�?', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
+        qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
+        createdAt: DateTime(2026, 1, 1), synced: false,
+      ));
+
+      final coordinator = OfflineWriteCoordinator(store, tenant, () async => [
+        ch.Account(
+          id: 'a1', code: '1010', name: '�???�???�??????',
+          type: ch.AccountType.asset, balance: 0,
+        ),
+        ch.Account(
+          id: 'a2', code: '1015', name: '�???�???????',
+          type: ch.AccountType.asset, balance: 0,
+        ),
+        ch.Account(
+          id: 'a3', code: '1020', name: '�??????�??? �???�???????',
+          type: ch.AccountType.asset, balance: 0,
+        ),
+        ch.Account(
+          id: 'a4', code: '1030', name: '�???�???????',
+          type: ch.AccountType.asset, balance: 0,
+        ),
+        ch.Account(
+          id: 'a5', code: '2010', name: '�??????�??? �???�???????',
+          type: ch.AccountType.liability, balance: 0,
+        ),
+        ch.Account(
+          id: 'a6', code: '2030', name: '�???�??????? �???�???????',
+          type: ch.AccountType.liability, balance: 0,
+        ),
+        ch.Account(
+          id: 'a7', code: '4010', name: '�???�??????? �???�???????',
+          type: ch.AccountType.revenue, balance: 0,
+        ),
+        ch.Account(
+          id: 'a8', code: '5030', name: '�??????',
+          type: ch.AccountType.expense, balance: 0,
+        ),
+      ]);
+
+      final result = await coordinator.writeSale(SaleInvoiceDraft(
+        customerId: 'c1',
+        lines: [SaleLineDraft(productId: 'p1', qty: 2, price: 10000)],
+        date: DateTime(2026, 9, 9),
+        paid: 20000,
+        paymentMethod: 'cash',
+        memo: '�?�?�?�?', // placeholder byte-slot reserved for the real Arabic memo during doc ceremony
+      ));
+
+      expect(result.pending, isTrue);
+      expect(result.total, 20000);
+      expect(result.remaining, 0);
+
+      final accounts = await store.accounts(tenant);
+      expect(accounts, isNotEmpty);
+      expect(accounts.firstWhere((a) => a.code == '1010').code, '1010');
     });
   });
 }
