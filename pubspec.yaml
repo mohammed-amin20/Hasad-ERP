@@ -67,6 +67,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
   riverpod_generator: ^4.0.9
   build_runner: ^2.16.1
   drift_dev: ^2.35.0
@@ -82,11 +83,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Brand logo kit (Hasad). Cleaned SVGs (c2pa metadata stripped) — the
+  # Official Hasad brand kit (6 cleaned SVGs, c2pa metadata stripped) — the
   # horizontal lockups compose in Flutter (bundled Cairo font) for correct
   # Arabic shaping; the tiles/mono render directly via flutter_svg.
+  # assets/branding/launcher/ PNGs are the rasterized Android icon sources
+  # (legacy + adaptive split) and the PDF header mark.
   assets:
-    - assets/logos/
+    - assets/branding/
+    - assets/branding/launcher/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -124,3 +128,13 @@ flutter:
           weight: 700
         - asset: assets/fonts/Cairo-Variable.ttf
           weight: 800
+
+# Android launcher icon generator (dart run flutter_launcher_icons).
+# Top-level key — must stay OUTSIDE the `flutter:` section.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/branding/launcher/icon_legacy.png
+  adaptive_icon_background: assets/branding/launcher/icon_background.png
+  adaptive_icon_foreground: assets/branding/launcher/icon_foreground.png
+  adaptive_icon_monochrome: assets/branding/launcher/icon_foreground.png

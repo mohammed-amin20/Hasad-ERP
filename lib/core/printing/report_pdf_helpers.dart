@@ -7,7 +7,7 @@ import '../../core/utils/money.dart';
 /// Shared helpers for all report PDF builders.
 abstract final class ReportPdfHelpers {
   static const cairoAsset = 'assets/fonts/Cairo-Variable.ttf';
-  static const logoAsset = 'assets/logos/hasad-logo-mark.png';
+  static const logoAsset = 'assets/branding/hasad-logo-mark.png';
   static const primary = PdfColor.fromInt(0xFF2563EB);
   static const success = PdfColor.fromInt(0xFF16A34A);
   static const danger = PdfColor.fromInt(0xFFDC2626);

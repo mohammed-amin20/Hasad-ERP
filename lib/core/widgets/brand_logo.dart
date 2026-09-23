@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// The حصاد mark (DESIGN_SYSTEM.md §1): the wheat tile rendered from the actual
-/// brand SVG. Always circle-clipped so the compact mark reads consistently on
-/// every surface (user preference).
+/// The حصاد mark (DESIGN_SYSTEM.md §1): the wheat tile rendered from the
+/// official brand SVG. The tile is a ready-made squircle (rx=112 built into
+/// the artwork), so it renders as-is with `BoxFit.contain` — no extra
+/// clipping needed.
 ///
 /// [variant] picks the source tile for the surface it sits on:
-/// - [BrandMarkVariant.amber] — warp on the amber tile (`hasad-logo-icon-amber`),
-///   for light/white surfaces (sidebar, app bar, login card).
-/// - [BrandMarkVariant.dark] — gold warp on the slate tile (`hasad-logo-icon`),
-///   for dark surfaces (splash, dark panels).
+/// - [BrandMarkVariant.amber] — amber squircle (`hasad-logo-icon`), for
+///   light/white surfaces (sidebar, app bar, login card).
+/// - [BrandMarkVariant.dark] — navy squircle (`hasad-logo-icon-navy`), for
+///   dark surfaces (splash, dark panels).
 class BrandLogo extends StatelessWidget {
   const BrandLogo({super.key, this.size = 40, this.variant = BrandMarkVariant.amber});
 
@@ -17,7 +18,7 @@ class BrandLogo extends StatelessWidget {
   final BrandMarkVariant variant;
 
   String get _asset => variant == BrandMarkVariant.dark
-      ? BrandAssets.iconDark
+      ? BrandAssets.iconNavy
       : BrandAssets.iconAmber;
 
   @override
@@ -28,14 +29,12 @@ class BrandLogo extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: ClipOval(
-          child: SvgPicture.asset(
-            _asset,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            semanticsLabel: 'شعار حصاد',
-          ),
+        child: SvgPicture.asset(
+          _asset,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          semanticsLabel: 'شعار حصاد',
         ),
       ),
     );
@@ -44,11 +43,13 @@ class BrandLogo extends StatelessWidget {
 
 enum BrandMarkVariant { amber, dark }
 
-/// Bundled brand SVG asset paths.
+/// Official Hasad brand kit asset paths (assets/branding/, cleaned SVGs).
 abstract final class BrandAssets {
-  static const String iconDark = 'assets/logos/hasad-logo-icon.svg';
-  static const String iconAmber = 'assets/logos/hasad-logo-icon-amber.svg';
-  static const String mono = 'assets/logos/hasad-logo-mono.svg';
-  static const String lockupDark = 'assets/logos/hasad-logo-horizontal-dark.svg';
-  static const String lockupLight = 'assets/logos/hasad-logo-horizontal-light.svg';
+  static const String iconNavy = 'assets/branding/hasad-logo-icon-navy.svg';
+  static const String iconAmber = 'assets/branding/hasad-logo-icon.svg';
+  static const String iconPresentation = 'assets/branding/hasad-logo-icon-presentation.svg';
+  static const String mono = 'assets/branding/hasad-logo-mono.svg';
+  static const String lockupDark = 'assets/branding/hasad-logo-horizontal-dark.svg';
+  static const String lockupLight = 'assets/branding/hasad-logo-horizontal-light.svg';
+  static const String logoMark = 'assets/branding/hasad-logo-mark.png';
 }

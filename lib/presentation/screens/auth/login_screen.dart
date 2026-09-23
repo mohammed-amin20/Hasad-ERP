@@ -21,17 +21,30 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+
+  late final AnimationController _entrance;
 
   bool _submitting = false;
   String? _error;
   bool _obscure = true;
 
   @override
+  void initState() {
+    super.initState();
+    _entrance = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+    )..forward();
+  }
+
+  @override
   void dispose() {
+    _entrance.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -125,15 +138,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 padding: const EdgeInsets.all(24),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: screenWidth * 0.92),
-                  child: _LoginCard(
-                    formKey: _formKey,
-                    email: _email,
-                    password: _password,
-                    obscure: _obscure,
-                    onToggleObscure: () => setState(() => _obscure = !_obscure),
-                    error: _error,
-                    submitting: _submitting,
-                    onSubmit: _submit,
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _entrance,
+                      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+                    ),
+                    child: SlideTransition(
+                      position: _entrance.drive(
+                        Tween(
+                          begin: const Offset(0, 0.06),
+                          end: Offset.zero,
+                        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                      ),
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.97, end: 1.0).animate(
+                          CurvedAnimation(
+                            parent: _entrance,
+                            curve: const Interval(
+                              0.0,
+                              0.8,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                        ),
+                        child: _LoginCard(
+                          formKey: _formKey,
+                          email: _email,
+                          password: _password,
+                          obscure: _obscure,
+                          onToggleObscure: () =>
+                              setState(() => _obscure = !_obscure),
+                          error: _error,
+                          submitting: _submitting,
+                          onSubmit: _submit,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -154,6 +194,60 @@ class _Glow extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(shape: BoxShape.circle, gradient: gradient),
+    );
+  }
+}
+
+/// Brand header for the login card: the official squircle on a soft amber
+/// halo, the Arabic wordmark + Latin submark (BrandLockup), the tagline, and
+/// a slim brand-gradient accent line echoing the stat-card accent pattern.
+class _BrandMoment extends StatelessWidget {
+  const _BrandMoment();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.brandEnd.withValues(alpha: 0.16),
+                    AppColors.brandEnd.withValues(alpha: 0.05),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: const SizedBox(width: 180, height: 180),
+            ),
+            const BrandLockup(width: 200),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'منصة إدارة الأعمال والمحاسبة الذكية',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          height: 4,
+          width: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: AppColors.brandGradient,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -181,7 +275,6 @@ class _LoginCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Container(
       width: 400,
       padding: const EdgeInsets.fromLTRB(36, 40, 36, 40),
@@ -203,16 +296,7 @@ class _LoginCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Center(child: BrandLockup(width: 200)),
-            const SizedBox(height: 20),
-            Text(
-              'منصة إدارة الأعمال والمحاسبة الذكية',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            const _BrandMoment(),
             const SizedBox(height: 24),
             TextFormField(
               controller: email,
