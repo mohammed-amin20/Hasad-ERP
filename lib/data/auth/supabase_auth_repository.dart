@@ -61,19 +61,14 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<List<TenantRef>> getUserTenants() async {
     try {
-      final userId = _client.auth.currentUser?.id;
-      if (userId == null) return [];
+      if (_client.auth.currentUser == null) return [];
 
-      final rows = await _client
-          .from('user_tenants')
-          .select('tenant_id, role, tenants!inner(name)')
-          .eq('user_id', _client.auth.currentUser!.id);
+      final rows = await _client.rpc('get_user_tenants');
 
       return rows.map((row) {
-        final tenant = row['tenants'] as Map<String, dynamic>;
         return TenantRef(
           id: row['tenant_id'] as String,
-          name: tenant['name'] as String,
+          name: row['tenant_name'] as String,
           role: AppRole.fromDb(row['role'] as String?),
         );
       }).toList();
