@@ -78,13 +78,19 @@ void main() {
       expect(search.map((c) => c.id), ['c2']);
     });
 
-    test('offline with an empty mirror serves an empty list', () async {
+    test('offline with an empty mirror surfaces an honest error (no silent [])',
+        () async {
       final repo = OfflineCustomerRepository(
         _FakeCustomers.offline(),
         store: store,
         tenantId: tenant,
       );
-      expect(await repo.listAll(), isEmpty);
+      // A.5 cache-first: an empty mirror + unreachable remote throws honestly
+      // instead of silently serving [].
+      expect(
+        () => repo.listAll(),
+        throwsA(isA<NetworkException>()),
+      );
     });
 
     test('create delegates online and mirrors the created row', () async {

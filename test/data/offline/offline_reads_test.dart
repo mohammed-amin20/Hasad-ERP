@@ -29,26 +29,33 @@ void main() {
   });
 
   group('cacheFirst', () {
-    test('serves the network value and mirrors it', () async {
-      final mirrored = <String>[];
+    test('serves the local mirror immediately (cache-first, no verdict gate)', () async {
+      var networkCalls = 0;
       final value = await cacheFirst(
         store: store,
         tenantId: tenant,
-        network: () async => 'online',
-        mirror: (v) async => mirrored.add(v),
+        network: () async {
+          networkCalls++;
+          return 'online';
+        },
         local: () async => 'local',
       );
-      expect(value, 'online');
-      expect(mirrored, ['online']);
+      // Cache-first: a non-empty local mirror is served immediately and NEVER
+      // gated by the connectivity verdict. The live read fans out in the
+      // background (best-effort refresh, mirror-on-success) — it does NOT gate
+      // or serve the path.
+      expect(value, 'local');
+      // Background live refresh fires without blocking the served mirror.
+      await Future<void>.delayed(Duration.zero);
+      expect(networkCalls, 1);
     });
 
-    test('falls back to the local read on a NetworkException', () async {
+    test('falls back to the local read on a NetworkException (empty mirror)', () async {
       var localCalls = 0;
       final value = await cacheFirst(
         store: store,
         tenantId: tenant,
         network: () async => throw const NetworkException(),
-        mirror: (v) async {},
         local: () async {
           localCalls++;
           return 'local';
@@ -58,31 +65,48 @@ void main() {
       expect(localCalls, 1);
     });
 
-    test('a failing mirror never fails an otherwise successful read', () async {
-      final value = await cacheFirst(
-        store: store,
-        tenantId: tenant,
-        network: () async => 'online',
-        mirror: (v) async => throw StateError('mirror boom'),
-        local: () async => 'local',
+    test('an honest error over a silent [] when the mirror is empty and remote unreachable', () async {
+      expect(
+        () => cacheFirst(
+          store: store,
+          tenantId: tenant,
+          network: () async => throw const NetworkException(),
+          local: () async => const <String>[],
+        ),
+        throwsA(isA<NetworkException>()),
       );
-      expect(value, 'online');
     });
 
-    test('without a store the local read still decides the fallback', () async {
+    test('web/unstamped tenant degrades to a plain live read (never gates on verdict)', () async {
+      var networkCalls = 0;
       final value = await cacheFirst(
         store: null,
         tenantId: null,
-        network: () async => throw const NetworkException(),
+        network: () async {
+          networkCalls++;
+          return 'online';
+        },
         local: () async => 'local',
       );
-      expect(value, 'local');
+      expect(value, 'online');
+      expect(networkCalls, 1);
+    });
+
+    test('a populated mirror with a transient blip is served immediately (no silent [])', () async {
+      await store.mirrorCustomers(tenant, const []);
+      final value = await cacheFirst(
+        store: store,
+        tenantId: tenant,
+        network: () async => throw const NetworkException(),
+        local: () async => ['populated'],
+      );
+      expect(value, ['populated']);
     });
   });
 
   group('cacheLast', () {
-    test('caches the serialized payload on a successful read', () async {
-      await cacheLast(
+    test('online serves fresh data and refreshes the cache', () async {
+      final value = await cacheLast(
         store: store,
         tenantId: tenant,
         key: 'k1',
@@ -90,12 +114,13 @@ void main() {
         fromCached: int.parse,
         toPayload: (v) => '$v',
       );
+      expect(value, 42);
       expect(await store.report(tenant, 'k1'), '42');
     });
 
     test('offline serves the last cached payload', () async {
       await store.putReport(tenant, 'k2', '{"n":7}');
-      final value = await cacheLast<Map<String, dynamic>>(
+      final value = await cacheLast(
         store: store,
         tenantId: tenant,
         key: 'k2',
@@ -106,15 +131,15 @@ void main() {
       expect(value['n'], 7);
     });
 
-    test('offline without a cached payload rethrows', () async {
+    test('offline without a cached payload rethrows (honest error, no silent [])', () async {
       expect(
         () => cacheLast(
           store: store,
           tenantId: tenant,
           key: 'missing',
           network: () async => throw const NetworkException(),
-          fromCached: (p) => p,
-          toPayload: (v) => v,
+          fromCached: int.parse,
+          toPayload: (v) => '$v',
         ),
         throwsA(isA<NetworkException>()),
       );
@@ -124,12 +149,12 @@ void main() {
       final value = await cacheLast(
         store: store,
         tenantId: tenant,
-        key: 'ro',
-        network: () async => 1,
+        key: 'k3',
+        network: () async => 42,
         fromCached: int.parse,
         toPayload: (v) => throw StateError('serialize boom'),
       );
-      expect(value, 1);
+      expect(value, 42);
     });
   });
 }
