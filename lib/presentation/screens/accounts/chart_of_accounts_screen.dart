@@ -7,12 +7,18 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/status_badge.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
 import '../../../domain/accounts/account_draft.dart';
 import '../../providers/accounts_providers.dart';
+import '../../widgets/filter_bar.dart';
 import '../../widgets/freshness_chip.dart';
+import '../../widgets/record_table.dart';
+import '../../widgets/state_views.dart';
 
 class ChartOfAccountsScreen extends ConsumerStatefulWidget {
   const ChartOfAccountsScreen({super.key});
@@ -23,13 +29,14 @@ class ChartOfAccountsScreen extends ConsumerStatefulWidget {
 }
 
 class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
-  static const _typeOrder = [
-    AccountType.asset,
-    AccountType.liability,
-    AccountType.equity,
-    AccountType.revenue,
-    AccountType.expense,
-  ];
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,13 +55,134 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       ],
       child: Stack(
         children: [
-          chartAsync.when(
-            loading: () => const Center(child: AppProgress()),
-            error: (e, _) => _ErrorState(message: e.toString()),
-            data: (accounts) {
-              if (accounts.isEmpty) return const _EmptyState();
-              return _GroupedList(accounts: accounts, typeOrder: _typeOrder);
-            },
+          Column(
+            children: [
+              FilterBar(
+                searchController: _searchCtrl,
+                hintText: 'بحث بالكود أو الاسم...',
+                onSearchChanged: (value) => setState(() => _query = value.trim()),
+                onClearSearch: () {
+                  _searchCtrl.clear();
+                  setState(() => _query = '');
+                },
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: AsyncSection<List<Account>>(
+                  value: chartAsync,
+                  onRetry: () => ref.invalidate(chartOfAccountsProvider),
+                  emptyIcon: FontAwesomeIcons.sitemap,
+                  emptyTitle: 'لا توجد حسابات',
+                  emptyMessage: 'أضف أول حساب لبدء بناء دليل الحسابات.',
+                  builder: (context, accounts) {
+                    final filtered = _query.isEmpty
+                        ? accounts
+                        : accounts
+                            .where((a) =>
+                                a.code.contains(_query) ||
+                                a.name.contains(_query))
+                            .toList();
+                    if (filtered.isEmpty) {
+                      return const EmptyStateCard(
+                        icon: FontAwesomeIcons.magnifyingGlass,
+                        title: 'لا نتائج',
+                        message: 'لا يوجد حساب يطابق البحث الحالي.',
+                      );
+                    }
+
+                    final groups = <AccountType, List<Account>>{};
+                    for (final account in filtered) {
+                      (groups[account.type] ??= []).add(account);
+                    }
+
+                    final sortedAccounts = <Account>[];
+                    const typeOrder = [
+                      AccountType.asset,
+                      AccountType.liability,
+                      AccountType.equity,
+                      AccountType.revenue,
+                      AccountType.expense,
+                    ];
+                    for (final type in typeOrder) {
+                  final list = groups[type];
+                  if (list != null && list.isNotEmpty) {
+                    sortedAccounts.addAll(list);
+                  }
+                }
+
+                return RecordTable<Account>(
+                      items: sortedAccounts,
+                      onTap: (a) => _showAccountForm(context),
+                      columns: [
+                        RecordColumn<Account>(
+                          label: 'الكود',
+                          primary: true,
+                          flex: 2,
+                          cell: (context, a) => Text(
+                            a.code,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                        RecordColumn<Account>(
+                          label: 'اسم الحساب',
+                          flex: 3,
+                          cell: (context, a) => Text(
+                            a.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        RecordColumn<Account>(
+                          label: 'الحساب الأب',
+                          flex: 2,
+                          cell: (context, a) => Text(
+                            a.parentCode ?? '—',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        RecordColumn<Account>(
+                          label: 'النوع',
+                          flex: 2,
+                          cell: (context, a) => StatusBadge(
+                            label: a.type.label,
+                            palette: _typePalette(a.type),
+                          ),
+                        ),
+                        RecordColumn<Account>(
+                          label: 'الرصيد',
+                          flex: 2,
+                          cell: (context, a) => Text(
+                            Money.format(a.balance),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: a.balance < 0
+                                  ? AppColors.danger
+                                  : AppColors.textPrimary,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ],
+                      trailing: (context, a) => const SizedBox.shrink(),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
           Positioned(
             right: 0,
@@ -69,6 +197,21 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
         ],
       ),
     );
+  }
+
+  static BadgePalette _typePalette(AccountType type) {
+    switch (type) {
+      case AccountType.asset:
+        return BadgePalette.paid;
+      case AccountType.liability:
+        return BadgePalette.unpaid;
+      case AccountType.equity:
+        return BadgePalette.partial;
+      case AccountType.revenue:
+        return BadgePalette.paid;
+      case AccountType.expense:
+        return BadgePalette.warning;
+    }
   }
 
   void _showAccountForm(BuildContext context) {
@@ -105,157 +248,16 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
   }
 }
 
-class _GroupedList extends StatelessWidget {
-  const _GroupedList({required this.accounts, required this.typeOrder});
-
-  final List<Account> accounts;
-  final List<AccountType> typeOrder;
-
-  @override
-  Widget build(BuildContext context) {
-    final groups = <AccountType, List<Account>>{};
-    for (final account in accounts) {
-      (groups[account.type] ??= []).add(account);
-    }
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 88),
-      children: [
-        for (final type in typeOrder)
-          if (groups[type]?.isNotEmpty ?? false) ...[
-            _TypeHeader(type: type, count: groups[type]!.length),
-            for (final account in groups[type]!) _AccountTile(account: account),
-            const SizedBox(height: 16),
-          ],
-      ],
-    );
-  }
-}
-
-class _TypeHeader extends StatelessWidget {
-  const _TypeHeader({required this.type, required this.count});
-
-  final AccountType type;
-  final int count;
-
-  static const _typeColors = {
-    AccountType.asset: AppColors.success,
-    AccountType.liability: AppColors.danger,
-    AccountType.equity: AppColors.secondary,
-    AccountType.revenue: AppColors.primary,
-    AccountType.expense: AppColors.warning,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _typeColors[type] ?? AppColors.textMuted;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            type.label,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '($count)',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountTile extends StatelessWidget {
-  const _AccountTile({required this.account});
-
-  final Account account;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final balance = account.balance;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              account.code,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  account.name,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  account.parentCode ?? account.type.label,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            Money.format(balance),
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: balance < 0 ? AppColors.danger : AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountFormSheet extends StatefulWidget {
+class _AccountFormSheet extends ConsumerStatefulWidget {
   const _AccountFormSheet({required this.onSave});
 
   final Future<void> Function(AccountDraft draft) onSave;
 
   @override
-  State<_AccountFormSheet> createState() => _AccountFormSheetState();
+  ConsumerState<_AccountFormSheet> createState() => _AccountFormSheetState();
 }
 
-class _AccountFormSheetState extends State<_AccountFormSheet> {
+class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
   final _formKey = GlobalKey<FormState>();
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -301,9 +303,33 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'إضافة حساب جديد',
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                const IconChip(
+                  icon: FontAwesomeIcons.sitemap,
+                  color: AppColors.primary,
+                  size: 40,
+                  iconSize: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'إضافة حساب جديد',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'أدخل بيانات الحساب الجديد',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             TextFormField(
@@ -375,77 +401,16 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
+            FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: AppProgress(strokeWidth: 2),
+                      child:
+                          AppProgress(strokeWidth: 2, color: Colors.white),
                     )
                   : const Text('إضافة'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.sitemap,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'لا توجد حسابات',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),

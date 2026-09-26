@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../../domain/invoices/invoice.dart';
-
-/// Colour pair for the design-system status badges (DESIGN_SYSTEM §2).
 class BadgePalette {
   const BadgePalette({required this.background, required this.foreground});
 
@@ -26,9 +24,15 @@ class BadgePalette {
     background: AppColors.badgeCommissionBg,
     foreground: AppColors.badgeCommissionFg,
   );
+  static const neutral = BadgePalette(
+    background: AppColors.surfaceMuted,
+    foreground: AppColors.textSecondary,
+  );
+  static const warning = BadgePalette(
+    background: AppColors.warningSoft,
+    foreground: AppColors.badgePartialFg,
+  );
 }
-
-/// Pill-shaped status badge used across lists.
 class StatusBadge extends StatelessWidget {
   const StatusBadge({super.key, required this.label, required this.palette});
 
@@ -54,15 +58,11 @@ class StatusBadge extends StatelessWidget {
     );
   }
 }
-
-/// Palette for an invoice payment status.
 BadgePalette badgeForStatus(InvoiceStatus status) => switch (status) {
   InvoiceStatus.paid => BadgePalette.paid,
   InvoiceStatus.partial => BadgePalette.partial,
   InvoiceStatus.unpaid => BadgePalette.unpaid,
 };
-
-/// Palette for an invoice ownership badge.
 BadgePalette badgeForOwnership(InvoiceOwnership ownership) =>
     ownership == InvoiceOwnership.consignment
     ? BadgePalette.commission

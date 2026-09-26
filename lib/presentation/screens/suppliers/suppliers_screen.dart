@@ -5,10 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/status_badge.dart';
 import '../../../domain/suppliers/supplier.dart';
 import '../../../domain/suppliers/supplier_draft.dart';
 import '../../providers/suppliers_providers.dart';
+import '../../widgets/confirm_dialog.dart';
+import '../../widgets/filter_bar.dart';
+import '../../widgets/record_table.dart';
 
 class SuppliersScreen extends ConsumerStatefulWidget {
   const SuppliersScreen({super.key});
@@ -19,20 +25,11 @@ class SuppliersScreen extends ConsumerStatefulWidget {
 
 class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
   final _searchCtrl = TextEditingController();
-  bool _searchOpen = false;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _toggleSearch() {
-    setState(() => _searchOpen = !_searchOpen);
-    if (!_searchOpen) {
-      _searchCtrl.clear();
-      ref.read(supplierSearchProvider.notifier).update('');
-    }
   }
 
   @override
@@ -42,69 +39,111 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
     return PageScaffold(
       title: 'الموردون',
       subtitle: 'الموردون المباشرون وبالعمولة',
-      actions: [
-        IconButton(
-          tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
-          onPressed: _toggleSearch,
-          icon: FaIcon(
-            _searchOpen
-                ? FontAwesomeIcons.xmark
-                : FontAwesomeIcons.magnifyingGlass,
-          ),
-        ),
-      ],
       child: Stack(
         children: [
           Column(
             children: [
-              if (_searchOpen)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    textInputAction: TextInputAction.search,
-                    onChanged: (v) =>
-                        ref.read(supplierSearchProvider.notifier).update(v),
-                    decoration: InputDecoration(
-                      hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const FaIcon(
-                        FontAwesomeIcons.magnifyingGlass,
+              FilterBar(
+                searchController: _searchCtrl,
+                hintText: 'بحث بالاسم أو رقم الهاتف...',
+                onSearchChanged: (value) =>
+                    ref.read(supplierSearchProvider.notifier).update(value),
+                onClearSearch: () {
+                  _searchCtrl.clear();
+                  ref.read(supplierSearchProvider.notifier).update('');
+                  setState(() {});
+                },
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: AsyncSection<List<Supplier>>(
+                  value: listAsync,
+                  onRetry: () => ref.invalidate(suppliersListProvider),
+                  emptyIcon: FontAwesomeIcons.building,
+                  emptyTitle: 'لا يوجد موردون',
+                  emptyMessage: 'اضغط على زر الإضافة لتسجيل أول مورد.',
+                  emptyAction: FilledButton.icon(
+                    onPressed: () => _showSupplierForm(context),
+                    icon: const FaIcon(FontAwesomeIcons.plus, size: 13),
+                    iconAlignment: IconAlignment.end,
+                    label: const Text('إضافة مورد'),
+                  ),
+                  builder: (context, suppliers) => RecordTable<Supplier>(
+                    items: suppliers,
+                    columns: [
+                      RecordColumn<Supplier>(
+                        label: 'المورد',
+                        primary: true,
+                        flex: 3,
+                        cell: (context, s) => Row(
+                          children: [
+                            IconChip(
+                              icon: FontAwesomeIcons.building,
+                              color: AppColors.secondary,
+                              size: 32,
+                              iconSize: 13,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                s.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
-                              tooltip: 'مسح البحث',
-                              icon: const FaIcon(FontAwesomeIcons.xmark),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                ref
-                                    .read(supplierSearchProvider.notifier)
-                                    .update('');
-                              },
-                            )
-                          : null,
+                      RecordColumn<Supplier>(
+                        label: 'الهاتف',
+                        flex: 2,
+                        cell: (context, s) => Text(
+                          s.phone?.isNotEmpty == true ? s.phone! : '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      RecordColumn<Supplier>(
+                        label: 'نوع التعامل',
+                        flex: 2,
+                        cell: (context, s) => s.dealType ==
+                                SupplierDealType.commission
+                            ? _CommissionBadge(rate: s.commissionRate)
+                            : const StatusBadge(
+                                label: 'مباشر',
+                                palette: BadgePalette.neutral,
+                              ),
+                      ),
+                    ],
+                    trailing: (context, s) => PopupMenuButton<String>(
+                      tooltip: 'إجراءات المورد',
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _showSupplierForm(context, supplier: s);
+                        }
+                        if (value == 'delete') _confirmDelete(s);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                        PopupMenuItem(value: 'delete', child: Text('حذف')),
+                      ],
                     ),
                   ),
-                ),
-              Expanded(
-                child: listAsync.when(
-                  loading: () => const Center(child: AppProgress()),
-                  error: (e, _) => _ErrorState(message: e.toString()),
-                  data: (suppliers) {
-                    if (suppliers.isEmpty) {
-                      return const _EmptyState();
-                    }
-                    return _SupplierList(suppliers: suppliers);
-                  },
                 ),
               ),
             ],
           ),
           Positioned(
-            right: 0,
+            left: 0,
             bottom: 0,
             child: FloatingActionButton(
               heroTag: 'suppliers_add',
+              tooltip: 'إضافة مورد',
               onPressed: () => _showSupplierForm(context),
               child: const FaIcon(FontAwesomeIcons.plus),
             ),
@@ -150,87 +189,28 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
       ),
     );
   }
-}
 
-class _SupplierList extends StatelessWidget {
-  const _SupplierList({required this.suppliers});
-
-  final List<Supplier> suppliers;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      itemCount: suppliers.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final s = suppliers[index];
-        return _SupplierTile(
-          supplier: s,
-          onEdit: () {
-            final screen = context
-                .findAncestorStateOfType<_SuppliersScreenState>();
-            screen?._showSupplierForm(context, supplier: s);
-          },
-          onDelete: () => _confirmDelete(context, s),
-        );
-      },
+  Future<void> _confirmDelete(Supplier supplier) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'حذف المورد',
+      message: 'هل تريد حذف "${supplier.name}" نهائياً؟',
+      confirmLabel: 'حذف',
+      tone: ConfirmTone.danger,
     );
-  }
-}
-
-class _SupplierTile extends StatelessWidget {
-  const _SupplierTile({
-    required this.supplier,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final Supplier supplier;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isCommission = supplier.dealType == SupplierDealType.commission;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
-        child: Text(
-          supplier.name.isNotEmpty ? supplier.name[0] : '?',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: AppColors.secondary,
-            fontWeight: FontWeight.w700,
-          ),
+    if (!confirmed || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(suppliersListProvider.notifier).delete(supplier.id);
+      messenger.showSnackBar(const SnackBar(content: Text('تم حذف المورد')));
+    } on Object catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text(mapErrorToAppException(error).message),
         ),
-      ),
-      title: Text(
-        supplier.name,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (supplier.phone != null && supplier.phone!.isNotEmpty)
-            Text(supplier.phone!, style: theme.textTheme.bodySmall),
-          if (isCommission)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: _CommissionBadge(rate: supplier.commissionRate),
-            ),
-        ],
-      ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (v) {
-          if (v == 'edit') onEdit();
-          if (v == 'delete') onDelete();
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('تعديل')),
-          PopupMenuItem(value: 'delete', child: Text('حذف')),
-        ],
-      ),
-    );
+      );
+    }
   }
 }
 
@@ -242,20 +222,9 @@ class _CommissionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = rate == null ? 'بالعمولة' : 'بالعمولة — $rate%';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEF3C7),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF92400E),
-        ),
-      ),
+    return StatusBadge(
+      label: label,
+      palette: BadgePalette.warning,
     );
   }
 }
@@ -353,9 +322,22 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                _isEditing ? 'تعديل المورد' : 'إضافة مورد جديد',
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                children: [
+                  const IconChip(
+                    icon: FontAwesomeIcons.building,
+                    color: AppColors.secondary,
+                    size: 40,
+                    iconSize: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _isEditing ? 'تعديل المورد' : 'إضافة مورد جديد',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -439,7 +421,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
                     ? const SizedBox(
@@ -451,115 +433,6 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-void _confirmDelete(BuildContext context, Supplier supplier) {
-  showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('حذف المورد'),
-      content: Text('هل تريد حذف "${supplier.name}" نهائياً؟'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('إلغاء'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-          onPressed: () async {
-            final navigator = Navigator.of(context);
-            final messenger = ScaffoldMessenger.of(context);
-            final container = ProviderScope.containerOf(context);
-            navigator.pop();
-            try {
-              await container
-                  .read(suppliersListProvider.notifier)
-                  .delete(supplier.id);
-              messenger.showSnackBar(
-                const SnackBar(content: Text('تم حذف المورد')),
-              );
-            } on Object catch (error) {
-              messenger.showSnackBar(
-                SnackBar(
-                  backgroundColor: AppColors.danger,
-                  content: Text(mapErrorToAppException(error).message),
-                ),
-              );
-            }
-          },
-          child: const Text('حذف'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaIcon(
-              FontAwesomeIcons.building,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'لا يوجد موردون',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'اضغط على + لإضافة أول مورد',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
         ),
       ),
     );

@@ -5,11 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../domain/inventory/inventory.dart';
 import '../../../domain/products/product.dart';
 import '../../providers/inventory_providers.dart';
+import '../../widgets/filter_bar.dart';
+import '../../widgets/record_table.dart';
+import '../../widgets/state_views.dart';
 import '../../widgets/invoice_input_fields.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
@@ -21,23 +26,12 @@ class InventoryScreen extends ConsumerStatefulWidget {
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   final _searchCtrl = TextEditingController();
-  bool _searchOpen = false;
   String _query = '';
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _toggleSearch() {
-    setState(() {
-      _searchOpen = !_searchOpen;
-      if (!_searchOpen) {
-        _searchCtrl.clear();
-        _query = '';
-      }
-    });
   }
 
   @override
@@ -47,48 +41,26 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     return PageScaffold(
       title: 'المخزون',
       subtitle: 'الأرصدة والجرد الدوري',
-      actions: [
-        IconButton(
-          tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
-          onPressed: _toggleSearch,
-          icon: FaIcon(
-            _searchOpen
-                ? FontAwesomeIcons.xmark
-                : FontAwesomeIcons.magnifyingGlass,
-          ),
-        ),
-      ],
       child: Column(
         children: [
-          if (_searchOpen)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                onChanged: (v) => setState(() => _query = v.trim()),
-                decoration: InputDecoration(
-                  hintText: 'بحث بالاسم أو الباركود...',
-                  prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          tooltip: 'مسح البحث',
-                          icon: const FaIcon(FontAwesomeIcons.xmark),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _query = '');
-                          },
-                        )
-                      : null,
-                ),
-              ),
-            ),
+          FilterBar(
+            searchController: _searchCtrl,
+            hintText: 'بحث بالاسم أو الباركود...',
+            onSearchChanged: (value) => setState(() => _query = value.trim()),
+            onClearSearch: () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
+          ),
+          const SizedBox(height: 16),
           Expanded(
-            child: listAsync.when(
-              loading: () => const Center(child: AppProgress()),
-              error: (e, _) => _ErrorState(message: e.toString()),
-              data: (products) {
+            child: AsyncSection<List<Product>>(
+              value: listAsync,
+              onRetry: () => ref.invalidate(inventoryProductsProvider),
+              emptyIcon: FontAwesomeIcons.boxesStacked,
+              emptyTitle: 'لا توجد منتجات',
+              emptyMessage: 'سجّل المنتجات أولاً ليظهر رصيد المخزون هنا.',
+              builder: (context, products) {
                 final filtered = _query.isEmpty
                     ? products
                     : products
@@ -99,14 +71,71 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                           )
                           .toList();
                 if (filtered.isEmpty) {
-                  return const _EmptyState();
+                  return const EmptyStateCard(
+                    icon: FontAwesomeIcons.magnifyingGlass,
+                    title: 'لا نتائج',
+                    message: 'لا يوجد منتج يطابق البحث الحالي.',
+                  );
                 }
-                return ListView.separated(
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) => _ProductStockTile(
-                    product: filtered[i],
-                    onCount: () => _showCountSheet(filtered[i]),
+                return RecordTable<Product>(
+                  items: filtered,
+                  onTap: (p) => _showCountSheet(p),
+                  columns: [
+                    RecordColumn<Product>(
+                      label: 'المنتج',
+                      primary: true,
+                      flex: 3,
+                      cell: (context, p) => Row(
+                        children: [
+                          const IconChip(
+                            icon: FontAwesomeIcons.box,
+                            color: AppColors.secondary,
+                            size: 32,
+                            iconSize: 13,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              p.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    RecordColumn<Product>(
+                      label: 'الرصيد',
+                      flex: 2,
+                      cell: (context, p) => _StockCell(product: p),
+                    ),
+                    RecordColumn<Product>(
+                      label: 'الحالة',
+                      flex: 2,
+                      cell: (context, p) => p.qty <= p.reorderLevel
+                          ? StatusBadge(
+                              label: p.qty == 0 ? 'نفد' : 'منخفض',
+                              palette: BadgePalette.unpaid,
+                            )
+                          : const StatusBadge(
+                              label: 'متوفر',
+                              palette: BadgePalette.paid,
+                            ),
+                    ),
+                  ],
+                  trailing: (context, p) => OutlinedButton.icon(
+                    onPressed: () => _showCountSheet(p),
+                    icon: const FaIcon(FontAwesomeIcons.clipboardCheck, size: 12),
+                    iconAlignment: IconAlignment.end,
+                    label: const Text('جرد'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 );
               },
@@ -151,55 +180,33 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 }
 
-class _ProductStockTile extends StatelessWidget {
-  const _ProductStockTile({required this.product, required this.onCount});
+class _StockCell extends StatelessWidget {
+  const _StockCell({required this.product});
 
   final Product product;
-  final VoidCallback onCount;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final qtyText = formatQty(product.qty, product.unitType);
     final reorderText = formatQty(product.reorderLevel, product.unitType);
-    final isLow = product.qty <= product.reorderLevel;
-
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
-        child: Text(
-          product.name.isNotEmpty ? product.name[0] : '?',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: AppColors.secondary,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$qtyText ${product.unit}',
+          style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
-      ),
-      title: Text(
-        product.name,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Row(
-        children: [
-          Text(
-            '$qtyText ${product.unit} · حد الإعادة: $reorderText',
-            style: theme.textTheme.bodySmall,
+        Text(
+          'حد الإعادة: $reorderText',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.textMuted,
           ),
-          if (isLow) ...[
-            const SizedBox(width: 8),
-            StatusBadge(
-              label: product.qty == 0 ? 'نفد' : 'منخفض',
-              palette: BadgePalette.unpaid,
-            ),
-          ],
-        ],
-      ),
-      trailing: OutlinedButton.icon(
-        onPressed: onCount,
-        icon: const FaIcon(FontAwesomeIcons.clipboardCheck, size: 18),
-        label: const Text('جرد'),
-        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-      ),
+        ),
+      ],
     );
   }
 }
@@ -279,15 +286,34 @@ class _CountSheetState extends State<_CountSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'جرد ${product.name}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'مخزون النظام حالياً: '
-                '${formatQty(product.qty, product.unitType)} ${product.unit}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Row(
+                children: [
+                  const IconChip(
+                    icon: FontAwesomeIcons.clipboardCheck,
+                    color: AppColors.secondary,
+                    size: 40,
+                    iconSize: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'جرد ${product.name}',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'مخزون النظام حالياً: '
+                          '${formatQty(product.qty, product.unitType)} ${product.unit}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               ProductQuantityField(
@@ -323,7 +349,7 @@ class _CountSheetState extends State<_CountSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
                     ? const SizedBox(
@@ -335,74 +361,6 @@ class _CountSheetState extends State<_CountSheet> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.boxesStacked,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'لا توجد منتجات',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'أضف منتجات من شاشة المنتجات ثم قم بجردها هنا',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
         ),
       ),
     );

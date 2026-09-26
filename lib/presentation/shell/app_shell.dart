@@ -54,32 +54,33 @@ class _AppShellState extends ConsumerState<AppShell> {
         key: _shellKey,
         body: SkipLink(
           target: _contentFocus,
-          child: hasSidebar
-              ? Row(
-                  children: [
-                    SideNavigation(
-                      collapsed: collapsed,
-                      onToggleCollapse: isDesktop
-                          ? null
-                          : () => setState(
-                              () => _sidebarCollapsed = !_sidebarCollapsed,
+child: hasSidebar
+                    ? Row(
+                        children: [
+                          SideNavigation(
+                            collapsed: collapsed,
+                            onToggleCollapse: isDesktop
+                                ? null
+                                : () => setState(
+                                    () => _sidebarCollapsed = !_sidebarCollapsed,
+                                  ),
                             ),
-                    ),
-                    Expanded(
-                      child: _ScreenBody(
+                          Expanded(
+                            child: _ScreenBody(
+                              user: user,
+                              contentFocus: _contentFocus,
+                              onOpenDrawer: () =>
+                                  _shellKey.currentState?.openDrawer(),
+                            ),
+                          ),
+                        ],
+                      )
+                    : _ScreenBody(
                         user: user,
                         contentFocus: _contentFocus,
                         onOpenDrawer: () =>
                             _shellKey.currentState?.openDrawer(),
                       ),
-                    ),
-                  ],
-                )
-              : _ScreenBody(
-                  user: user,
-                  contentFocus: _contentFocus,
-                  onOpenDrawer: () => _shellKey.currentState?.openDrawer(),
-                ),
         ),
         drawer: hasSidebar ? null : const SideNavigation(),
       ),
@@ -119,7 +120,6 @@ class _ScreenBody extends ConsumerWidget {
       body: Column(
         children: [
           const OfflineBanner(),
-          if (user != null && !user!.hasTenant) const _OnboardingBanner(),
           Expanded(
             child: Focus(focusNode: contentFocus, child: body),
           ),
@@ -285,19 +285,3 @@ class _MobileAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 }
 
-class _OnboardingBanner extends StatelessWidget {
-  const _OnboardingBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.warning,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      child: const Text(
-        'حسابك غير مرتبط بمؤسسة بعد — الرجاء التسجيل أو التواصل مع الإدارة',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}

@@ -6,10 +6,15 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../domain/employees/employee.dart';
 import '../../../domain/employees/employee_draft.dart';
 import '../../providers/employees_providers.dart';
+import '../../widgets/confirm_dialog.dart';
+import '../../widgets/filter_bar.dart';
+import '../../widgets/record_table.dart';
 import 'employee_statement_screen.dart';
 
 class EmployeesScreen extends ConsumerStatefulWidget {
@@ -21,7 +26,6 @@ class EmployeesScreen extends ConsumerStatefulWidget {
 
 class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
   final _searchCtrl = TextEditingController();
-  bool _searchOpen = false;
 
   @override
   void dispose() {
@@ -29,12 +33,15 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     super.dispose();
   }
 
-  void _toggleSearch() {
-    setState(() => _searchOpen = !_searchOpen);
-    if (!_searchOpen) {
-      _searchCtrl.clear();
-      ref.read(employeeSearchProvider.notifier).update('');
-    }
+  void _openStatement(Employee employee) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmployeeStatementScreen(
+          employeeId: employee.id,
+          employeeName: employee.name,
+        ),
+      ),
+    );
   }
 
   @override
@@ -44,69 +51,137 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     return PageScaffold(
       title: 'الموظفون',
       subtitle: 'بيانات الموظفين والرواتب الأساسية',
-      actions: [
-        IconButton(
-          tooltip: _searchOpen ? 'إغلاق البحث' : 'بحث',
-          onPressed: _toggleSearch,
-          icon: FaIcon(
-            _searchOpen
-                ? FontAwesomeIcons.xmark
-                : FontAwesomeIcons.magnifyingGlass,
-          ),
-        ),
-      ],
       child: Stack(
         children: [
           Column(
             children: [
-              if (_searchOpen)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    textInputAction: TextInputAction.search,
-                    onChanged: (v) =>
-                        ref.read(employeeSearchProvider.notifier).update(v),
-                    decoration: InputDecoration(
-                      hintText: 'بحث بالاسم أو رقم الهاتف...',
-                      prefixIcon: const FaIcon(
-                        FontAwesomeIcons.magnifyingGlass,
+              FilterBar(
+                searchController: _searchCtrl,
+                hintText: 'بحث بالاسم أو رقم الهاتف...',
+                onSearchChanged: (value) =>
+                    ref.read(employeeSearchProvider.notifier).update(value),
+                onClearSearch: () {
+                  _searchCtrl.clear();
+                  ref.read(employeeSearchProvider.notifier).update('');
+                  setState(() {});
+                },
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: AsyncSection<List<Employee>>(
+                  value: listAsync,
+                  onRetry: () => ref.invalidate(employeesListProvider),
+                  emptyIcon: FontAwesomeIcons.userPlus,
+                  emptyTitle: 'لا يوجد موظفون',
+                  emptyMessage: 'اضغط على زر الإضافة لتسجيل أول موظف.',
+                  emptyAction: FilledButton.icon(
+                    onPressed: () => _showEmployeeForm(context),
+                    icon: const FaIcon(FontAwesomeIcons.plus, size: 13),
+                    iconAlignment: IconAlignment.end,
+                    label: const Text('إضافة موظف'),
+                  ),
+                  builder: (context, employees) => RecordTable<Employee>(
+                    items: employees,
+                    onTap: (e) => _openStatement(e),
+                    columns: [
+                      RecordColumn<Employee>(
+                        label: 'الموظف',
+                        primary: true,
+                        flex: 3,
+                        cell: (context, e) => Row(
+                          children: [
+                            IconChip(
+                              icon: FontAwesomeIcons.user,
+                              color: AppColors.secondary,
+                              size: 32,
+                              iconSize: 13,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    e.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  if (e.jobTitle?.isNotEmpty == true)
+                                    Text(
+                                      e.jobTitle!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
-                              tooltip: 'مسح البحث',
-                              icon: const FaIcon(FontAwesomeIcons.xmark),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                ref
-                                    .read(employeeSearchProvider.notifier)
-                                    .update('');
-                              },
-                            )
-                          : null,
+                      RecordColumn<Employee>(
+                        label: 'الهاتف',
+                        flex: 2,
+                        cell: (context, e) => Text(
+                          e.phone?.isNotEmpty == true ? e.phone! : '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      RecordColumn<Employee>(
+                        label: 'الراتب الأساسي',
+                        flex: 2,
+                        emphasis: true,
+                        alignment: AlignmentDirectional.centerEnd,
+                        cell: (context, e) => Text(
+                          Money.format(e.baseSalary),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.secondary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                    trailing: (context, e) => PopupMenuButton<String>(
+                      tooltip: 'إجراءات الموظف',
+                      onSelected: (value) {
+                        if (value == 'statement') _openStatement(e);
+                        if (value == 'edit') {
+                          _showEmployeeForm(context, employee: e);
+                        }
+                        if (value == 'delete') _confirmDelete(e);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'statement',
+                          child: Text('كشف الحركة'),
+                        ),
+                        PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                        PopupMenuItem(value: 'delete', child: Text('حذف')),
+                      ],
                     ),
                   ),
-                ),
-              Expanded(
-                child: listAsync.when(
-                  loading: () => const Center(child: AppProgress()),
-                  error: (e, _) => _ErrorState(message: e.toString()),
-                  data: (employees) {
-                    if (employees.isEmpty) {
-                      return const _EmptyState();
-                    }
-                    return _EmployeeList(employees: employees);
-                  },
                 ),
               ),
             ],
           ),
           Positioned(
-            right: 0,
+            left: 0,
             bottom: 0,
             child: FloatingActionButton(
               heroTag: 'employees_add',
+              tooltip: 'إضافة موظف',
               onPressed: () => _showEmployeeForm(context),
               child: const FaIcon(FontAwesomeIcons.plus),
             ),
@@ -152,104 +227,28 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
       ),
     );
   }
-}
 
-class _EmployeeList extends StatelessWidget {
-  const _EmployeeList({required this.employees});
-
-  final List<Employee> employees;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      itemCount: employees.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final e = employees[index];
-        return _EmployeeTile(
-          employee: e,
-          onOpen: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => EmployeeStatementScreen(
-                employeeId: e.id,
-                employeeName: e.name,
-              ),
-            ),
-          ),
-          onEdit: () {
-            final screen = context
-                .findAncestorStateOfType<_EmployeesScreenState>();
-            screen?._showEmployeeForm(context, employee: e);
-          },
-          onDelete: () => _confirmDelete(context, e),
-        );
-      },
+  Future<void> _confirmDelete(Employee employee) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'حذف الموظف',
+      message: 'هل تريد حذف "${employee.name}" نهائياً؟',
+      confirmLabel: 'حذف',
+      tone: ConfirmTone.danger,
     );
-  }
-}
-
-class _EmployeeTile extends StatelessWidget {
-  const _EmployeeTile({
-    required this.employee,
-    required this.onOpen,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final Employee employee;
-  final VoidCallback onOpen;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      onTap: onOpen,
-      leading: CircleAvatar(
-        backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
-        child: Text(
-          employee.name.isNotEmpty ? employee.name[0] : '?',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: AppColors.secondary,
-            fontWeight: FontWeight.w700,
-          ),
+    if (!confirmed || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(employeesListProvider.notifier).delete(employee.id);
+      messenger.showSnackBar(const SnackBar(content: Text('تم حذف الموظف')));
+    } on Object catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text(mapErrorToAppException(error).message),
         ),
-      ),
-      title: Text(
-        employee.name,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (employee.jobTitle != null && employee.jobTitle!.isNotEmpty)
-            Text(employee.jobTitle!, style: theme.textTheme.bodySmall),
-          if (employee.phone != null && employee.phone!.isNotEmpty)
-            Text(employee.phone!, style: theme.textTheme.bodySmall),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'الراتب الأساسي: ${Money.format(employee.baseSalary)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textMuted,
-              ),
-            ),
-          ),
-        ],
-      ),
-      isThreeLine: true,
-      trailing: PopupMenuButton<String>(
-        onSelected: (v) {
-          if (v == 'edit') onEdit();
-          if (v == 'delete') onDelete();
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('تعديل')),
-          PopupMenuItem(value: 'delete', child: Text('حذف')),
-        ],
-      ),
-    );
+      );
+    }
   }
 }
 
@@ -338,9 +337,22 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                _isEditing ? 'تعديل الموظف' : 'إضافة موظف جديد',
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                children: [
+                  const IconChip(
+                    icon: FontAwesomeIcons.userTie,
+                    color: AppColors.secondary,
+                    size: 40,
+                    iconSize: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _isEditing ? 'تعديل الموظف' : 'إضافة موظف جديد',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -396,7 +408,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 },
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
                     ? const SizedBox(
@@ -408,111 +420,6 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-void _confirmDelete(BuildContext context, Employee employee) {
-  showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('حذف الموظف'),
-      content: Text('هل تريد حذف "${employee.name}" نهائياً؟'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('إلغاء'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-          onPressed: () async {
-            final navigator = Navigator.of(context);
-            final messenger = ScaffoldMessenger.of(context);
-            final container = ProviderScope.containerOf(context);
-            navigator.pop();
-            try {
-              await container
-                  .read(employeesListProvider.notifier)
-                  .delete(employee.id);
-              messenger.showSnackBar(
-                const SnackBar(content: Text('تم حذف الموظف')),
-              );
-            } on Object catch (error) {
-              messenger.showSnackBar(
-                SnackBar(
-                  backgroundColor: AppColors.danger,
-                  content: Text(mapErrorToAppException(error).message),
-                ),
-              );
-            }
-          },
-          child: const Text('حذف'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaIcon(FontAwesomeIcons.user, size: 48, color: AppColors.textMuted),
-            const SizedBox(height: 16),
-            Text(
-              'لا يوجد موظفون',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'اضغط على + لإضافة أول موظف',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
         ),
       ),
     );

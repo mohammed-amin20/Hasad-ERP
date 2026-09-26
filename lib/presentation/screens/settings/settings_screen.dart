@@ -6,6 +6,7 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/time_format.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../domain/reminders/reminder_log_entry.dart';
@@ -72,7 +73,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       subtitle: 'إعدادات المنشأة والتذكيرات والنسخ الاحتياطي',
       child: settingsAsync.when(
         loading: () => const Center(child: AppProgress()),
-        error: (e, _) => _ErrorState(message: e.toString()),
+        error: (e, _) => ErrorStateView(
+          message: mapErrorToAppException(e).message,
+          onRetry: () => ref.invalidate(reminderSettingsControllerProvider),
+        ),
         data: (settings) => ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
@@ -610,42 +614,6 @@ class _SyncStatusCard extends ConsumerWidget {
               child: ElevatedButton(
                 onPressed: () => ref.read(manualSyncNowProvider),
                 child: const Text('مزامنة الآن'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
               ),
             ),
           ],

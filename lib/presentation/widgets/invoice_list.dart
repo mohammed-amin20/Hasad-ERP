@@ -11,8 +11,8 @@ import '../../domain/products/product.dart';
 import '../providers/auth_providers.dart';
 import '../providers/sales_providers.dart';
 import 'payment_sheets.dart';
-
-/// Reusable invoice list (shared by sales and purchases screens).
+import 'record_table.dart';
+import 'state_views.dart';
 class InvoiceListView extends StatelessWidget {
   const InvoiceListView({
     super.key,
@@ -25,83 +25,103 @@ class InvoiceListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      itemCount: invoices.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final invoice = invoices[index];
-        return ListTile(
-          onTap: () => onTap(invoice),
-          leading: CircleAvatar(
-            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-            child: Text(
-              _shortNo(invoice.no),
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          title: Text(
-            invoice.partyName ?? '',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            'فاتورة ${invoice.no} · ${formatInvoiceDate(invoice.date)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+    return RecordTable<Invoice>(
+      items: invoices,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      columns: [
+        RecordColumn<Invoice>(
+          label: 'الفاتورة',
+          primary: true,
+          flex: 3,
+          cell: (context, invoice) => Row(
             children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    Money.format(invoice.total),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _shortNo(invoice.no),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StatusBadge(
-                        label: invoice.status.label,
-                        palette: badgeForStatus(invoice.status),
-                      ),
-                      if (invoice.ownership ==
-                          InvoiceOwnership.consignment) ...[
-                        const SizedBox(width: 4),
-                        StatusBadge(
-                          label: invoice.ownership.label,
-                          palette: badgeForOwnership(invoice.ownership),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(width: 4),
-              const FaIcon(
-                FontAwesomeIcons.chevronLeft,
-                color: AppColors.textMuted,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  invoice.partyName ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+        RecordColumn<Invoice>(
+          label: 'التاريخ',
+          flex: 2,
+          cell: (context, invoice) => Text(
+            formatInvoiceDate(invoice.date),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        RecordColumn<Invoice>(
+          label: 'الحالة',
+          flex: 2,
+          cell: (context, invoice) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StatusBadge(
+                label: invoice.status.label,
+                palette: badgeForStatus(invoice.status),
+              ),
+              if (invoice.ownership == InvoiceOwnership.consignment) ...[
+                const SizedBox(width: 4),
+                StatusBadge(
+                  label: invoice.ownership.label,
+                  palette: badgeForOwnership(invoice.ownership),
+                ),
+              ],
+            ],
+          ),
+        ),
+        RecordColumn<Invoice>(
+          label: 'الإجمالي',
+          flex: 2,
+          emphasis: true,
+          alignment: AlignmentDirectional.centerEnd,
+          cell: (context, invoice) => Text(
+            Money.format(invoice.total),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   String _shortNo(String no) =>
       no.length > 3 ? no.substring(no.length - 3) : no;
 }
-
-/// Detail bottom sheet for a single invoice (header, lines, totals).
 class InvoiceDetailSheet extends ConsumerWidget {
   const InvoiceDetailSheet({super.key, required this.invoice});
 
@@ -202,42 +222,25 @@ class InvoiceDetailSheet extends ConsumerWidget {
     );
   }
 }
-
-/// Payment actions are admin + accountant only (consignment already blocked).
 bool _canPay(WidgetRef ref) {
   final user = ref.read(authStateProvider).value;
   return user != null && (user.isAdmin || user.isAccountant);
 }
-
-/// Shared error state for list screens.
 class ListErrorState extends StatelessWidget {
-  const ListErrorState({super.key, required this.message});
+  const ListErrorState({super.key, required this.message, this.onRetry});
 
   final String message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: ErrorStateCard(
+          title: 'حدث خطأ',
+          message: message,
+          onRetry: onRetry,
         ),
       ),
     );

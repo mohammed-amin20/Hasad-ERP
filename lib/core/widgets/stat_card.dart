@@ -1,11 +1,10 @@
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../config/app_config.dart';
 import '../theme/app_colors.dart';
+import 'hasad_card.dart';
 
-/// Dashboard stat card replicating the HTML `.stat-card`: white surface,
-/// 16px radius, hairline border, soft shadow, a labeled icon row and a bold
-/// value. Optional right accent bar and tinted fills for highlighted cards.
 class StatCard extends StatelessWidget {
   const StatCard({
     super.key,
@@ -17,6 +16,10 @@ class StatCard extends StatelessWidget {
     this.accentColor,
     this.backgroundColor,
     this.borderColor,
+    this.caption,
+    this.captionIcon,
+    this.captionColor,
+    this.onTap,
   });
 
   final FaIconData icon;
@@ -24,82 +27,123 @@ class StatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color? valueColor;
-
-  /// Colored 4px accent on the right edge (HTML `border-right: 4px solid`).
   final Color? accentColor;
-
-  /// Optional tinted fill (e.g. the green profit card).
   final Color? backgroundColor;
-
-  /// Optional border override (e.g. green-200 on the profit card).
   final Color? borderColor;
+  final String? caption;
+  final FaIconData? captionIcon;
+  final Color? captionColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final accent = accentColor;
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor ?? AppColors.border, width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D0F172A),
-            blurRadius: 6,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Stack(
+    final theme = Theme.of(context);
+    return InteractiveCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppConfig.cardPadding),
+      accent: accentColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    FaIcon(icon, size: 16, color: iconColor),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+          Row(
+            children: [
+              IconChip(
+                icon: icon,
+                color: iconColor,
+                size: 32,
+                iconSize: 15,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    letterSpacing: -0.5,
-                    color: valueColor ?? AppColors.textPrimary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: theme.textTheme.displayLarge?.copyWith(
+                color: valueColor ?? AppColors.textPrimary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          if (caption != null && caption!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (captionIcon != null) ...[
+                  FaIcon(
+                    captionIcon,
+                    size: 11,
+                    color: captionColor ?? AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Text(
+                    caption!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 12,
+                      color: captionColor ?? AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          if (accent != null)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(width: 4, color: accent),
-            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Responsive KPI grid: 4 columns on wide desktops, 2 on tablets, 1 on
+/// narrow phones. The shared rhythm for every list of metrics in the app.
+class StatCardGrid extends StatelessWidget {
+  const StatCardGrid({super.key, required this.cards, this.extent = 148});
+
+  final List<Widget> cards;
+  final double extent;
+
+  static int columnsFor(double width) {
+    if (width >= 1040) return 4;
+    if (width >= 440) return 2;
+    return 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnsFor(constraints.maxWidth),
+            mainAxisSpacing: AppConfig.cardGap,
+            crossAxisSpacing: AppConfig.cardGap,
+            mainAxisExtent: extent,
+          ),
+          children: cards,
+        );
+      },
     );
   }
 }

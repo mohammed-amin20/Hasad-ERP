@@ -5,16 +5,21 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/app_progress.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/app_progress.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/dashboard/dashboard.dart';
 import '../../providers/dashboard_providers.dart';
 import '../../widgets/freshness_chip.dart';
+import '../../widgets/staggered_entrance.dart';
+import '../../widgets/state_views.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -24,6 +29,7 @@ class DashboardScreen extends ConsumerWidget {
     return PageScaffold(
       title: 'لوحة التحكم',
       subtitle: 'مرحباً، نظرة شاملة على أداء الشركة',
+      icon: FontAwesomeIcons.gaugeHigh,
       actions: const [FreshnessChip(cacheKey: dashboardKey)],
       child: const _DashboardBody(),
     );
@@ -33,139 +39,128 @@ class DashboardScreen extends ConsumerWidget {
 class _DashboardBody extends ConsumerWidget {
   const _DashboardBody();
 
-  static const List<StatCard> _statCards = [
-    StatCard(
+  static const List<_KpiSpec> _specs = [
+    _KpiSpec(
       icon: FontAwesomeIcons.coins,
       iconColor: Color(0xFFF59E0B),
       label: 'مبيعات اليوم',
-      value: '—',
       valueColor: Color(0xFF2563EB),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.cartShopping,
       iconColor: Color(0xFFA855F7),
       label: 'مشتريات اليوم',
-      value: '—',
-      valueColor: Color(0xFF9333EA),
+      valueColor: Color(0xFF7E22CE),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.creditCard,
       iconColor: Color(0xFFEF4444),
       label: 'ديون العملاء',
-      value: '—',
       valueColor: Color(0xFFDC2626),
-      accentColor: Color(0xFFDC2626),
+      accent: Color(0xFFDC2626),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.handHoldingDollar,
-      iconColor: Color(0xFFA855F7),
+      iconColor: Color(0xFF7C3AED),
       label: 'ديون الموردين',
-      value: '—',
       valueColor: Color(0xFF7E22CE),
-      accentColor: Color(0xFF7C3AED),
+      accent: Color(0xFF7C3AED),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.fileInvoice,
       iconColor: Color(0xFF818CF8),
       label: 'مصروفات الشهر',
-      value: '—',
       valueColor: Color(0xFFEF4444),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.users,
-      iconColor: Color(0xFF818CF8),
+      iconColor: Color(0xFF0EA5E9),
       label: 'رواتب الشهر',
-      value: '—',
       valueColor: Color(0xFFD97706),
     ),
-    StatCard(
+    _KpiSpec(
       icon: FontAwesomeIcons.chartLine,
       iconColor: Color(0xFF16A34A),
       label: 'صافي الربح (الشهر)',
-      value: '—',
       valueColor: Color(0xFF15803D),
-      backgroundColor: Color(0xFFF0FDF4),
-      borderColor: Color(0xFFBBF7D0),
+      surface: Color(0xFFF6FEF9),
+      border: Color(0xFFBBF7D0),
+      spanTwo: true,
     ),
   ];
 
-  int _statColumns(double width) {
-    if (width >= 1040) return 4;
-    if (width >= 440) return 2;
-    return 1;
-  }
+  static List<String> _values(DashboardSummary summary) => [
+    Money.format(summary.todaySales),
+    Money.format(summary.todayPurchases),
+    Money.format(summary.customerDebts),
+    Money.format(summary.supplierDebts),
+    Money.format(summary.monthExpenses),
+    Money.format(summary.monthSalaries),
+    Money.format(summary.netProfitMonth),
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(dashboardSummaryProvider);
     final summary = summaryAsync.value;
     final error = summaryAsync.error;
+    final values = summary == null ? null : _values(summary);
 
     return SingleChildScrollView(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final statCols = _statColumns(width);
-          const gap = 16.0;
-          final itemWidth = (width - gap * (statCols - 1)) / statCols;
-          final sideBySide = width >= 900;
+          final sideBySide = constraints.maxWidth >= 900;
 
-          final cards = summary == null
-              ? _statCards
-              : [
-                  ..._statCards.asMap().entries.map((e) {
-                    final index = e.key;
-                    final card = e.value;
-                    return _valueCard(card, _cardValues(summary)[index]);
-                  }),
-                ];
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          return StaggeredColumn(
             children: [
-              if (error != null) ...[
-                _ErrorBanner(
+              if (error != null)
+                ErrorStateCard(
+                  title: 'تعذر تحميل البيانات',
+                  message: 'تعذر جلب ملخص لوحة التحكم. تحقق من الاتصال ثم أعد المحاولة.',
                   onRetry: () => ref.invalidate(dashboardSummaryProvider),
                 ),
-                const SizedBox(height: 20),
-              ],
-              GridView.count(
-                crossAxisCount: statCols,
-                crossAxisSpacing: gap,
-                mainAxisSpacing: gap,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: itemWidth / 116,
-                children: cards,
+              StatCardGrid(
+                cards: [
+                  for (var i = 0; i < _specs.length; i++) _buildCard(_specs[i], values?[i]),
+                ],
               ),
-              const SizedBox(height: 16),
-              _SectionCard(
+              SectionCard(
                 icon: FontAwesomeIcons.chartColumn,
-                iconColor: const Color(0xFF2563EB),
+                iconColor: AppColors.primary,
                 title: 'المبيعات والمشتريات — آخر 7 أيام',
-                body: SizedBox(
-                  height: 260,
-                  child: _ChartArea(
-                    summary: summary,
-                    loading: summaryAsync.isLoading,
+                subtitle: 'مقارنة يومية للحركتين خلال الأسبوع الماضي',
+                trailing: sideBySide ? _ChartLegend() : null,
+                child: SizedBox(
+                  height: sideBySide ? 280 : 268,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _ChartArea(
+                          summary: summary,
+                          loading: summaryAsync.isLoading,
+                        ),
+                      ),
+                      if (!sideBySide) ...[
+                        const SizedBox(height: 12),
+                        _ChartLegend(),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              if (sideBySide) ...[
+              if (sideBySide)
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: _SectionCard(
+                      child: SectionCard(
                         icon: FontAwesomeIcons.triangleExclamation,
-                        iconColor: const Color(0xFFEF4444),
+                        iconColor: AppColors.danger,
                         title: 'أعلى العملاء ديوناً',
-                        body: SizedBox(
-                          height: 140,
+                        child: SizedBox(
+                          height: 180,
                           child: summary == null
-                              ? const _EmptyPanel(
-                                  icon: FontAwesomeIcons.userGroup,
-                                )
+                              ? const SkeletonList(count: 2, itemHeight: 40)
                               : _DebtorsPanel(
                                   debtors: summary.topDebtors,
                                   loading: summaryAsync.isLoading,
@@ -173,18 +168,16 @@ class _DashboardBody extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: AppConfig.cardGap),
                     Expanded(
-                      child: _SectionCard(
+                      child: SectionCard(
                         icon: FontAwesomeIcons.boxOpen,
-                        iconColor: const Color(0xFFF59E0B),
+                        iconColor: AppColors.warning,
                         title: 'تنبيهات المخزون المنخفض',
-                        body: SizedBox(
-                          height: 140,
+                        child: SizedBox(
+                          height: 180,
                           child: summary == null
-                              ? const _EmptyPanel(
-                                  icon: FontAwesomeIcons.boxesStacked,
-                                )
+                              ? const SkeletonList(count: 2, itemHeight: 40)
                               : _LowStockPanel(
                                   items: summary.lowStock,
                                   loading: summaryAsync.isLoading,
@@ -193,31 +186,30 @@ class _DashboardBody extends ConsumerWidget {
                       ),
                     ),
                   ],
-                ),
-              ] else ...[
-                _SectionCard(
+                )
+              else ...[
+                SectionCard(
                   icon: FontAwesomeIcons.triangleExclamation,
-                  iconColor: const Color(0xFFEF4444),
+                  iconColor: AppColors.danger,
                   title: 'أعلى العملاء ديوناً',
-                  body: SizedBox(
-                    height: 140,
+                  child: SizedBox(
+                    height: 180,
                     child: summary == null
-                        ? const _EmptyPanel(icon: FontAwesomeIcons.userGroup)
+                        ? const SkeletonList(count: 2, itemHeight: 40)
                         : _DebtorsPanel(
                             debtors: summary.topDebtors,
                             loading: summaryAsync.isLoading,
                           ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                _SectionCard(
+                SectionCard(
                   icon: FontAwesomeIcons.boxOpen,
-                  iconColor: const Color(0xFFF59E0B),
+                  iconColor: AppColors.warning,
                   title: 'تنبيهات المخزون المنخفض',
-                  body: SizedBox(
-                    height: 140,
+                  child: SizedBox(
+                    height: 180,
                     child: summary == null
-                        ? const _EmptyPanel(icon: FontAwesomeIcons.boxesStacked)
+                        ? const SkeletonList(count: 2, itemHeight: 40)
                         : _LowStockPanel(
                             items: summary.lowStock,
                             loading: summaryAsync.isLoading,
@@ -232,72 +224,40 @@ class _DashboardBody extends ConsumerWidget {
     );
   }
 
-  StatCard _valueCard(StatCard card, String value) => StatCard(
-    icon: card.icon,
-    iconColor: card.iconColor,
-    label: card.label,
-    value: value,
-    valueColor: card.valueColor,
-    accentColor: card.accentColor,
-    backgroundColor: card.backgroundColor,
-    borderColor: card.borderColor,
-  );
-
-  List<String> _cardValues(DashboardSummary summary) => [
-    Money.format(summary.todaySales),
-    Money.format(summary.todayPurchases),
-    Money.format(summary.customerDebts),
-    Money.format(summary.supplierDebts),
-    Money.format(summary.monthExpenses),
-    Money.format(summary.monthSalaries),
-    Money.format(summary.netProfitMonth),
-  ];
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFECACA)),
-      ),
-      child: Row(
-        children: [
-          const FaIcon(
-            FontAwesomeIcons.circleExclamation,
-            size: 16,
-            color: Color(0xFFDC2626),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'تعذر تحميل البيانات، يرجى المحاولة مرة أخرى.',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF991B1B),
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onRetry,
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFDC2626),
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text('إعادة المحاولة'),
-          ),
-        ],
-      ),
+  Widget _buildCard(_KpiSpec spec, String? value) {
+    return StatCard(
+      icon: spec.icon,
+      iconColor: spec.iconColor,
+      label: spec.label,
+      value: value ?? '—',
+      valueColor: spec.valueColor,
+      accentColor: spec.accent,
+      backgroundColor: spec.surface,
+      borderColor: spec.border,
     );
   }
+}
+
+class _KpiSpec {
+  const _KpiSpec({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.valueColor,
+    this.accent,
+    this.surface,
+    this.border,
+    this.spanTwo = false,
+  });
+
+  final FaIconData icon;
+  final Color iconColor;
+  final String label;
+  final Color valueColor;
+  final Color? accent;
+  final Color? surface;
+  final Color? border;
+  final bool spanTwo;
 }
 
 class _ChartArea extends StatelessWidget {
@@ -310,18 +270,19 @@ class _ChartArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final days = summary?.last7Days ?? const <DailySalesPurchases>[];
     if (loading) {
-      return const _CenteredStatus(child: AppProgress());
+      return const Center(
+        child: SizedBox(width: 24, height: 24, child: AppProgress()),
+      );
     }
     if (days.isEmpty) {
-      return const _EmptyPanel(icon: FontAwesomeIcons.chartColumn);
+      return EmptyStateCard(
+        compact: true,
+        icon: FontAwesomeIcons.chartColumn,
+        title: 'لا توجد حركة بعد',
+        message: 'ستظهر هنا حركة المبيعات والمشتريات خلال آخر سبعة أيام.',
+      );
     }
-    return Column(
-      children: [
-        Expanded(child: _TrendChart(days: days)),
-        const SizedBox(height: 8),
-        const _Legend(),
-      ],
-    );
+    return _TrendChart(days: days);
   }
 }
 
@@ -345,6 +306,7 @@ class _TrendChart extends StatelessWidget {
       purchases.fold<double>(0, (m, s) => math.max(m, s.y)),
     );
     final yMax = math.max(maxY * 1.15, 1.0);
+    final animate = AppMotion.of(context, const Duration(milliseconds: 400));
 
     return LineChart(
       LineChartData(
@@ -353,8 +315,10 @@ class _TrendChart extends StatelessWidget {
         gridData: FlGridData(
           drawVerticalLine: false,
           horizontalInterval: _gridInterval(yMax),
-          getDrawingHorizontalLine: (value) =>
-              const FlLine(color: Color(0xFFEEF2F7), strokeWidth: 1),
+          getDrawingHorizontalLine: (value) => const FlLine(
+            color: AppColors.chartGrid,
+            strokeWidth: 1,
+          ),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -367,13 +331,13 @@ class _TrendChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 62,
+              reservedSize: 56,
               getTitlesWidget: (value, meta) => Text(
                 Money.format(value.toInt()),
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textMuted,
                 ),
               ),
             ),
@@ -396,7 +360,7 @@ class _TrendChart extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 );
@@ -406,7 +370,7 @@ class _TrendChart extends StatelessWidget {
         ),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF0F172A),
+            getTooltipColor: (_) => AppColors.textPrimary,
             getTooltipItems: (spots) => [
               for (final spot in spots)
                 LineTooltipItem(
@@ -423,15 +387,15 @@ class _TrendChart extends StatelessWidget {
           ),
         ),
         lineBarsData: [
-          _TrendLine(color: const Color(0xFF2563EB), spots: sales).resolve(),
+          _TrendLine(color: AppColors.chartSales, spots: sales).resolve(),
           _TrendLine(
-            color: const Color(0xFF7C3AED),
+            color: AppColors.chartPurchases,
             spots: purchases,
           ).resolve(),
         ],
       ),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOut,
+      duration: animate,
+      curve: AppMotion.enter,
     );
   }
 
@@ -478,18 +442,15 @@ class _TrendLine {
   );
 }
 
-class _Legend extends StatelessWidget {
-  const _Legend();
-
+class _ChartLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _LegendDot(color: Color(0xFF2563EB), label: 'المبيعات'),
+        _LegendDot(color: AppColors.chartSales, label: 'المبيعات'),
         SizedBox(width: 16),
-        _LegendDot(color: Color(0xFF7C3AED), label: 'المشتريات'),
+        _LegendDot(color: AppColors.chartPurchases, label: 'المشتريات'),
       ],
     );
   }
@@ -514,7 +475,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: AppColors.textSecondary,
@@ -534,30 +495,31 @@ class _DebtorsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const _CenteredStatus(child: AppProgress());
+      return const SkeletonList(count: 2, itemHeight: 32);
     }
     if (debtors.isEmpty) {
-      return const _EmptyPanel(icon: FontAwesomeIcons.userGroup);
+      return EmptyStateCard(
+        compact: true,
+        icon: FontAwesomeIcons.userGroup,
+        title: 'لا توجد ديون',
+        message: 'كل العملاء مسددون حتى الآن.',
+      );
     }
     return ListView.separated(
       padding: EdgeInsets.zero,
       itemCount: debtors.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, color: Color(0xFFEEF2F7)),
+      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final debtor = debtors[index];
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: const Color(0xFFFEF2F2),
-                child: const FaIcon(
-                  FontAwesomeIcons.user,
-                  size: 12,
-                  color: Color(0xFFDC2626),
-                ),
+              const IconChip(
+                icon: FontAwesomeIcons.user,
+                color: AppColors.danger,
+                size: 32,
+                iconSize: 13,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -568,7 +530,7 @@ class _DebtorsPanel extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF334155),
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -578,7 +540,8 @@ class _DebtorsPanel extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFFDC2626),
+                  color: AppColors.danger,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -598,36 +561,34 @@ class _LowStockPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const _CenteredStatus(child: AppProgress());
+      return const SkeletonList(count: 2, itemHeight: 32);
     }
     if (items.isEmpty) {
-      return const _EmptyPanel(icon: FontAwesomeIcons.boxesStacked);
+      return EmptyStateCard(
+        compact: true,
+        icon: FontAwesomeIcons.boxesStacked,
+        title: 'المخزون بخير',
+        message: 'لا توجد أصناف تحت حد إعادة الطلب.',
+      );
     }
     return ListView.separated(
       padding: EdgeInsets.zero,
       itemCount: items.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, color: Color(0xFFEEF2F7)),
+      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final item = items[index];
+        final color = item.outOfStock ? AppColors.danger : AppColors.warning;
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: item.outOfStock
-                    ? const Color(0xFFFEF2F2)
-                    : const Color(0xFFFFF7ED),
-                child: FaIcon(
-                  item.outOfStock
-                      ? FontAwesomeIcons.circleXmark
-                      : FontAwesomeIcons.triangleExclamation,
-                  size: 12,
-                  color: item.outOfStock
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFFF59E0B),
-                ),
+              IconChip(
+                icon: item.outOfStock
+                    ? FontAwesomeIcons.circleXmark
+                    : FontAwesomeIcons.triangleExclamation,
+                color: color,
+                size: 32,
+                iconSize: 13,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -638,7 +599,7 @@ class _LowStockPanel extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF334155),
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -650,9 +611,7 @@ class _LowStockPanel extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: item.outOfStock
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFFB45309),
+                  color: item.outOfStock ? AppColors.danger : AppColors.warning,
                 ),
               ),
             ],
@@ -665,107 +624,4 @@ class _LowStockPanel extends StatelessWidget {
   String _formatQty(num value) => value == value.roundToDouble()
       ? value.toStringAsFixed(0)
       : value.toStringAsFixed(2);
-}
-
-class _CenteredStatus extends StatelessWidget {
-  const _CenteredStatus({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(child: SizedBox(width: 24, height: 24, child: child));
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.body,
-  });
-
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final Widget body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D0F172A),
-            blurRadius: 6,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              FaIcon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          body,
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyPanel extends StatelessWidget {
-  const _EmptyPanel({required this.icon});
-
-  final FaIconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEEF2F7)),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaIcon(icon, size: 24, color: AppColors.textMuted),
-            const SizedBox(height: 6),
-            Text(
-              'لا توجد بيانات بعد',
-              style: AppTheme.light.textTheme.bodySmall?.copyWith(
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

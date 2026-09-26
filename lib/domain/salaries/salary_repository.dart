@@ -260,6 +260,17 @@ class EmployeeStatementRequest {
   final String employeeId;
   final DateTime from;
   final DateTime to;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EmployeeStatementRequest &&
+          other.employeeId == employeeId &&
+          other.from == from &&
+          other.to == to;
+
+  @override
+  int get hashCode => Object.hash(employeeId, from, to);
 }
 
 /// Client-side aggregate of salary/movement history for one employee.

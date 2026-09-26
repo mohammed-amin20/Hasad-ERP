@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/app_progress.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../domain/statements/debts_repository.dart';
 import '../../providers/statements_providers.dart';
+import '../../widgets/filter_bar.dart';
+import '../../widgets/record_table.dart';
 import '../../widgets/payment_sheets.dart';
-import '../../widgets/invoice_list.dart';
 import '../statements/statement_screen.dart';
 
-/// Debts overview: what customers owe us + what we owe suppliers.
 class DebtsScreen extends ConsumerWidget {
   const DebtsScreen({super.key});
 
@@ -27,197 +28,174 @@ class DebtsScreen extends ConsumerWidget {
       subtitle: 'ما لنا على العملاء وما علينا للموردين',
       child: ListView(
         children: [
-          _sectionTitle(context, 'لنا على العملاء'),
-          const SizedBox(height: 8),
-          customersAsync.when(
-            loading: () =>
-                const _LoadingRow(label: 'جاري تحميل ديون العملاء...'),
-            error: (e, _) => ListErrorState(message: e.toString()),
-            data: (balances) => balances.isEmpty
-                ? const _EmptyHint(label: 'لا توجد ديون مسجلة للعملاء')
-                : _partyList(
-                    context,
-                    ref,
-                    balances,
-                    partyType: 'customer',
-                    leadingColor: AppColors.primary,
-                  ),
-          ),
-          const SizedBox(height: 24),
-          _sectionTitle(context, 'علينا للموردين'),
-          const SizedBox(height: 8),
-          suppliersAsync.when(
-            loading: () =>
-                const _LoadingRow(label: 'جاري تحميل ديون الموردين...'),
-            error: (e, _) => ListErrorState(message: e.toString()),
-            data: (balances) => balances.isEmpty
-                ? const _EmptyHint(label: 'لا توجد ديون مسجلة للموردين')
-                : _partyList(
-                    context,
-                    ref,
-                    balances,
-                    partyType: 'supplier',
-                    leadingColor: AppColors.danger,
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionTitle(BuildContext context, String title) {
-    final theme = Theme.of(context);
-    return Text(title, style: theme.textTheme.titleLarge);
-  }
-
-  Widget _partyList(
-    BuildContext context,
-    WidgetRef ref,
-    List<PartyBalance> balances, {
-    required String partyType,
-    required Color leadingColor,
-  }) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (var i = 0; i < balances.length; i++) ...[
-            _PartyTile(
-              balance: balances[i],
-              leadingColor: leadingColor,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => StatementScreen(
-                      partyType: partyType,
-                      partyId: balances[i].id,
-                      partyName: balances[i].name,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilterBar(
+                hintText: 'بحث في ديون العملاء...',
+                onSearchChanged: (_) {},
+                onClearSearch: () {},
+              ),
+              const SizedBox(height: 16),
+              AsyncSection<List<PartyBalance>>(
+                value: customersAsync,
+                onRetry: () => ref.invalidate(customerDebtsProvider),
+                emptyIcon: FontAwesomeIcons.users,
+                emptyTitle: 'لا توجد ديون للعملاء',
+                emptyMessage: 'سجل فواتير مبيعات لعملاء لظهور الذمم هنا.',
+                builder: (context, balances) => _PartyTable(
+                  balances: balances,
+                  partyType: 'customer',
+                  leadingColor: AppColors.primary,
+                  onTap: (balance) => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => StatementScreen(
+                        partyType: 'customer',
+                        partyId: balance.id,
+                        partyName: balance.name,
+                      ),
                     ),
                   ),
-                );
-              },
-              onSettle: partyType == 'supplier'
-                  ? () => showSettleSupplierSheet(
-                      context,
-                      supplierId: balances[i].id,
-                      supplierName: balances[i].name,
-                    )
-                  : null,
-            ),
-            if (i < balances.length - 1) const Divider(height: 1),
-          ],
+                  onSettle: null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilterBar(
+                hintText: 'بحث في ديون الموردين...',
+                onSearchChanged: (_) {},
+                onClearSearch: () {},
+              ),
+              const SizedBox(height: 16),
+              AsyncSection<List<PartyBalance>>(
+                value: suppliersAsync,
+                onRetry: () => ref.invalidate(supplierDebtsProvider),
+                emptyIcon: FontAwesomeIcons.store,
+                emptyTitle: 'لا توجد ديون للموردين',
+                emptyMessage: 'سجل فواتير مشتريات من موردين لظهور الذمم هنا.',
+                builder: (context, balances) => _PartyTable(
+                  balances: balances,
+                  partyType: 'supplier',
+                  leadingColor: AppColors.danger,
+                  onTap: (balance) => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => StatementScreen(
+                        partyType: 'supplier',
+                        partyId: balance.id,
+                        partyName: balance.name,
+                      ),
+                    ),
+                  ),
+                  onSettle: (balance) => showSettleSupplierSheet(
+                    context,
+                    supplierId: balance.id,
+                    supplierName: balance.name,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _PartyTile extends StatelessWidget {
-  const _PartyTile({
-    required this.balance,
+class _PartyTable extends StatelessWidget {
+  const _PartyTable({
+    required this.balances,
+    required this.partyType,
     required this.leadingColor,
     required this.onTap,
     this.onSettle,
   });
 
-  final PartyBalance balance;
+  final List<PartyBalance> balances;
+  final String partyType;
   final Color leadingColor;
-  final VoidCallback onTap;
-  final VoidCallback? onSettle;
+  final void Function(PartyBalance) onTap;
+  final void Function(PartyBalance)? onSettle;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
+    return RecordTable<PartyBalance>(
+      items: balances,
       onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: leadingColor.withValues(alpha: 0.12),
-        child: Text(
-          balance.name.isEmpty ? '؟' : balance.name.substring(0, 1),
-          style: TextStyle(color: leadingColor, fontWeight: FontWeight.w700),
-        ),
-      ),
-      title: Text(
-        balance.name,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
+      columns: [
+        RecordColumn<PartyBalance>(
+          label: partyType == 'customer' ? 'العميل' : 'المورد',
+          primary: true,
+          flex: 3,
+          cell: (context, b) => Row(
             children: [
-              Text(
-                Money.format(balance.amount),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: leadingColor,
-                  fontWeight: FontWeight.w800,
-                ),
+              IconChip(
+                icon: partyType == 'customer'
+                    ? FontAwesomeIcons.user
+                    : FontAwesomeIcons.store,
+                color: leadingColor,
+                size: 32,
+                iconSize: 13,
               ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  StatusBadge(
-                    label: onSettle != null ? 'مورد' : 'عميل',
-                    palette: onSettle != null
-                        ? BadgePalette.commission
-                        : BadgePalette.partial,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  b.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
-                  if (onSettle != null) ...[
-                    const SizedBox(width: 4),
-                    TextButton(onPressed: onSettle, child: const Text('تسوية')),
-                  ],
-                ],
+                ),
               ),
             ],
           ),
-          const SizedBox(width: 4),
-          const FaIcon(
-            FontAwesomeIcons.chevronLeft,
-            color: AppColors.textMuted,
+        ),
+        RecordColumn<PartyBalance>(
+          label: 'الرصيد',
+          flex: 2,
+          cell: (context, b) => Text(
+            Money.format(b.amount),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: leadingColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LoadingRow extends StatelessWidget {
-  const _LoadingRow({required this.label});
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 18,
-            height: 18,
-            child: AppProgress(strokeWidth: 2),
+        ),
+        RecordColumn<PartyBalance>(
+          label: 'النوع',
+          flex: 2,
+          cell: (context, b) => StatusBadge(
+            label: onSettle != null ? 'مورد' : 'عميل',
+            palette: onSettle != null
+                ? BadgePalette.commission
+                : BadgePalette.partial,
           ),
-          const SizedBox(width: 12),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.label});
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall
-            ?.copyWith(color: AppColors.textMuted),
-      ),
+        ),
+      ],
+      trailing: (context, b) => onSettle != null
+          ? OutlinedButton.icon(
+              onPressed: () => onSettle!(b),
+              icon: const FaIcon(FontAwesomeIcons.handHoldingDollar, size: 12),
+              iconAlignment: IconAlignment.end,
+              label: const Text('تسوية'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+            )
+          : const FaIcon(
+              FontAwesomeIcons.chevronLeft,
+              color: AppColors.textMuted,
+            ),
     );
   }
 }

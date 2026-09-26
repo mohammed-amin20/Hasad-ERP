@@ -203,6 +203,10 @@ void main() {
       expect(find.text('5301 — الإيجار'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
+      await tester.tapAt(const Offset(400, 100));
+      await tester.pumpAndSettle();
+      expect(find.text('5301 — الإيجار'), findsNothing);
+
       await tester.tap(find.byTooltip('قيد يدوي جديد'));
       await tester.pumpAndSettle();
       expect(find.text('قيد يدوي جديد'), findsOneWidget);

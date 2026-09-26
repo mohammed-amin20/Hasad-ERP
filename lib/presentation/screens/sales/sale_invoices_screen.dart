@@ -6,6 +6,7 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/route_header.dart';
 import '../../../data/offline/report_keys.dart';
@@ -184,7 +185,10 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
               Expanded(
                 child: listAsync.when(
                   loading: () => const Center(child: AppProgress()),
-                  error: (e, _) => ListErrorState(message: e.toString()),
+                  error: (e, _) => ErrorStateView(
+                    message: mapErrorToAppException(e).message,
+                    onRetry: () => ref.invalidate(saleInvoicesListProvider),
+                  ),
                   data: (invoices) {
                     if (invoices.isEmpty) {
                       return const _EmptyState();
@@ -397,7 +401,10 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
               const SizedBox(height: 16),
               customersAsync.when(
                 loading: () => const Center(child: AppProgress()),
-                error: (e, _) => ListErrorState(message: e.toString()),
+                error: (e, _) => ErrorStateView(
+                  message: mapErrorToAppException(e).message,
+                  onRetry: () => ref.invalidate(allCustomersProvider),
+                ),
                 data: (customers) => DropdownButtonFormField<String>(
                   initialValue: _customerId,
                   decoration: const InputDecoration(
@@ -754,6 +761,7 @@ class _DateChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const FaIcon(
@@ -762,9 +770,13 @@ class _DateChip extends StatelessWidget {
               color: AppColors.textMuted,
             ),
             const SizedBox(width: 8),
-            Text(
-              '$label: $text',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Flexible(
+              child: Text(
+                '$label: $text',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ],
         ),

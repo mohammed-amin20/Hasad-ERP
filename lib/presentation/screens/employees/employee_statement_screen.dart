@@ -8,6 +8,7 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/printing/employee_slip_pdf.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../domain/salaries/salary_repository.dart';
 import '../../providers/salaries_providers.dart';
@@ -142,7 +143,11 @@ class _EmployeeStatementScreenState
           Expanded(
             child: statementAsync.when(
               loading: () => const Center(child: AppProgress()),
-              error: (e, _) => _ErrorState(message: e.toString()),
+              error: (e, _) => ErrorStateView(
+                message: mapErrorToAppException(e).message,
+                onRetry: () =>
+                    ref.invalidate(employeeStatementProvider(request)),
+              ),
               data: (statement) => _buildStatement(context, statement),
             ),
           ),
@@ -202,11 +207,14 @@ class _EmployeeStatementScreenState
               padding: const EdgeInsets.all(4),
               child: _StatementTable(lines: statement.lines),
             ),
-          ),
+),
       ],
     );
   }
 }
+
+String _monthLabel(DateTime month) =>
+    '${month.year}/${month.month.toString().padLeft(2, '0')}';
 
 class _StatementTable extends StatelessWidget {
   const _StatementTable({required this.lines});
@@ -335,40 +343,3 @@ class _SummaryBox extends StatelessWidget {
     );
   }
 }
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _monthLabel(DateTime month) =>
-    '${month.year}/${month.month.toString().padLeft(2, '0')}';

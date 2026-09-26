@@ -3,8 +3,10 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_progress.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
@@ -60,7 +62,10 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
           Expanded(
             child: statementAsync.when(
               loading: () => const Center(child: AppProgress()),
-              error: (e, _) => _ErrorState(message: e.toString()),
+              error: (e, _) => ErrorStateView(
+                message: mapErrorToAppException(e).message,
+                onRetry: () => ref.invalidate(ledgerStatementProvider),
+              ),
               data: (statement) => statement == null
                   ? const _SelectAccountState()
                   : _LedgerView(statement: statement),
@@ -232,8 +237,7 @@ class _LedgerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
+    return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(16),
@@ -305,7 +309,7 @@ class _LedgerView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _LedgerTable(statement: statement),
+        Expanded(child: _LedgerTable(statement: statement)),
       ],
     );
   }
@@ -360,28 +364,31 @@ class _LedgerTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (statement.lines.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.bookOpen,
-              size: 40,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'لا توجد حركات في هذه الفترة',
-              style: theme.textTheme.bodyMedium?.copyWith(
+      return Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              const FaIcon(
+                FontAwesomeIcons.bookOpen,
+                size: 40,
                 color: AppColors.textMuted,
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                'لا توجد حركات في هذه الفترة',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -403,108 +410,165 @@ class _LedgerTable extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
-              children: [
-                Expanded(flex: 3, child: Text('التاريخ', style: header)),
-                Expanded(flex: 2, child: Text('رقم القيد', style: header)),
-                Expanded(flex: 4, child: Text('البيان', style: header)),
-                Expanded(flex: 2, child: Text('مدين', style: header)),
-                Expanded(flex: 2, child: Text('دائن', style: header)),
-                Expanded(flex: 2, child: Text('الرصيد', style: header)),
-              ],
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+              border: Border(
+                bottom: BorderSide(color: AppColors.border),
+                left: BorderSide(color: AppColors.border),
+                right: BorderSide(color: AppColors.border),
+                top: BorderSide(color: AppColors.border),
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          for (final line in statement.lines)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               child: Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: Text(_fmtDate(line.date), style: cell),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text('${line.entryNo}', style: cell),
-                  ),
-                  Expanded(
-                    flex: 4,
-                    child: Text(
-                      line.memo,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: cell,
+                  Expanded(flex: 3, child: Text('التاريخ', style: header)),
+                  Expanded(flex: 2, child: Text('رقم القيد', style: header)),
+                  Expanded(flex: 4, child: Text('البيان', style: header)),
+                  Expanded(flex: 2, child: Text('مدين', style: header)),
+                  Expanded(flex: 2, child: Text('دائن', style: header)),
+                  Expanded(flex: 2, child: Text('الرصيد', style: header)),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            constraints: BoxConstraints.tightFor(height: 1),
+            color: AppColors.border,
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: statement.lines.length,
+              itemBuilder: (context, index) {
+                final line = statement.lines[index];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (index > 0)
+                      Container(
+                        constraints: BoxConstraints.tightFor(height: 1),
+                        color: AppColors.border,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(_fmtDate(line.date), style: cell),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text('${line.entryNo}', style: cell),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              line.memo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: cell,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              line.debit > 0 ? Money.format(line.debit) : '',
+                              style: cell,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              line.credit > 0 ? Money.format(line.credit) : '',
+                              style: cell,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              Money.format(line.balance),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: line.balance < 0
+                                    ? AppColors.danger
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                );
+              },
+            ),
+          ),
+          Container(
+            constraints: BoxConstraints.tightFor(height: 1),
+            color: AppColors.border,
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              border: Border(
+                top: BorderSide(color: AppColors.border),
+                left: BorderSide(color: AppColors.border),
+                right: BorderSide(color: AppColors.border),
+                bottom: BorderSide(color: AppColors.border),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Row(
+                children: [
+                  const Expanded(flex: 9, child: SizedBox.shrink()),
                   Expanded(
                     flex: 2,
                     child: Text(
-                      line.debit > 0 ? Money.format(line.debit) : '',
-                      style: cell,
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      line.credit > 0 ? Money.format(line.credit) : '',
-                      style: cell,
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      Money.format(line.balance),
+                      'الإجمالي',
+                      textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w800,
-                        color: line.balance < 0
-                            ? AppColors.danger
-                            : AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      Money.format(statement.totalDebit),
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      Money.format(statement.totalCredit),
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Row(
-              children: [
-                const Expanded(flex: 9, child: SizedBox.shrink()),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'الإجمالي',
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    Money.format(statement.totalDebit),
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    Money.format(statement.totalCredit),
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -533,42 +597,6 @@ class _SelectAccountState extends StatelessWidget {
             Text(
               'اختر حساباً لعرض حركاته',
               style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
             ),
           ],
         ),

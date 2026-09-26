@@ -1,40 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../theme/app_colors.dart';
+import '../config/app_config.dart';
+import '../theme/app_page_icons.dart';
 import 'content_placeholder.dart';
+import 'page_chrome.dart';
 import 'user_corner.dart';
 
-/// Uniform page header + body shell for every screen in the app.
-///
-/// - Header: a white rounded "topbar" card (matching the reference HTML)
-///   with the page title + optional subtitle, optional trailing actions,
-///   and the user corner (date + avatar).
-/// - Body: [child], or a [ContentPlaceholder] when null.
 class PageScaffold extends StatelessWidget {
   const PageScaffold({
     super.key,
     required this.title,
     this.subtitle,
+    this.icon,
+    this.iconColor,
     this.actions,
     this.child,
+    this.padded = true,
   });
 
   final String title;
   final String? subtitle;
+  final FaIconData? icon;
+  final Color? iconColor;
   final List<Widget>? actions;
   final Widget? child;
+  final bool padded;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 700;
-        final outerPadding = isMobile ? 16.0 : 24.0;
-        final headerVPadding = isMobile ? 10.0 : 14.0;
-        final headerHPadding = isMobile ? 16.0 : 20.0;
-        final headerRadius = isMobile ? 12.0 : 16.0;
-        const gapAfterHeader = 16.0;
+        final isMobile = constraints.maxWidth < AppConfig.breakpointNarrow;
+        final outerPadding = padded
+            ? (isMobile
+                  ? AppConfig.pageGutterNarrow
+                  : AppConfig.pageGutter)
+            : 0.0;
 
         return SafeArea(
           child: Padding(
@@ -42,96 +44,15 @@ class PageScaffold extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: headerHPadding,
-                    vertical: headerVPadding,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(headerRadius),
-                    border: Border.all(color: AppColors.border),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0D0F172A),
-                        blurRadius: 6,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 700;
-                      if (!wide) {
-                        final acts = actions ?? const <Widget>[];
-                        return Row(
-                          children: [
-                            SizedBox(
-                              width: constraints.maxWidth / 2,
-                              child: Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: Text(
-                                  title,
-                                  style: theme.textTheme.headlineMedium,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: AlignmentDirectional.centerEnd,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (var i = 0; i < acts.length; i++) ...[
-                                      if (i > 0) const SizedBox(width: 2),
-                                      acts[i],
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  title,
-                                  style: theme.textTheme.headlineMedium,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (subtitle != null && !isMobile)
-                                  Text(
-                                    subtitle!,
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (actions != null)
-                            for (final action in actions!) ...[
-                              action,
-                              const SizedBox(width: 4),
-                            ],
-                          if (actions != null && actions!.isNotEmpty)
-                            const SizedBox(width: 8),
-                          const UserCorner(showDate: true),
-                        ],
-                      );
-                    },
-                  ),
+                PageChrome(
+                  title: title,
+                  subtitle: subtitle,
+                  icon: icon ?? AppPageIcons.of(title),
+                  iconColor: iconColor,
+                  actions: actions ?? const [],
+                  trailing: isMobile ? null : const UserCorner(showDate: true),
                 ),
-                SizedBox(height: gapAfterHeader),
+                const SizedBox(height: AppConfig.sectionGap / 1.5),
                 Expanded(child: child ?? const ContentPlaceholder()),
               ],
             ),

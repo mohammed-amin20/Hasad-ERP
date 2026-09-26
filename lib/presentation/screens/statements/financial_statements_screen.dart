@@ -3,8 +3,11 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_progress.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/reports/balance_sheet.dart' as sheet_models;
@@ -63,7 +66,12 @@ class _FinancialStatementsScreenState
           Expanded(
             child: reportAsync.when(
               loading: () => const Center(child: AppProgress()),
-              error: (e, _) => _ErrorState(message: e.toString()),
+              error: (e, _) => ErrorStateView(
+                message: mapErrorToAppException(e).message,
+                onRetry: () => ref.invalidate(
+                  _showBalanceSheet ? balanceSheetProvider : incomeStatementProvider,
+                ),
+              ),
               data: (data) => _showBalanceSheet
                   ? _BalanceSheetView(sheet: data as sheet_models.BalanceSheet)
                   : _IncomeView(statement: data as pnl_models.IncomeStatement),
@@ -439,42 +447,29 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return HasadCard(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: color.withValues(alpha: 0.08),
-            child: Row(
-              children: [
-                FaIcon(icon, size: 16, color: color),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  Money.format(total),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
+          CardHeader(
+            title: title,
+            icon: icon,
+            iconColor: color,
+            trailing: Text(
+              Money.format(total),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
+          const SizedBox(height: 12),
           if (rows.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'لا توجد بنود',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -483,18 +478,16 @@ class _SectionCard extends StatelessWidget {
               ),
             )
           else
-            for (final row in rows)
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Row(
                   children: [
                     SizedBox(
                       width: 56,
                       child: Text(
-                        row.code,
+                        rows[i].code,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: color,
                           fontWeight: FontWeight.w700,
@@ -503,7 +496,7 @@ class _SectionCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: Text(
-                        row.name,
+                        rows[i].name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -511,52 +504,19 @@ class _SectionCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
-                      Money.format(row.amount),
+                      Money.format(rows[i].amount),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
         ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

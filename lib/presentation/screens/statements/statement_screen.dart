@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/widgets/app_progress.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/printing/statement_pdf.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/route_header.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/statements/statement.dart';
@@ -103,7 +105,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.danger,
-          content: Text('تعذر إنشاء ملف PDF: ${e.toString()}'),
+          content: Text('تعذر إنشاء ملف PDF: ${mapErrorToAppException(e).message}'),
         ),
       );
     } finally {
@@ -113,15 +115,14 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final statementAsync = _submitted
         ? ref.watch(partyStatementProvider(_request!))
         : null;
     final statement = statementAsync?.value;
 
-    return Container(
-      color: AppColors.background,
-      child: SafeArea(
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -198,17 +199,9 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
               child:
                   statementAsync?.when(
                     loading: () => const Center(child: AppProgress()),
-                    error: (e, _) => Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          e.toString(),
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.danger,
-                          ),
-                        ),
-                      ),
+                    error: (e, _) => ErrorStateView(
+                      message: mapErrorToAppException(e).message,
+                      onRetry: () => ref.invalidate(partyStatementProvider(_request!)),
                     ),
                     data: (st) => _StatementBody(statement: st),
                   ) ??

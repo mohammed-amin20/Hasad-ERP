@@ -6,6 +6,7 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/route_header.dart';
 import '../../../core/widgets/status_badge.dart';
@@ -121,7 +122,10 @@ class _PurchaseInvoicesScreenState
               Expanded(
                 child: listAsync.when(
                   loading: () => const Center(child: AppProgress()),
-                  error: (e, _) => ListErrorState(message: e.toString()),
+                  error: (e, _) => ErrorStateView(
+                    message: mapErrorToAppException(e).message,
+                    onRetry: () => ref.invalidate(purchaseInvoicesListProvider),
+                  ),
                   data: (invoices) {
                     if (invoices.isEmpty) {
                       return const _EmptyState();
@@ -396,7 +400,10 @@ class _NewPurchaseInvoicePageState
               const SizedBox(height: 16),
               suppliersAsync.when(
                 loading: () => const Center(child: AppProgress()),
-                error: (e, _) => ListErrorState(message: e.toString()),
+                error: (e, _) => ErrorStateView(
+                  message: mapErrorToAppException(e).message,
+                  onRetry: () => ref.invalidate(allSuppliersProvider),
+                ),
                 data: (suppliers) => DropdownButtonFormField<String>(
                   initialValue: _supplierId,
                   decoration: const InputDecoration(

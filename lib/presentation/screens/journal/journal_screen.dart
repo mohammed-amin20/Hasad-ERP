@@ -7,6 +7,8 @@ import '../../../core/widgets/app_progress.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/hasad_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
@@ -15,6 +17,7 @@ import '../../../domain/journal/manual_journal_draft.dart';
 import '../../providers/accounts_providers.dart';
 import '../../providers/journal_providers.dart';
 import '../../widgets/freshness_chip.dart';
+import '../../widgets/record_table.dart';
 import '../../widgets/invoice_input_fields.dart';
 
 class JournalScreen extends ConsumerStatefulWidget {
@@ -91,13 +94,102 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: entriesAsync.when(
-                  loading: () => const Center(child: AppProgress()),
-                  error: (e, _) => _ErrorState(message: e.toString()),
-                  data: (entries) {
-                    if (entries.isEmpty) return const _EmptyState();
-                    return _EntryList(entries: entries);
-                  },
+                child: AsyncSection<List<JournalEntry>>(
+                  value: entriesAsync,
+                  onRetry: () => ref.invalidate(journalListProvider),
+                  emptyIcon: FontAwesomeIcons.bookOpen,
+                  emptyTitle: 'لا توجد قيود في الفترة المحددة',
+                  emptyMessage: 'اضغط على + لترحيل قيد يدوي',
+                  builder: (context, entries) => RecordTable<JournalEntry>(
+                    items: entries,
+                    onTap: (e) => _showEntryDetail(context, e),
+                    columns: [
+                      RecordColumn<JournalEntry>(
+                        label: 'الرقم',
+                        primary: true,
+                        flex: 2,
+                        cell: (context, e) => Text(
+                          'قيد رقم ${e.entryNo}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      RecordColumn<JournalEntry>(
+                        label: 'البيان',
+                        flex: 3,
+                        cell: (context, e) => Text(
+                          e.memo.isEmpty ? 'قيد رقم ${e.entryNo}' : e.memo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      RecordColumn<JournalEntry>(
+                        label: 'التاريخ',
+                        flex: 2,
+                        cell: (context, e) => Text(
+                          _fmtDate(e.date),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      RecordColumn<JournalEntry>(
+                        label: 'النوع',
+                        flex: 2,
+                        cell: (context, e) => _SourceBadge(
+                          manual: e.sourceType == JournalSourceType.manual,
+                        ),
+                      ),
+                      RecordColumn<JournalEntry>(
+                        label: 'الإجمالي',
+                        flex: 2,
+                        cell: (context, e) => Text(
+                          Money.format(e.total),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                    trailing: (context, e) => PopupMenuButton<String>(
+                      tooltip: 'خيارات',
+                      icon: const FaIcon(
+                        FontAwesomeIcons.ellipsisVertical,
+                        size: 16,
+                        color: AppColors.textMuted,
+                      ),
+                      onSelected: (value) {
+                        if (value == 'detail') {
+                          _showEntryDetail(context, e);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'detail',
+                          child: Row(
+                            children: [
+                              FaIcon(FontAwesomeIcons.eye, size: 14),
+                              SizedBox(width: 8),
+                              Text('عرض التفاصيل'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -145,6 +237,19 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
       ),
     );
   }
+
+  void _showEntryDetail(BuildContext context, JournalEntry entry) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _EntryDetailSheet(entry: entry),
+    );
+  }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
+      '${d.day.toString().padLeft(2, '0')}';
 }
 
 class _RangeBar extends StatelessWidget {
@@ -224,96 +329,10 @@ class _DateChip extends StatelessWidget {
       ),
     );
   }
-}
 
-class _EntryList extends StatelessWidget {
-  const _EntryList({required this.entries});
-
-  final List<JournalEntry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      itemCount: entries.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => _EntryTile(entry: entries[index]),
-    );
-  }
-}
-
-class _EntryTile extends StatelessWidget {
-  const _EntryTile({required this.entry});
-
-  final JournalEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final manual = entry.sourceType == JournalSourceType.manual;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: CircleAvatar(
-          backgroundColor: (manual ? AppColors.warning : AppColors.success)
-              .withValues(alpha: 0.12),
-          child: FaIcon(
-            manual ? FontAwesomeIcons.pen : FontAwesomeIcons.bolt,
-            size: 16,
-            color: manual ? AppColors.warning : AppColors.success,
-          ),
-        ),
-        title: Text(
-          entry.memo.isEmpty ? 'قيد رقم ${entry.entryNo}' : entry.memo,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(
-            'قيد رقم ${entry.entryNo} · ${_fmtDate(entry.date)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.textMuted,
-            ),
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _SourceBadge(manual: manual),
-            const SizedBox(width: 8),
-            Text(
-              Money.format(entry.total),
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        children: [
-          const _LineHeader(),
-          const Divider(height: 1),
-          for (final line in entry.lines)
-            _LineRow(
-              code: line.accountCode,
-              name: line.accountName,
-              debit: line.debit,
-              credit: line.credit,
-            ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
+  String _fmtDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
+      '${d.day.toString().padLeft(2, '0')}';
 }
 
 class _SourceBadge extends StatelessWidget {
@@ -340,20 +359,180 @@ class _SourceBadge extends StatelessWidget {
   }
 }
 
-class _LineHeader extends StatelessWidget {
-  const _LineHeader();
+class _EntryDetailSheet extends StatelessWidget {
+  const _EntryDetailSheet({required this.entry});
+
+  final JournalEntry entry;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w700);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-      child: Row(
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 48,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SummaryCard(
+                      label: 'القيد رقم ${entry.entryNo}',
+                      value: entry.memo.isEmpty ? '—' : entry.memo,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SummaryCard(
+                      label: 'التاريخ',
+                      value: _fmtDate(entry.date),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          'الحساب',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'مدين',
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'دائن',
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 1),
+                  for (final line in entry.lines)
+                    _LineRow(
+                      code: line.accountCode,
+                      name: line.accountName,
+                      debit: line.debit,
+                      credit: line.credit,
+                    ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Expanded(flex: 3, child: Text('المجموع')),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          Money.format(entry.total),
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          Money.format(entry.total),
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
+      '${d.day.toString().padLeft(2, '0')}';
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 3, child: Text('الحساب', style: style)),
-          Expanded(flex: 2, child: Text('مدين', style: style)),
-          Expanded(flex: 2, child: Text('دائن', style: style)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -378,7 +557,7 @@ class _LineRow extends StatelessWidget {
     final theme = Theme.of(context);
     final cell = theme.textTheme.bodyMedium;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
           Expanded(
@@ -550,9 +729,33 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'قيد يدوي جديد',
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                children: [
+                  const IconChip(
+                    icon: FontAwesomeIcons.pen,
+                    color: AppColors.primary,
+                    size: 40,
+                    iconSize: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'قيد يدوي جديد',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'أدخل بيانات القيد والسطور',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               Material(
@@ -687,13 +890,13 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: AppProgress(strokeWidth: 2),
+                        child: AppProgress(strokeWidth: 2, color: Colors.white),
                       )
                     : const Text('ترحيل القيد'),
               ),
@@ -703,6 +906,10 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
       ),
     );
   }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
+      '${d.day.toString().padLeft(2, '0')}';
 }
 
 class _StatusPill extends StatelessWidget {
@@ -847,79 +1054,3 @@ class _ManualLineEditor extends StatelessWidget {
     );
   }
 }
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.bookOpen,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'لا توجد قيود في الفترة المحددة',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'اضغط على + لترحيل قيد يدوي',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(
-              FontAwesomeIcons.circleExclamation,
-              size: 48,
-              color: AppColors.danger,
-            ),
-            const SizedBox(height: 16),
-            Text('حدث خطأ', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _fmtDate(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/'
-    '${d.day.toString().padLeft(2, '0')}';
