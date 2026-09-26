@@ -24,7 +24,7 @@ create extension if not exists "uuid-ossp";
 
 ### Apply Migrations (single-paste — Recommended)
 
-The combined file `prod_schema.sql` in this folder concatenates `0001–0021` in order. Paste the entire file into **SQL Editor** once and run. Verify no errors in the output; then confirm the verification query at the end (table/function/cron counts).
+The combined file `prod_schema.sql` in this folder concatenates `0001–0024` in order. Paste the entire file into **SQL Editor** once and run. Verify no errors in the output; then confirm the verification query at the end (table/function/cron counts).
 
 **Important**: Extensions `pg_cron` and `pg_net` are allowlisted by Supabase but must be enabled; the script runs `create extension if not exists` which activates them. For `0013_reminder.sql` and `0020_reminders_to_all.sql`, cron jobs are created but **won't fire** until the n8n webhook is configured (see §3 below).
 
@@ -49,10 +49,10 @@ If the combined script fails, paste each file individually in order from `../mig
 → 0011_idempotency.sql → 0012_storage.sql → 0013_reminder.sql → 0014_stock_adjust.sql
 → 0015_get_party_statement.sql → 0016_employees_rls.sql → 0017_master_tables_set_tenant.sql
 → 0018_purchase_links_existing_product.sql → 0019_reports.sql → 0020_reminders_to_all.sql
-→ 0021_user_tenants.sql
+→ 0021_user_tenants.sql → 0023_register_tenant_stamps_tenant.sql → 0024_backfill_user_tenants.sql
 ```
 
-After each, verify no errors. `0021` creates `user_tenants`, backfills `current_tenant_id`, and adds the `switch_tenant` RPC — required for multi-business (M9 WS6) and the `_TenantSwitcher` sidebar.
+After each, verify no errors. `0021` creates `user_tenants`, backfills `current_tenant_id`, and adds the `switch_tenant` RPC — required for multi-business (M9 WS6) and the `_TenantSwitcher` sidebar. `0023` re-shapes `register_tenant` to stamp `current_tenant_id` + membership and adds the `get_user_tenants()` RPC. `0024` backfills `user_tenants` memberships for orphaned pre-0023 accounts (idempotent).
 
 ### Configure Auth
 
@@ -350,7 +350,7 @@ Run `verify_security.sql` (postgres role, SQL Editor) and review every block:
 | `README.md` | This file |
 | `docker-compose.yml` | n8n + PostgreSQL for VPS |
 | `.env.example` | Template for n8n environment |
-| `prod_schema.sql` | Combined 0001–0021 migration script (single SQL Editor paste) |
+| `prod_schema.sql` | Combined 0001–0024 migration script (single SQL Editor paste) |
 | `reapply_rls.sql` | **Post-paste hardening:** ENABLE+FORCE RLS + recreate isolation policies (no grant changes) |
 | `reapply_reminder_rpcs.sql` | **Post-paste hardening:** drop-all + recreate reminder RPCs (numeric `_fire_reminder`), grants, daily cron |
 | `verify_security.sql` | Runnable §7 security audit (postgres role) |

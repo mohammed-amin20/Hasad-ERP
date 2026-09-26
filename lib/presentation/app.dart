@@ -7,6 +7,7 @@ import 'providers/auth_providers.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/splash_screen.dart';
 import 'shell/app_shell.dart';
+import 'widgets/no_workspace_view.dart';
 
 /// Root widget: chooses Splash / Login / Shell from the auth stream.
 class HasadApp extends ConsumerWidget {
@@ -38,7 +39,11 @@ class HasadApp extends ConsumerWidget {
         home: auth.when(
           loading: () => const SplashScreen(),
           error: (_, _) => const LoginScreen(),
-          data: (user) => user == null ? const LoginScreen() : const AppShell(),
+          data: (user) => user == null
+              ? const LoginScreen()
+              : user.hasTenant
+                  ? const AppShell()
+                  : const NoWorkspaceView(),
         ),
       ),
     );
