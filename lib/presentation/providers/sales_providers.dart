@@ -1,6 +1,5 @@
 ﻿import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../core/network/connectivity_providers.dart';
 import '../../data/invoices/invoice_repository.dart';
 import '../../data/offline/local_store.dart';
 import '../../data/offline/offline_invoice_repository.dart';
@@ -30,7 +29,6 @@ SaleRepository saleRepository(Ref ref) {
       tenantId,
       () => ref.read(accountRepositoryProvider).chart(),
     ),
-    () => ref.read(isOnlineProvider),
   );
 }
 

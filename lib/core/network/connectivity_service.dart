@@ -5,13 +5,41 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
+import '../config/app_config.dart';
 import 'web_online.dart';
 
-/// Service that monitors network connectivity changes.
+/// Probes whether [url] is reachable. Returns true on any 2xx.
+typedef ConnectivityProbe = Future<bool> Function(Uri url, Duration timeout);
+
+/// Default probe: the app's own backend health endpoint.
+///
+/// The `apikey` header is required (the endpoint answers 401 without it) and
+/// is not CORS-safelisted, so the browser sends a preflight first — GoTrue
+/// allows it and reflects the caller's origin on the 200, so `package:http`
+/// (a `BrowserClient` on web) can actually read the response.
+Future<bool> defaultConnectivityProbe(Uri url, Duration timeout) async {
+  const headers = <String, String>{'apikey': AppConfig.supabaseAnonKey};
+  if (kIsWeb) {
+    final response = await http.get(url, headers: headers).timeout(timeout);
+    return response.statusCode >= 200 && response.statusCode < 300;
+  }
+  final client = HttpClient()..connectionTimeout = timeout;
+  try {
+    final request = await client.getUrl(url);
+    headers.forEach(request.headers.set);
+    final response = await request.close();
+    return response.statusCode >= 200 && response.statusCode < 300;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 class ConnectivityService {
-  ConnectivityService(this._connectivity);
+  ConnectivityService(this._connectivity, {ConnectivityProbe? probe})
+    : _probe = probe ?? defaultConnectivityProbe;
 
   final Connectivity _connectivity;
+  final ConnectivityProbe _probe;
   final _controller = StreamController<List<ConnectivityResult>>.broadcast();
 
   Stream<List<ConnectivityResult>> get onConnectivityChanged =>
@@ -21,11 +49,20 @@ class ConnectivityService {
     ConnectivityResult.none,
   ];
 
-  bool _verifiedOnline = false;
+  /// Consecutive failed probes. A single blip must not flip a working
+  /// connection to "offline", so [_failureThreshold] failures in a row are
+  /// required before the verdict goes negative.
+  int _consecutiveFailures = 0;
+
+  /// Starts optimistic: until a probe actually proves otherwise we assume the
+  /// connection works, matching `isOnlineProvider`'s `?? true` default.
+  bool _verifiedOnline = true;
   Timer? _verificationTimer;
   static const _verificationInterval = Duration(seconds: 30);
   static const _verificationTimeout = Duration(seconds: 5);
-  static const _verificationUrl = 'https://www.google.com/generate_204';
+  static const int _failureThreshold = 2;
+
+  Uri get _verificationUrl => AppConfig.supabaseHealthUri;
 
   Future<void> initialize() async {
     _lastResult = await _connectivity.checkConnectivity();
@@ -39,7 +76,7 @@ class ConnectivityService {
         if (result.any((r) => r != ConnectivityResult.none)) {
           unawaited(verifyInternetConnectivity());
         } else {
-          _verifiedOnline = false;
+          _recordProbeResult(false);
         }
       }
     });
@@ -64,35 +101,37 @@ class ConnectivityService {
   }
 
   Future<bool> verifyInternetConnectivity() async {
+    var reachable = false;
     try {
       if (kIsWeb) {
         // The browser's `navigator.onLine` is the authoritative, instant
         // offline signal on web (no HTTP wait). When it reports offline the
-        // verdict flips to `false` immediately; otherwise fall through to the
-        // HTTP 204/200 probe which is authoritative for a browser that reports
-        // an interface but has no real internet access.
+        // verdict can flip without waiting on a request that cannot succeed.
         if (!webNavigatorOnLine()) {
-          _verifiedOnline = false;
-          return _verifiedOnline;
+          return _recordProbeResult(false);
         }
-        // `dart:io` HttpClient is unavailable at runtime on Flutter web, and
-        // the browser's connectivity events only reflect network interfaces.
-        // Verify real internet access via an HTTP 204/200 endpoint instead.
-        final response = await http
-            .get(Uri.parse(_verificationUrl))
-            .timeout(_verificationTimeout);
-        _verifiedOnline =
-            response.statusCode == 204 || response.statusCode == 200;
-        return _verifiedOnline;
       }
-      final client = HttpClient();
-      client.connectionTimeout = _verificationTimeout;
-      final request = await client.getUrl(Uri.parse(_verificationUrl));
-      final response = await request.close();
-      _verifiedOnline = response.statusCode == 204 || response.statusCode == 200;
-      client.close();
+      // `dart:io` HttpClient is unavailable at runtime on Flutter web, and
+      // the browser's connectivity events only reflect network interfaces.
+      // Verify real internet access by probing the backend we depend on.
+      reachable = await _probe(_verificationUrl, _verificationTimeout);
     } catch (_) {
-      _verifiedOnline = false;
+      reachable = false;
+    }
+    return _recordProbeResult(reachable);
+  }
+
+  /// Folds one probe outcome into the debounced verdict. Recovery is instant;
+  /// going offline needs [_failureThreshold] consecutive failures.
+  bool _recordProbeResult(bool reachable) {
+    if (reachable) {
+      _consecutiveFailures = 0;
+      _verifiedOnline = true;
+    } else {
+      _consecutiveFailures++;
+      if (_consecutiveFailures >= _failureThreshold) {
+        _verifiedOnline = false;
+      }
     }
     return _verifiedOnline;
   }
@@ -101,17 +140,11 @@ class ConnectivityService {
     _lastResult = await _connectivity.checkConnectivity();
     return _lastResult;
   }
-
-  /// True only if we have a network interface AND verified internet access
   bool get isVerifiedOnline => _verifiedOnline;
-
-  /// True if any network interface is up (instant, may be false positive)
   bool get hasInterface => _lastResult.any((r) => r != ConnectivityResult.none);
 
   ConnectivityResult get primaryResult =>
       _lastResult.isNotEmpty ? _lastResult.first : ConnectivityResult.none;
-
-  /// Current connectivity results (for external access)
   List<ConnectivityResult> get lastResult => List.unmodifiable(_lastResult);
 
   void dispose() {
@@ -127,8 +160,6 @@ class ConnectivityService {
     return true;
   }
 }
-
-/// Extension for user-friendly connectivity status
 extension ConnectivityResultX on ConnectivityResult {
   String get arabicLabel {
     switch (this) {
