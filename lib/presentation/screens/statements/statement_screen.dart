@@ -13,6 +13,7 @@ import '../../../core/widgets/route_header.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/statements/statement.dart';
 import '../../providers/statements_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
 
 /// Account statement for one party with a MANDATORY from/to date filter.
@@ -163,7 +164,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                           child: InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'من تاريخ',
-                              prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                              prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_from)),
                           ),
@@ -176,7 +177,7 @@ class _StatementScreenState extends ConsumerState<StatementScreen> {
                           child: InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'إلى تاريخ',
-                              prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                              prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                             ),
                             child: Text(formatDate(_to)),
                           ),

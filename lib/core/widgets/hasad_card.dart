@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../config/app_config.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_theme.dart';
 
 class HasadCard extends StatelessWidget {
   const HasadCard({
@@ -160,29 +161,33 @@ class IconChip extends StatelessWidget {
     super.key,
     required this.icon,
     required this.color,
-    this.size = 40,
-    this.iconSize = 18,
+    this.size,
+    this.iconSize,
     this.circular = true,
   });
 
   final FaIconData icon;
   final Color color;
-  final double size;
-  final double iconSize;
+  final double? size;
+  final double? iconSize;
   final bool circular;
 
   @override
   Widget build(BuildContext context) {
+    final icons = IconSizes.of(context);
+    final chipSize = size ?? icons.xxxl;
+    final iconIconSize = iconSize ?? icons.md;
+
     return Container(
-      width: size,
-      height: size,
+      width: chipSize,
+      height: chipSize,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.softFill(color),
         shape: circular ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circular ? null : BorderRadius.circular(12),
       ),
-      child: FaIcon(icon, size: iconSize, color: color),
+      child: FaIcon(icon, size: iconIconSize, color: color),
     );
   }
 }
@@ -207,6 +212,7 @@ class CardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icons = IconSizes.of(context);
     final theme = Theme.of(context);
     final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,8 +246,8 @@ class CardHeader extends StatelessWidget {
               IconChip(
                 icon: icon!,
                 color: iconColor ?? AppColors.primary,
-                size: compact ? 32 : 40,
-                iconSize: compact ? 15 : 18,
+                size: compact ? icons.xxl : icons.xxxl,
+                iconSize: compact ? icons.md : icons.md,
               ),
               const SizedBox(width: 12),
               Expanded(child: titleBlock),

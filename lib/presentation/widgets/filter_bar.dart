@@ -3,7 +3,10 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/hasad_card.dart';
+
+import 'field_icon.dart';
 
 class FilterBar extends StatelessWidget {
   const FilterBar({
@@ -23,6 +26,7 @@ class FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icons = IconSizes.of(context);
     return HasadCard(
       padding: const EdgeInsets.all(AppConfig.cardPaddingSmall),
       child: LayoutBuilder(
@@ -34,13 +38,16 @@ class FilterBar extends StatelessWidget {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: hintText,
-              prefixIcon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 15),
+              prefixIcon: FieldIcon.fa(
+                FontAwesomeIcons.magnifyingGlass,
+                size: icons.md,
+              ),
               suffixIcon: (searchController?.text.isNotEmpty ?? false) &&
                       onClearSearch != null
                   ? IconButton(
                       tooltip: 'مسح البحث',
                       onPressed: onClearSearch,
-                      icon: const FaIcon(FontAwesomeIcons.xmark, size: 14),
+                      icon: FaIcon(FontAwesomeIcons.xmark, size: icons.sm),
                     )
                   : null,
             ),
@@ -92,8 +99,9 @@ class DateRangeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icons = IconSizes.of(context);
     final chip = ActionChip(
-      avatar: const FaIcon(FontAwesomeIcons.calendarDays, size: 12),
+      avatar: FaIcon(FontAwesomeIcons.calendarDays, size: icons.xs),
       label: Text(label),
       onPressed: onTap,
       tooltip: 'تصفية حسب التاريخ',
@@ -109,11 +117,11 @@ class DateRangeChip extends StatelessWidget {
     );
     if (onClear == null) return chip;
     return InputChip(
-      avatar: const FaIcon(FontAwesomeIcons.calendarDays, size: 12),
+      avatar: FaIcon(FontAwesomeIcons.calendarDays, size: icons.xs),
       label: Text(label),
       onPressed: onTap,
       onDeleted: onClear,
-      deleteIcon: const FaIcon(FontAwesomeIcons.xmark, size: 11),
+      deleteIcon: FaIcon(FontAwesomeIcons.xmark, size: icons.xs),
       deleteButtonTooltipMessage: 'مسح التاريخ',
       tooltip: 'تصفية حسب التاريخ',
       side: const BorderSide(color: AppColors.border),

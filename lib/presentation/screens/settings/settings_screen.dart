@@ -14,6 +14,7 @@ import '../../../domain/reminders/reminder_settings.dart';
 import '../../providers/reminders_providers.dart';
 import '../../providers/offline_sync_providers.dart'
     show manualSyncNowProvider, pendingSyncCountProvider;
+import '../../widgets/field_icon.dart';
 
 /// Reminder automation + company settings (admin-only tab).
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -216,7 +217,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
               decoration: const InputDecoration(
                 labelText: 'رابط Webhook (n8n)',
                 hintText: 'https://...',
-                prefixIcon: FaIcon(FontAwesomeIcons.link, size: 16),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.link, size: 16),
                 helperText: 'اتركه فارغاً لتعطيل إرسال التذكيرات',
               ),
               validator: (value) {
@@ -235,7 +236,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
               textAlignVertical: TextAlignVertical.top,
               decoration: const InputDecoration(
                 labelText: 'قالب الرسالة',
-                prefixIcon: FaIcon(FontAwesomeIcons.message, size: 16),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.message, size: 16),
                 alignLabelWithHint: true,
               ),
               validator: (value) => (value == null || value.trim().isEmpty)
@@ -270,7 +271,7 @@ class _ReminderSettingsFormState extends State<_ReminderSettingsForm> {
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'إرسال تذكير بعد',
-                prefixIcon: FaIcon(FontAwesomeIcons.clock, size: 16),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.clock, size: 16),
               ),
               items: [
                 if (!_thresholdItems.any((e) => e.$1 == _threshold))

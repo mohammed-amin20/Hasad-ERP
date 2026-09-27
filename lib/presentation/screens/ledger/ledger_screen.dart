@@ -13,6 +13,7 @@ import '../../../domain/accounts/account.dart';
 import '../../../domain/reports/ledger.dart' as ledger_models;
 import '../../providers/accounts_providers.dart';
 import '../../providers/report_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
 
 class LedgerScreen extends ConsumerStatefulWidget {
@@ -143,7 +144,7 @@ class _LedgerControls extends ConsumerWidget {
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'الحساب',
-            prefixIcon: FaIcon(FontAwesomeIcons.sitemap),
+            prefixIcon: FieldIcon.fa(FontAwesomeIcons.sitemap),
           ),
           items: [
             for (final account in accounts)

@@ -17,6 +17,7 @@ import '../../../domain/suppliers/supplier.dart';
 import '../../providers/products_providers.dart';
 import '../../providers/suppliers_providers.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 
@@ -517,7 +518,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم المنتج',
-                  prefixIcon: FaIcon(FontAwesomeIcons.tableCells),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.tableCells),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -529,7 +530,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'الباركود',
-                  prefixIcon: FaIcon(FontAwesomeIcons.qrcode),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.qrcode),
                 ),
               ),
               const SizedBox(height: 12),
@@ -541,7 +542,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'الوحدة',
-                        prefixIcon: FaIcon(FontAwesomeIcons.ruler),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.ruler),
                         hintText: 'كجم، قطعة، كيس...',
                       ),
                       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -554,9 +555,10 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                   Expanded(
                     child: DropdownButtonFormField<ProductUnitType>(
                       initialValue: _unitType,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'نوع القياس',
-                        prefixIcon: FaIcon(FontAwesomeIcons.scaleBalanced),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.scaleBalanced),
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -607,7 +609,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       ),
                       decoration: const InputDecoration(
                         labelText: 'سعر البيع',
-                        prefixIcon: FaIcon(FontAwesomeIcons.tag),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.tag),
                       ),
                       validator: _validatePrice,
                     ),
@@ -622,7 +624,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       ),
                       decoration: const InputDecoration(
                         labelText: 'سعر الشراء',
-                        prefixIcon: FaIcon(FontAwesomeIcons.cartShopping),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.cartShopping),
                       ),
                       validator: _validatePrice,
                     ),
@@ -634,9 +636,10 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                 initialValue: _supplier?.id != null && _supplier!.id.isNotEmpty
                     ? _supplier!.id
                     : null,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'المورد',
-                  prefixIcon: FaIcon(FontAwesomeIcons.warehouse),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.warehouse),
                 ),
                 items: [
                   const DropdownMenuItem<String?>(
@@ -671,7 +674,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'نسبة العمولة %',
-                    prefixIcon: FaIcon(FontAwesomeIcons.percent),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.percent),
                   ),
                   validator: (v) {
                     final text = (v ?? '').trim();
@@ -719,7 +722,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: const FaIcon(FontAwesomeIcons.hashtag),
+        prefixIcon: const FieldIcon.fa(FontAwesomeIcons.hashtag),
       ),
       validator: _validateQuantity,
     );

@@ -15,6 +15,7 @@ import '../../../data/offline/report_keys.dart';
 import '../../../domain/accounts/account.dart';
 import '../../../domain/accounts/account_draft.dart';
 import '../../providers/accounts_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/freshness_chip.dart';
 import '../../widgets/record_table.dart';
@@ -191,7 +192,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
               heroTag: 'accounts_add',
               tooltip: 'إضافة حساب',
               onPressed: () => _showAccountForm(context),
-              child: const FaIcon(FontAwesomeIcons.plus),
+              child: const FaIcon(FontAwesomeIcons.plus, size: 24),
             ),
           ),
         ],
@@ -299,9 +300,10 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomPadding),
       child: Form(
         key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
@@ -343,7 +345,7 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
               decoration: const InputDecoration(
                 labelText: 'كود الحساب',
                 hintText: 'مثال: 5228',
-                prefixIcon: FaIcon(FontAwesomeIcons.hashtag),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.hashtag),
               ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               validator: (v) =>
@@ -355,7 +357,7 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'اسم الحساب',
-                prefixIcon: FaIcon(FontAwesomeIcons.heading),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.heading),
               ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               validator: (v) =>
@@ -366,7 +368,7 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
               initialValue: _type,
               decoration: const InputDecoration(
                 labelText: 'نوع الحساب',
-                prefixIcon: FaIcon(FontAwesomeIcons.layerGroup),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.layerGroup),
               ),
               items: const [
                 DropdownMenuItem(value: AccountType.asset, child: Text('أصول')),
@@ -397,7 +399,7 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
               textInputAction: TextInputAction.done,
               decoration: const InputDecoration(
                 labelText: 'كود الحساب الأب (اختياري)',
-                prefixIcon: FaIcon(FontAwesomeIcons.sitemap),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.sitemap),
               ),
             ),
             const SizedBox(height: 20),
@@ -412,7 +414,8 @@ class _AccountFormSheetState extends ConsumerState<_AccountFormSheet> {
                     )
                   : const Text('إضافة'),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

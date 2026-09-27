@@ -10,6 +10,7 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/field_icon.dart';
 
 /// Sign-in screen matching the reference HTML login: a dark navy→blue
 /// gradient backdrop, radial glows, and a white radius-24 card with the
@@ -306,9 +307,8 @@ class _LoginCard extends StatelessWidget {
               decoration: const InputDecoration(
                 labelText: 'اسم المستخدم',
                 hintText: 'name@example.com',
-                prefixIcon: FaIcon(
+                prefixIcon: FieldIcon.fa(
                   FontAwesomeIcons.envelope,
-                  size: 20,
                   color: AppColors.inputIcon,
                 ),
               ),
@@ -332,9 +332,8 @@ class _LoginCard extends StatelessWidget {
               onFieldSubmitted: (_) => onSubmit(),
               decoration: InputDecoration(
                 labelText: 'كلمة المرور',
-                prefixIcon: const FaIcon(
+                prefixIcon: const FieldIcon.fa(
                   FontAwesomeIcons.lock,
-                  size: 20,
                   color: AppColors.inputIcon,
                 ),
                 suffixIcon: IconButton(
@@ -401,16 +400,25 @@ class _LoginCard extends StatelessWidget {
                       height: 20,
                       child: AppProgress(strokeWidth: 2, color: Colors.white),
                     )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FaIcon(
-                          FontAwesomeIcons.arrowRightFromBracket,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('تسجيل الدخول'),
-                      ],
+                  : FittedBox(
+                      // A fixed `mainAxisSize.min` Row of icon + label cannot
+                      // shrink, so it overflowed its button by 6px at 360 wide
+                      // (a pre-existing defect — the submit button's label was
+                      // clipped, unrelated to any input field). Scale down
+                      // instead of ellipsizing a submit label; same pattern as
+                      // `PageChrome`'s narrow header strip.
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const FaIcon(
+                            FontAwesomeIcons.arrowRightFromBracket,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('تسجيل الدخول'),
+                        ],
+                      ),
                     ),
             ),
             const SizedBox(height: 20),

@@ -12,6 +12,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../domain/salaries/salary_repository.dart';
 import '../../providers/salaries_providers.dart';
+import '../../widgets/field_icon.dart';
 
 /// Per-employee monthly salary statement with a printable PDF payslip.
 class EmployeeStatementScreen extends ConsumerStatefulWidget {
@@ -109,7 +110,7 @@ class _EmployeeStatementScreenState
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'من شهر',
-                      prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                     ),
                     child: Text(_monthLabel(_from)),
                   ),
@@ -123,7 +124,7 @@ class _EmployeeStatementScreenState
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'إلى شهر',
-                      prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                     ),
                     child: Text(_monthLabel(_to)),
                   ),

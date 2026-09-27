@@ -13,6 +13,7 @@ import '../../../data/offline/report_keys.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/sales/sale_invoice_draft.dart';
 import '../../providers/sales_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
 import '../../widgets/invoice_input_fields.dart';
 import '../../widgets/invoice_list.dart';
@@ -164,7 +165,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
                         ref.read(saleSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث برقم الفاتورة...',
-                      prefixIcon: const FaIcon(
+                      prefixIcon: const FieldIcon.fa(
                         FontAwesomeIcons.magnifyingGlass,
                       ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
@@ -214,7 +215,7 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
             child: FloatingActionButton(
               heroTag: 'sale_add',
               onPressed: _newInvoice,
-              child: const FaIcon(FontAwesomeIcons.plus),
+              child: const FaIcon(FontAwesomeIcons.plus, size: 24),
             ),
           ),
         ],
@@ -407,9 +408,10 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                 ),
                 data: (customers) => DropdownButtonFormField<String>(
                   initialValue: _customerId,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'العميل',
-                    prefixIcon: FaIcon(FontAwesomeIcons.user),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.user),
                   ),
                   items: [
                     for (final c in customers)
@@ -432,7 +434,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'تاريخ الفاتورة',
-                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(formatInvoiceDate(_date)),
                 ),
@@ -445,7 +447,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   ),
                   TextButton.icon(
                     onPressed: _addLine,
-                    icon: const FaIcon(FontAwesomeIcons.plus),
+                    icon: const FaIcon(FontAwesomeIcons.plus, size: 24),
                     label: const Text('إضافة صنف'),
                   ),
                 ],
@@ -490,7 +492,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                       ),
                       decoration: const InputDecoration(
                         labelText: 'المدفوع',
-                        prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.moneyBill),
                       ),
                       validator: (v) {
                         final text = (v ?? '').trim();
@@ -507,9 +509,10 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _paymentMethod,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'طريقة الدفع',
-                        prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.wallet),
                       ),
                       items: [
                         for (final m in _paymentMethods)
@@ -530,7 +533,8 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'ملاحظات',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 24),

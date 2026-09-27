@@ -16,6 +16,7 @@ import '../../../domain/journal/journal.dart';
 import '../../../domain/journal/manual_journal_draft.dart';
 import '../../providers/accounts_providers.dart';
 import '../../providers/journal_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
 import '../../widgets/record_table.dart';
 import '../../widgets/invoice_input_fields.dart';
@@ -201,7 +202,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
               heroTag: 'journal_add',
               tooltip: 'قيد يدوي جديد',
               onPressed: () => _showManualEntry(context),
-              child: const FaIcon(FontAwesomeIcons.pen),
+              child: const FaIcon(FontAwesomeIcons.pen, size: 24),
             ),
           ),
         ],
@@ -781,10 +782,13 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                           color: AppColors.primary,
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          'التاريخ: ${_fmtDate(_date)}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                        Flexible(
+                          child: Text(
+                            'التاريخ: ${_fmtDate(_date)}',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ],
                     ),
@@ -797,7 +801,7 @@ class _ManualEntrySheetState extends ConsumerState<_ManualEntrySheet> {
                 textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'البيان',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
                 ),
               ),
               const SizedBox(height: 16),
@@ -970,9 +974,10 @@ class _ManualLineEditor extends StatelessWidget {
             Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: fields.accountId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'الحساب',
-                  prefixIcon: FaIcon(FontAwesomeIcons.sitemap),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.sitemap),
                 ),
                 items: [
                   for (final a in accounts)
@@ -1026,7 +1031,7 @@ class _ManualLineEditor extends StatelessWidget {
                 ],
                 decoration: const InputDecoration(
                   labelText: 'مدين',
-                  prefixIcon: FaIcon(FontAwesomeIcons.arrowUpFromBracket),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.arrowUpFromBracket),
                 ),
                 onChanged: (_) => onChanged(),
               ),
@@ -1043,7 +1048,7 @@ class _ManualLineEditor extends StatelessWidget {
                 ],
                 decoration: const InputDecoration(
                   labelText: 'دائن',
-                  prefixIcon: FaIcon(FontAwesomeIcons.arrowRightToBracket),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.arrowRightToBracket),
                 ),
                 onChanged: (_) => onChanged(),
               ),

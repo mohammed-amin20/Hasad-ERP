@@ -13,6 +13,7 @@ import '../../../domain/customers/customer_draft.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/customers_providers.dart';
 import '../../providers/reminders_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 
@@ -306,7 +307,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
                 autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم العميل',
-                  prefixIcon: FaIcon(FontAwesomeIcons.user),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.user),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -320,7 +321,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
                 autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: const InputDecoration(
                   labelText: 'رقم الهاتف',
-                  prefixIcon: FaIcon(FontAwesomeIcons.phone),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.phone),
                 ),
               ),
               const SizedBox(height: 12),
@@ -330,7 +331,7 @@ class _CustomerFormSheetState extends State<_CustomerFormSheet> {
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'ملاحظات',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
                   alignLabelWithHint: true,
                 ),
               ),

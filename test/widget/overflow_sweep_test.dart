@@ -33,6 +33,7 @@ import 'package:hasad_erp/presentation/providers/salaries_providers.dart';
 import 'package:hasad_erp/presentation/providers/sales_providers.dart';
 import 'package:hasad_erp/presentation/providers/statements_providers.dart';
 import 'package:hasad_erp/presentation/providers/suppliers_providers.dart';
+import 'package:hasad_erp/presentation/screens/auth/login_screen.dart';
 import 'package:hasad_erp/presentation/screens/debts/debts_screen.dart';
 import 'package:hasad_erp/presentation/screens/employees/employee_statement_screen.dart';
 import 'package:hasad_erp/presentation/screens/employees/employees_screen.dart';
@@ -72,6 +73,11 @@ final _overrides = [
 ];
 
 final _screens = <String, Widget>{
+  // The login form is the only screen that ships its own `Scaffold` and its own
+  // entrance animation, so it is the one entry here that is not a page body.
+  // It is here because a 6px submit-button overflow at 360 wide went unnoticed
+  // for exactly as long as this sweep omitted it.
+  'login': const LoginScreen(),
   'suppliers': const SuppliersScreen(),
   'products': const ProductsScreen(),
   'inventory': const InventoryScreen(),
@@ -92,15 +98,27 @@ final _screens = <String, Widget>{
   ),
 };
 
-const _widths = <double>[375, 768, 1024, 1440];
+/// Realistic device viewports, not just widths. The previous sweep varied only
+/// the width at a fixed 900px height, so it could never detect a *vertical*
+/// overflow — and the mobile bugs it missed (dropdowns overflowing their 235px
+/// field at 375px) were horizontal but only reachable on a short viewport.
+const _viewports = <String, Size>{
+  'phone 360x640': Size(360, 640),
+  'phone 375x667': Size(375, 667),
+  'phone 390x844': Size(390, 844),
+  'phone 412x915': Size(412, 915),
+  'tablet 768x1024': Size(768, 1024),
+  'laptop 1024x768': Size(1024, 768),
+  'desktop 1440x900': Size(1440, 900),
+};
 
 void main() {
-  for (final width in _widths) {
+  for (final viewport in _viewports.entries) {
     for (final entry in _screens.entries) {
-      testWidgets('${entry.key} lays out without overflow at $width', (
+      testWidgets('${entry.key} lays out without overflow at ${viewport.key}', (
         tester,
       ) async {
-        tester.view.physicalSize = Size(width, 900);
+        tester.view.physicalSize = viewport.value;
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
@@ -121,7 +139,7 @@ void main() {
         expect(
           tester.takeException(),
           isNull,
-          reason: '${entry.key} at $width',
+          reason: '${entry.key} at ${viewport.key}',
         );
       });
     }

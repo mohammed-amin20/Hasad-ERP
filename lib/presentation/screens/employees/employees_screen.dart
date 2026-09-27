@@ -13,6 +13,7 @@ import '../../../domain/employees/employee.dart';
 import '../../../domain/employees/employee_draft.dart';
 import '../../providers/employees_providers.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 import 'employee_statement_screen.dart';
@@ -362,7 +363,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم الموظف',
-                  prefixIcon: FaIcon(FontAwesomeIcons.user),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.user),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -374,7 +375,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'المسمى الوظيفي',
-                  prefixIcon: FaIcon(FontAwesomeIcons.briefcase),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.briefcase),
                 ),
               ),
               const SizedBox(height: 12),
@@ -385,7 +386,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: const InputDecoration(
                   labelText: 'رقم الهاتف',
-                  prefixIcon: FaIcon(FontAwesomeIcons.phone),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.phone),
                 ),
               ),
               const SizedBox(height: 12),
@@ -397,7 +398,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
                 ),
                 decoration: const InputDecoration(
                   labelText: 'الراتب الأساسي',
-                  prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.moneyBill),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();

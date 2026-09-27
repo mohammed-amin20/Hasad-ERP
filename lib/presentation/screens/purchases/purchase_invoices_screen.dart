@@ -15,6 +15,7 @@ import '../../../domain/products/product.dart';
 import '../../../domain/purchases/purchase_invoice_draft.dart';
 import '../../../domain/suppliers/supplier.dart';
 import '../../providers/purchases_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
 import '../../widgets/invoice_input_fields.dart';
 import '../../widgets/invoice_list.dart';
@@ -101,7 +102,7 @@ class _PurchaseInvoicesScreenState
                         ref.read(purchaseSearchProvider.notifier).update(v),
                     decoration: InputDecoration(
                       hintText: 'بحث برقم الفاتورة...',
-                      prefixIcon: const FaIcon(
+                      prefixIcon: const FieldIcon.fa(
                         FontAwesomeIcons.magnifyingGlass,
                       ),
                       suffixIcon: _searchCtrl.text.isNotEmpty
@@ -406,9 +407,10 @@ class _NewPurchaseInvoicePageState
                 ),
                 data: (suppliers) => DropdownButtonFormField<String>(
                   initialValue: _supplierId,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'المورد',
-                    prefixIcon: FaIcon(FontAwesomeIcons.store),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.store),
                   ),
                   items: [
                     for (final s in suppliers)
@@ -454,7 +456,7 @@ class _NewPurchaseInvoicePageState
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'تاريخ الفاتورة',
-                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(formatInvoiceDate(_date)),
                 ),
@@ -517,7 +519,7 @@ class _NewPurchaseInvoicePageState
                           ),
                           decoration: const InputDecoration(
                             labelText: 'المدفوع',
-                            prefixIcon: FaIcon(FontAwesomeIcons.moneyBill),
+                            prefixIcon: FieldIcon.fa(FontAwesomeIcons.moneyBill),
                           ),
                           validator: (v) {
                             final text = (v ?? '').trim();
@@ -533,9 +535,10 @@ class _NewPurchaseInvoicePageState
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _paymentMethod,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'طريقة الدفع',
-                            prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                            prefixIcon: FieldIcon.fa(FontAwesomeIcons.wallet),
                           ),
                           items: [
                             for (final m in _paymentMethods)
@@ -558,7 +561,8 @@ class _NewPurchaseInvoicePageState
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'ملاحظات',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 24),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../domain/products/product.dart';
 import '../../domain/purchases/purchase_invoice_draft.dart';
+import 'field_icon.dart';
 import 'invoice_input_fields.dart';
 
 /// Opens a bottom sheet to describe a brand-new product and returns its draft,
@@ -89,7 +90,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'اسم المنتج',
-                  prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.boxesStacked),
                 ),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'أدخل اسم المنتج' : null,
@@ -105,7 +106,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                       decoration: const InputDecoration(
                         labelText: 'الوحدة',
                         hintText: 'قطعة',
-                        prefixIcon: Icon(Icons.straighten),
+                        prefixIcon: FieldIcon.material(Icons.straighten),
                       ),
                     ),
                   ),
@@ -113,9 +114,10 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                   Expanded(
                     child: DropdownButtonFormField<ProductUnitType>(
                       initialValue: _unitType,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'نوع الكمية',
-                        prefixIcon: FaIcon(FontAwesomeIcons.scaleBalanced),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.scaleBalanced),
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -145,7 +147,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                 ],
                 decoration: const InputDecoration(
                   labelText: 'سعر البيع (اختياري)',
-                  prefixIcon: FaIcon(FontAwesomeIcons.tag),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.tag),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();
@@ -162,7 +164,7 @@ class _NewProductSheetState extends State<_NewProductSheet> {
                 ),
                 decoration: const InputDecoration(
                   labelText: 'نسبة العمولة % (اختياري)',
-                  prefixIcon: FaIcon(FontAwesomeIcons.percent),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.percent),
                 ),
                 validator: (v) {
                   final text = (v ?? '').trim();

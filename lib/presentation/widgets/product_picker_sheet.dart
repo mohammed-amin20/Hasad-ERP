@@ -8,6 +8,8 @@ import '../../core/utils/money.dart';
 import '../../domain/products/product.dart';
 import '../providers/products_providers.dart';
 
+import 'field_icon.dart';
+
 /// Opens a searchable bottom sheet and returns the selected [Product],
 /// or null if dismissed.
 Future<Product?> showProductPicker(BuildContext context) {
@@ -55,7 +57,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
                   ref.read(productSearchProvider.notifier).update(v),
               decoration: InputDecoration(
                 hintText: 'بحث بالاسم أو الباركود...',
-                prefixIcon: FaIcon(FontAwesomeIcons.magnifyingGlass),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.magnifyingGlass),
               ),
             ),
             const SizedBox(height: 12),

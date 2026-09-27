@@ -13,6 +13,7 @@ import '../../../domain/suppliers/supplier.dart';
 import '../../../domain/suppliers/supplier_draft.dart';
 import '../../providers/suppliers_providers.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 
@@ -347,7 +348,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 autofillHints: const [AutofillHints.name],
                 decoration: const InputDecoration(
                   labelText: 'اسم المورد',
-                  prefixIcon: FaIcon(FontAwesomeIcons.building),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.building),
                 ),
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 validator: (v) =>
@@ -361,7 +362,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: const InputDecoration(
                   labelText: 'رقم الهاتف',
-                  prefixIcon: FaIcon(FontAwesomeIcons.phone),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.phone),
                 ),
               ),
               const SizedBox(height: 12),
@@ -369,7 +370,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 initialValue: _dealType,
                 decoration: const InputDecoration(
                   labelText: 'نوع التعامل',
-                  prefixIcon: FaIcon(FontAwesomeIcons.handshake),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.handshake),
                 ),
                 items: const [
                   DropdownMenuItem(
@@ -395,7 +396,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'نسبة العمولة %',
-                    prefixIcon: FaIcon(FontAwesomeIcons.percent),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.percent),
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {
@@ -416,7 +417,7 @@ class _SupplierFormSheetState extends State<_SupplierFormSheet> {
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'ملاحظات',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
                   alignLabelWithHint: true,
                 ),
               ),

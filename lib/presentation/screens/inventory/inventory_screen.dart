@@ -12,6 +12,7 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../domain/inventory/inventory.dart';
 import '../../../domain/products/product.dart';
 import '../../providers/inventory_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 import '../../widgets/state_views.dart';
@@ -328,7 +329,7 @@ class _CountSheetState extends State<_CountSheet> {
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'تاريخ الجرد',
-                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(
                     '${_date.year.toString().padLeft(4, '0')}/'
@@ -345,7 +346,8 @@ class _CountSheetState extends State<_CountSheet> {
                 decoration: const InputDecoration(
                   labelText: 'سبب التعديل',
                   hintText: 'جرد شهري، تلف، بضاعة إضافية...',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 20),

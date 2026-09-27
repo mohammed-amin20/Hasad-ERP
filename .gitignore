@@ -47,3 +47,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local scratch / debug tooling (machine-specific, not part of the app).
+# hf_*   - browser-driving scratch scripts + a screenshot from a debug session
+# scratch/ - throwaway PowerShell diagnostics
+# tool/   - a one-off PNG rasteriser that hardcodes C:\Users\khatib\...
+hf_*
+scratch/
+tool/

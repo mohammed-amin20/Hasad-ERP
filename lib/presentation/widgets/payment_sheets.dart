@@ -9,6 +9,7 @@ import '../../core/utils/money.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/payments/payment_repository.dart';
 import '../providers/payments_providers.dart';
+import 'field_icon.dart';
 import 'invoice_input_fields.dart';
 import 'invoice_list.dart';
 
@@ -139,11 +140,12 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('تسجيل دفعة', style: theme.textTheme.titleLarge),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('تسجيل دفعة', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               'فاتورة ${invoice.no} · المتبقي ${Money.format(invoice.remaining)}',
@@ -176,9 +178,10 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _method,
+                    isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'طريقة الدفع',
-                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.wallet),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -197,7 +200,7 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'تاريخ الدفعة',
-                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                 ),
                 child: Text(formatInvoiceDate(_date)),
               ),
@@ -209,7 +212,8 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'ملاحظات',
-                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 24),
@@ -226,7 +230,8 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
                     )
                   : const Text('حفظ الدفعة'),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -333,11 +338,12 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('تسوية المورد', style: theme.textTheme.titleLarge),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('تسوية المورد', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               '$supplierName — تُسوى أقدم الفواتير والعمولات أولاً',
@@ -367,9 +373,10 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _method,
+                    isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'طريقة الدفع',
-                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.wallet),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -388,7 +395,7 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'تاريخ التسوية',
-                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                 ),
                 child: Text(formatInvoiceDate(_date)),
               ),
@@ -400,7 +407,8 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'ملاحظات',
-                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 24),
@@ -417,7 +425,8 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
                     )
                   : const Text('تنفيذ التسوية'),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

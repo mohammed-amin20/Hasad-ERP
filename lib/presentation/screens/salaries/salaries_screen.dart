@@ -13,6 +13,7 @@ import '../../../domain/employees/employee.dart';
 import '../../../domain/salaries/salary_repository.dart';
 import '../../providers/employees_providers.dart';
 import '../../providers/salaries_providers.dart';
+import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
 import '../../widgets/salary_sheets.dart';
@@ -73,7 +74,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'الموظف',
-                      prefixIcon: FaIcon(FontAwesomeIcons.user),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.user),
                     ),
                     hint: const Text('اختر موظفاً...'),
                     items: [
@@ -93,7 +94,7 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'الشهر',
-                      prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                     ),
                     child: Text(
                       '${_month.year}/${_month.month.toString().padLeft(2, '0')}',

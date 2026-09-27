@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../config/app_config.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import 'hasad_card.dart';
 
 class PageChrome extends StatelessWidget {
@@ -28,6 +29,7 @@ class PageChrome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final icons = IconSizes.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -42,43 +44,39 @@ class PageChrome extends StatelessWidget {
           final wide = constraints.maxWidth >= AppConfig.breakpointNarrow;
           if (!wide) {
             return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (leading != null) ...[
                   leading!,
                   const SizedBox(width: 8),
                 ],
-                SizedBox(
-                  width: constraints.maxWidth / 2,
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: Text(
-                      title,
-                      style: theme.textTheme.headlineMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
                 Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (var i = 0; i < actions.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 2),
-                          actions[i],
-                        ],
-                      ],
-                    ),
+                  child: Text(
+                    title,
+                    style: theme.textTheme.headlineMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < actions.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 2),
+                        actions[i],
+                      ],
+                    ],
+                  ),
+                ],
               ],
             );
           }
 
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (leading != null) ...[
                 leading!,
@@ -88,8 +86,8 @@ class PageChrome extends StatelessWidget {
                 IconChip(
                   icon: icon!,
                   color: iconColor ?? AppColors.primary,
-                  size: 40,
-                  iconSize: 18,
+                  size: icons.xxxl,
+                  iconSize: icons.md,
                 ),
                 const SizedBox(width: 14),
               ],

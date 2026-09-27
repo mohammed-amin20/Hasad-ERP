@@ -9,6 +9,7 @@ import '../../core/utils/money.dart';
 import '../../domain/products/product.dart';
 import '../../domain/salaries/salary_repository.dart';
 import '../providers/salaries_providers.dart';
+import 'field_icon.dart';
 import 'invoice_input_fields.dart';
 import 'product_picker_sheet.dart';
 
@@ -227,9 +228,10 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _direction,
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'الجهة',
-                        prefixIcon: FaIcon(FontAwesomeIcons.arrowsUpDown),
+                        prefixIcon: FieldIcon.fa(FontAwesomeIcons.arrowsUpDown),
                       ),
                       items: const [
                         DropdownMenuItem(value: 'in', child: Text('إضافة')),
@@ -244,7 +246,7 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                       initialValue: _category,
                       decoration: InputDecoration(
                         labelText: 'النوع',
-                        prefixIcon: Icon(Icons.category_outlined),
+                        prefixIcon: FieldIcon.material(Icons.category_outlined),
                       ),
                       items: [
                         for (final c in _categories(_direction!))
@@ -268,7 +270,7 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                   child: InputDecorator(
                     decoration: InputDecoration(
                       labelText: 'المنتج',
-                      prefixIcon: FaIcon(FontAwesomeIcons.boxesStacked),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.boxesStacked),
                     ),
                     child: Text(
                       _product == null
@@ -304,7 +306,7 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                 child: InputDecorator(
                   decoration: InputDecoration(
                     labelText: 'تاريخ الحركة',
-                    prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                    prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                   ),
                   child: Text(
                     '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
@@ -318,7 +320,8 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
                 maxLines: 2,
                 decoration: InputDecoration(
                   labelText: 'وصف الحركة',
-                  prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 24),
@@ -493,7 +496,7 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
                     initialValue: _method,
                     decoration: InputDecoration(
                       labelText: 'طريقة الدفع',
-                      prefixIcon: FaIcon(FontAwesomeIcons.wallet),
+                      prefixIcon: FieldIcon.fa(FontAwesomeIcons.wallet),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'cash', child: Text('نقدي')),
@@ -512,7 +515,7 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'تاريخ الصرف',
-                  prefixIcon: FaIcon(FontAwesomeIcons.calendarDay),
+                  prefixIcon: FieldIcon.fa(FontAwesomeIcons.calendarDay),
                 ),
                 child: Text(
                   '${_date.year}/${_date.month.toString().padLeft(2, '0')}/${_date.day.toString().padLeft(2, '0')}',
@@ -526,7 +529,8 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'ملاحظات',
-                prefixIcon: FaIcon(FontAwesomeIcons.fileLines),
+                prefixIcon: FieldIcon.fa(FontAwesomeIcons.fileLines),
+                alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 24),

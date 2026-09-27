@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../config/app_config.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import 'hasad_card.dart';
 
 class StatCard extends StatelessWidget {
@@ -38,6 +39,7 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final icons = IconSizes.of(context);
     return InteractiveCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppConfig.cardPadding),
@@ -51,8 +53,8 @@ class StatCard extends StatelessWidget {
               IconChip(
                 icon: icon,
                 color: iconColor,
-                size: 32,
-                iconSize: 15,
+                size: icons.xxl,
+                iconSize: icons.md,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -88,7 +90,7 @@ class StatCard extends StatelessWidget {
                 if (captionIcon != null) ...[
                   FaIcon(
                     captionIcon,
-                    size: 11,
+                    size: icons.sm,
                     color: captionColor ?? AppColors.textMuted,
                   ),
                   const SizedBox(width: 6),

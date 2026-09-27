@@ -1,6 +1,77 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show lerpDouble;
 
 import 'app_colors.dart';
+
+/// Centralized icon size scale — single source of truth for all icon sizing.
+/// Access via `IconSizes.of(context)`.
+class IconSizes extends ThemeExtension<IconSizes> {
+  const IconSizes({
+    required this.xs,
+    required this.sm,
+    required this.md,
+    required this.lg,
+    required this.xl,
+    required this.xxl,
+    required this.xxxl,
+  });
+
+  final double xs;   // 12 — chips, small avatars, delete icons
+  final double sm;   // 14 — TextField suffix, small actions
+  final double md;   // 18 — IconButton, IconChip default, TextField prefix, PopupMenu
+  final double lg;   // 24 — FAB, large actions
+  final double xl;   // 28 — large decorative icons
+  final double xxl;  // 32 — StatCard, SectionCard compact
+  final double xxxl; // 40 — SectionCard regular, page headers
+
+  static IconSizes of(BuildContext context) =>
+      Theme.of(context).extension<IconSizes>() ?? _defaults;
+
+  static const _defaults = IconSizes(
+    xs: 12,
+    sm: 14,
+    md: 18,
+    lg: 24,
+    xl: 28,
+    xxl: 32,
+    xxxl: 40,
+  );
+
+  @override
+  IconSizes copyWith({
+    double? xs,
+    double? sm,
+    double? md,
+    double? lg,
+    double? xl,
+    double? xxl,
+    double? xxxl,
+  }) {
+    return IconSizes(
+      xs: xs ?? this.xs,
+      sm: sm ?? this.sm,
+      md: md ?? this.md,
+      lg: lg ?? this.lg,
+      xl: xl ?? this.xl,
+      xxl: xxl ?? this.xxl,
+      xxxl: xxxl ?? this.xxxl,
+    );
+  }
+
+  @override
+  IconSizes lerp(ThemeExtension<IconSizes>? other, double t) {
+    if (other is! IconSizes) return this;
+    return IconSizes(
+      xs: lerpDouble(xs, other.xs, t)!,
+      sm: lerpDouble(sm, other.sm, t)!,
+      md: lerpDouble(md, other.md, t)!,
+      lg: lerpDouble(lg, other.lg, t)!,
+      xl: lerpDouble(xl, other.xl, t)!,
+      xxl: lerpDouble(xxl, other.xxl, t)!,
+      xxxl: lerpDouble(xxxl, other.xxxl, t)!,
+    );
+  }
+}
 
 abstract final class AppTheme {
   static ThemeData get light => _theme;
@@ -180,7 +251,37 @@ abstract final class AppTheme {
         color: AppColors.danger,
       ),
       errorMaxLines: 2,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+      // Single-line fields (and every DropdownButtonFormField) keep their
+      // label on the field's vertical centre line so it lines up with the
+      // centred prefix icon. Multiline fields opt back in per-decoration.
+      isDense: true,
+      visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+      alignLabelWithHint: false,
+      prefixIconColor: AppColors.textSecondary,
+      suffixIconColor: AppColors.textSecondary,
+      // `InputDecorator` sets the prefix slot's `IconTheme.size` to
+      // `isDense ? 18 : 24` (input_decorator.dart). `FaIcon` - unlike `Icon` -
+      // deliberately omits the `SizedBox`/`Center` that make a Material `Icon`
+      // self-centring, so its `RichText` is laid out with *width-only*
+      // constraints and painted at the top of whatever box these constraints
+      // produce. A 40px slot therefore shows an 18px glyph sitting 11px above
+      // the field's centre, even though the slot box itself is centred.
+      // Cap the height at the icon size so the slot hugs the glyph and the
+      // decorator's `centerLayout` centres it. This is a cap (`minHeight: 0`),
+      // not a force, so the few `size: 16` prefix icons stay centred as well.
+      prefixIconConstraints: const BoxConstraints(
+        minWidth: 40,
+        minHeight: 0,
+        maxWidth: 48,
+        maxHeight: 18,
+      ),
+      suffixIconConstraints: const BoxConstraints(
+        minWidth: 36,
+        minHeight: 36,
+        maxWidth: 40,
+        maxHeight: 40,
+      ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style:
@@ -384,6 +485,36 @@ abstract final class AppTheme {
       linearTrackColor: AppColors.surfaceSunken,
       circularTrackColor: AppColors.surfaceSunken,
     ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      textStyle: _baseText.copyWith(fontSize: 14, color: AppColors.textPrimary),
+      menuStyle: MenuStyle(
+        alignment: AlignmentDirectional.topStart,
+        backgroundColor: WidgetStatePropertyAll(AppColors.surface),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStatePropertyAll(0),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: AppColors.border),
+          ),
+        ),
+        padding: WidgetStatePropertyAll(const EdgeInsets.symmetric(vertical: 8)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        // Inherits from main inputDecorationTheme; dropdown inherits prefix/suffix constraints
+      ),
+    ),
+    extensions: <ThemeExtension<dynamic>>[
+      const IconSizes(
+        xs: 12,
+        sm: 14,
+        md: 18,
+        lg: 24,
+        xl: 28,
+        xxl: 32,
+        xxxl: 40,
+      ),
+    ],
   );
   static WidgetStateProperty<Color?> _buttonOverlay() {
     return WidgetStateProperty.resolveWith((states) {
