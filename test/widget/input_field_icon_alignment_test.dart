@@ -22,6 +22,10 @@ import 'package:hasad_erp/domain/products/product_repository.dart';
 import 'package:hasad_erp/domain/suppliers/supplier.dart';
 import 'package:hasad_erp/domain/suppliers/supplier_draft.dart';
 import 'package:hasad_erp/domain/suppliers/supplier_repository.dart';
+import 'package:hasad_erp/data/offline/local_store.dart';
+import 'package:hasad_erp/data/offline/offline_sync.dart';
+import 'package:hasad_erp/presentation/providers/dashboard_providers.dart';
+import 'package:hasad_erp/presentation/providers/offline_sync_providers.dart';
 import 'package:hasad_erp/presentation/app.dart';
 import 'package:hasad_erp/presentation/providers/accounts_providers.dart';
 import 'package:hasad_erp/presentation/providers/auth_providers.dart';
@@ -36,6 +40,8 @@ import 'package:hasad_erp/presentation/screens/products/products_screen.dart';
 import 'package:hasad_erp/presentation/screens/purchases/purchase_invoices_screen.dart';
 import 'package:hasad_erp/presentation/screens/sales/sale_invoices_screen.dart';
 import 'package:hasad_erp/presentation/shell/app_shell.dart';
+
+import '../tool/shell_stubs.dart';
 
 /// Regression: every `prefixIcon` / `suffixIcon` glyph must sit on its field's
 /// vertical centre line, in Arabic RTL, at every supported viewport.
@@ -212,6 +218,18 @@ void _setViewport(WidgetTester tester, Size size) {
 Widget _scope(Widget child) {
   return ProviderScope(
     overrides: [
+      // M13 Phase 0: the app gates its first frame on the local store, and
+      // `path_provider` has no plugin in a test isolate, so the real store
+      // provider never resolves here.
+      localStoreProvider.overrideWith((ref) async => const NullLocalStore()),
+      // The shell's dashboard and sync flusher are the only paths to
+      // `supabaseClientProvider`; see `test/tool/shell_stubs.dart`.
+      dashboardRepositoryProvider
+          .overrideWithValue(ShellFakeDashboardRepository()),
+      syncFlusherProvider.overrideWith(
+        (ref) async =>
+            SyncFlusher(const NullLocalStore(), '', ShellNoopSyncTarget()),
+      ),
       authStateProvider.overrideWith((ref) => Stream.value(_user)),
       isOnlineProvider.overrideWithValue(true),
       productRepositoryProvider.overrideWithValue(

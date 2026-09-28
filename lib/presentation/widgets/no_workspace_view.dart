@@ -50,7 +50,8 @@ class _NoWorkspaceCard extends ConsumerWidget {
 
     Future<void> signOut() async {
       try {
-        await ref.read(authRepositoryProvider).signOut();
+        final repo = await ref.read(authRepositoryProvider.future);
+        await repo.signOut();
       } on Object catch (error) {
         messenger.showSnackBar(
           SnackBar(content: Text(mapErrorToAppException(error).message)),

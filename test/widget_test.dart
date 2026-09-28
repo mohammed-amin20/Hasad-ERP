@@ -41,7 +41,11 @@ class _FakeAuthRepository implements AuthRepository {
 Widget _loginApp() {
   return ProviderScope(
     overrides: [
-      authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+      // `authRepositoryProvider` is a FutureProvider (it awaits the local store
+      // so the offline-aware decorator can be constructed), so the override
+      // must go through `.future` rather than `overrideWithValue`.
+      authRepositoryProvider
+          .overrideWith((ref) async => _FakeAuthRepository()),
     ],
     child: MaterialApp(
       locale: const Locale('ar'),

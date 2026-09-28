@@ -58,12 +58,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _error = null;
     });
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .signInWithPassword(
-            email: _email.text.trim(),
-            password: _password.text,
-          );
+      final repo = await ref.read(authRepositoryProvider.future);
+      await repo.signInWithPassword(
+        email: _email.text.trim(),
+        password: _password.text,
+      );
       // Success: HasadApp reacts to the auth stream and swaps to the shell.
     } on Object catch (error) {
       if (!mounted) return;

@@ -2405,6 +2405,17 @@ class $LocalAccountsTable extends LocalAccounts
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2413,6 +2424,7 @@ class $LocalAccountsTable extends LocalAccounts
     name,
     type,
     parentCode,
+    parentId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2469,6 +2481,12 @@ class $LocalAccountsTable extends LocalAccounts
         parentCode.isAcceptableOrUnknown(data['parent_code']!, _parentCodeMeta),
       );
     }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
     return context;
   }
 
@@ -2502,6 +2520,10 @@ class $LocalAccountsTable extends LocalAccounts
         DriftSqlType.string,
         data['${effectivePrefix}parent_code'],
       ),
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      ),
     );
   }
 
@@ -2518,6 +2540,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
   final String name;
   final String type;
   final String? parentCode;
+  final String? parentId;
   const LocalAccountRow({
     required this.id,
     required this.tenantId,
@@ -2525,6 +2548,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
     required this.name,
     required this.type,
     this.parentCode,
+    this.parentId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2536,6 +2560,9 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
     map['type'] = Variable<String>(type);
     if (!nullToAbsent || parentCode != null) {
       map['parent_code'] = Variable<String>(parentCode);
+    }
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<String>(parentId);
     }
     return map;
   }
@@ -2550,6 +2577,9 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
       parentCode: parentCode == null && nullToAbsent
           ? const Value.absent()
           : Value(parentCode),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
     );
   }
 
@@ -2565,6 +2595,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
       name: serializer.fromJson<String>(json['name']),
       type: serializer.fromJson<String>(json['type']),
       parentCode: serializer.fromJson<String?>(json['parentCode']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
     );
   }
   @override
@@ -2577,6 +2608,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
       'name': serializer.toJson<String>(name),
       'type': serializer.toJson<String>(type),
       'parentCode': serializer.toJson<String?>(parentCode),
+      'parentId': serializer.toJson<String?>(parentId),
     };
   }
 
@@ -2587,6 +2619,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
     String? name,
     String? type,
     Value<String?> parentCode = const Value.absent(),
+    Value<String?> parentId = const Value.absent(),
   }) => LocalAccountRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -2594,6 +2627,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
     name: name ?? this.name,
     type: type ?? this.type,
     parentCode: parentCode.present ? parentCode.value : this.parentCode,
+    parentId: parentId.present ? parentId.value : this.parentId,
   );
   LocalAccountRow copyWithCompanion(LocalAccountsCompanion data) {
     return LocalAccountRow(
@@ -2605,6 +2639,7 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
       parentCode: data.parentCode.present
           ? data.parentCode.value
           : this.parentCode,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
     );
   }
 
@@ -2616,13 +2651,15 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
           ..write('code: $code, ')
           ..write('name: $name, ')
           ..write('type: $type, ')
-          ..write('parentCode: $parentCode')
+          ..write('parentCode: $parentCode, ')
+          ..write('parentId: $parentId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, tenantId, code, name, type, parentCode);
+  int get hashCode =>
+      Object.hash(id, tenantId, code, name, type, parentCode, parentId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2632,7 +2669,8 @@ class LocalAccountRow extends DataClass implements Insertable<LocalAccountRow> {
           other.code == this.code &&
           other.name == this.name &&
           other.type == this.type &&
-          other.parentCode == this.parentCode);
+          other.parentCode == this.parentCode &&
+          other.parentId == this.parentId);
 }
 
 class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
@@ -2642,6 +2680,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
   final Value<String> name;
   final Value<String> type;
   final Value<String?> parentCode;
+  final Value<String?> parentId;
   final Value<int> rowid;
   const LocalAccountsCompanion({
     this.id = const Value.absent(),
@@ -2650,6 +2689,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
     this.name = const Value.absent(),
     this.type = const Value.absent(),
     this.parentCode = const Value.absent(),
+    this.parentId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalAccountsCompanion.insert({
@@ -2659,6 +2699,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
     required String name,
     required String type,
     this.parentCode = const Value.absent(),
+    this.parentId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -2672,6 +2713,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
     Expression<String>? name,
     Expression<String>? type,
     Expression<String>? parentCode,
+    Expression<String>? parentId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2681,6 +2723,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
       if (name != null) 'name': name,
       if (type != null) 'type': type,
       if (parentCode != null) 'parent_code': parentCode,
+      if (parentId != null) 'parent_id': parentId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2692,6 +2735,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
     Value<String>? name,
     Value<String>? type,
     Value<String?>? parentCode,
+    Value<String?>? parentId,
     Value<int>? rowid,
   }) {
     return LocalAccountsCompanion(
@@ -2701,6 +2745,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
       name: name ?? this.name,
       type: type ?? this.type,
       parentCode: parentCode ?? this.parentCode,
+      parentId: parentId ?? this.parentId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2726,6 +2771,9 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
     if (parentCode.present) {
       map['parent_code'] = Variable<String>(parentCode.value);
     }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2741,6 +2789,7 @@ class LocalAccountsCompanion extends UpdateCompanion<LocalAccountRow> {
           ..write('name: $name, ')
           ..write('type: $type, ')
           ..write('parentCode: $parentCode, ')
+          ..write('parentId: $parentId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7455,6 +7504,17 @@ class $SyncQueueItemsTable extends SyncQueueItems
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _dependsOnMeta = const VerificationMeta(
+    'dependsOn',
+  );
+  @override
+  late final GeneratedColumn<String> dependsOn = GeneratedColumn<String>(
+    'depends_on',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -7492,6 +7552,7 @@ class $SyncQueueItemsTable extends SyncQueueItems
     status,
     attempts,
     lastError,
+    dependsOn,
     createdAt,
     updatedAt,
   ];
@@ -7575,6 +7636,12 @@ class $SyncQueueItemsTable extends SyncQueueItems
         lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
       );
     }
+    if (data.containsKey('depends_on')) {
+      context.handle(
+        _dependsOnMeta,
+        dependsOn.isAcceptableOrUnknown(data['depends_on']!, _dependsOnMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -7640,6 +7707,10 @@ class $SyncQueueItemsTable extends SyncQueueItems
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
       ),
+      dependsOn: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}depends_on'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -7669,6 +7740,16 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
   final String status;
   final int attempts;
   final String? lastError;
+
+  /// JSON array of the `sync_queue_items.id` uuids this item must be replayed
+  /// AFTER, e.g. `'["…","…"]'`. Null (or `'[]'`) means "no prerequisites".
+  ///
+  /// Replay is ordered by [createdAt] and, within equal timestamps, by
+  /// dependency: an item whose prerequisite is still `pending`/`staged` is
+  /// skipped this pass instead of being sent first and failing on a
+  /// not-yet-created parent. A `failed` prerequisite permanently blocks the
+  /// dependent (see `offline_sync.dart`).
+  final String? dependsOn;
   final DateTime createdAt;
   final DateTime updatedAt;
   const SyncQueueRow({
@@ -7683,6 +7764,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     required this.status,
     required this.attempts,
     this.lastError,
+    this.dependsOn,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -7707,6 +7789,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     map['attempts'] = Variable<int>(attempts);
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
+    }
+    if (!nullToAbsent || dependsOn != null) {
+      map['depends_on'] = Variable<String>(dependsOn);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -7734,6 +7819,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
+      dependsOn: dependsOn == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dependsOn),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -7756,6 +7844,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       status: serializer.fromJson<String>(json['status']),
       attempts: serializer.fromJson<int>(json['attempts']),
       lastError: serializer.fromJson<String?>(json['lastError']),
+      dependsOn: serializer.fromJson<String?>(json['dependsOn']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -7775,6 +7864,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       'status': serializer.toJson<String>(status),
       'attempts': serializer.toJson<int>(attempts),
       'lastError': serializer.toJson<String?>(lastError),
+      'dependsOn': serializer.toJson<String?>(dependsOn),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -7792,6 +7882,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     String? status,
     int? attempts,
     Value<String?> lastError = const Value.absent(),
+    Value<String?> dependsOn = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => SyncQueueRow(
@@ -7806,6 +7897,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     status: status ?? this.status,
     attempts: attempts ?? this.attempts,
     lastError: lastError.present ? lastError.value : this.lastError,
+    dependsOn: dependsOn.present ? dependsOn.value : this.dependsOn,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -7822,6 +7914,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       status: data.status.present ? data.status.value : this.status,
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      dependsOn: data.dependsOn.present ? data.dependsOn.value : this.dependsOn,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -7841,6 +7934,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           ..write('status: $status, ')
           ..write('attempts: $attempts, ')
           ..write('lastError: $lastError, ')
+          ..write('dependsOn: $dependsOn, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -7860,6 +7954,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     status,
     attempts,
     lastError,
+    dependsOn,
     createdAt,
     updatedAt,
   );
@@ -7878,6 +7973,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           other.status == this.status &&
           other.attempts == this.attempts &&
           other.lastError == this.lastError &&
+          other.dependsOn == this.dependsOn &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -7894,6 +7990,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
   final Value<String> status;
   final Value<int> attempts;
   final Value<String?> lastError;
+  final Value<String?> dependsOn;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -7909,6 +8006,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.status = const Value.absent(),
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.dependsOn = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -7925,6 +8023,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.status = const Value.absent(),
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.dependsOn = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -7944,6 +8043,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Expression<String>? status,
     Expression<int>? attempts,
     Expression<String>? lastError,
+    Expression<String>? dependsOn,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -7960,6 +8060,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       if (status != null) 'status': status,
       if (attempts != null) 'attempts': attempts,
       if (lastError != null) 'last_error': lastError,
+      if (dependsOn != null) 'depends_on': dependsOn,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -7978,6 +8079,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Value<String>? status,
     Value<int>? attempts,
     Value<String?>? lastError,
+    Value<String?>? dependsOn,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -7994,6 +8096,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       status: status ?? this.status,
       attempts: attempts ?? this.attempts,
       lastError: lastError ?? this.lastError,
+      dependsOn: dependsOn ?? this.dependsOn,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -8036,6 +8139,9 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
+    if (dependsOn.present) {
+      map['depends_on'] = Variable<String>(dependsOn.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -8062,6 +8168,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
           ..write('status: $status, ')
           ..write('attempts: $attempts, ')
           ..write('lastError: $lastError, ')
+          ..write('dependsOn: $dependsOn, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -8076,6 +8183,17 @@ class $IdMappingsTable extends IdMappings
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $IdMappingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _tenantIdMeta = const VerificationMeta(
+    'tenantId',
+  );
+  @override
+  late final GeneratedColumn<String> tenantId = GeneratedColumn<String>(
+    'tenant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _entityMeta = const VerificationMeta('entity');
   @override
   late final GeneratedColumn<String> entity = GeneratedColumn<String>(
@@ -8120,7 +8238,13 @@ class $IdMappingsTable extends IdMappings
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [entity, localId, serverId, syncedAt];
+  List<GeneratedColumn> get $columns => [
+    tenantId,
+    entity,
+    localId,
+    serverId,
+    syncedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -8133,6 +8257,14 @@ class $IdMappingsTable extends IdMappings
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('tenant_id')) {
+      context.handle(
+        _tenantIdMeta,
+        tenantId.isAcceptableOrUnknown(data['tenant_id']!, _tenantIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tenantIdMeta);
+    }
     if (data.containsKey('entity')) {
       context.handle(
         _entityMeta,
@@ -8167,11 +8299,15 @@ class $IdMappingsTable extends IdMappings
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {entity, localId};
+  Set<GeneratedColumn> get $primaryKey => {tenantId, entity, localId};
   @override
   IdMappingRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return IdMappingRow(
+      tenantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tenant_id'],
+      )!,
       entity: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}entity'],
@@ -8198,11 +8334,13 @@ class $IdMappingsTable extends IdMappings
 }
 
 class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
+  final String tenantId;
   final String entity;
   final String localId;
   final String serverId;
   final DateTime syncedAt;
   const IdMappingRow({
+    required this.tenantId,
     required this.entity,
     required this.localId,
     required this.serverId,
@@ -8211,6 +8349,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['tenant_id'] = Variable<String>(tenantId);
     map['entity'] = Variable<String>(entity);
     map['local_id'] = Variable<String>(localId);
     map['server_id'] = Variable<String>(serverId);
@@ -8220,6 +8359,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
 
   IdMappingsCompanion toCompanion(bool nullToAbsent) {
     return IdMappingsCompanion(
+      tenantId: Value(tenantId),
       entity: Value(entity),
       localId: Value(localId),
       serverId: Value(serverId),
@@ -8233,6 +8373,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return IdMappingRow(
+      tenantId: serializer.fromJson<String>(json['tenantId']),
       entity: serializer.fromJson<String>(json['entity']),
       localId: serializer.fromJson<String>(json['localId']),
       serverId: serializer.fromJson<String>(json['serverId']),
@@ -8243,6 +8384,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'tenantId': serializer.toJson<String>(tenantId),
       'entity': serializer.toJson<String>(entity),
       'localId': serializer.toJson<String>(localId),
       'serverId': serializer.toJson<String>(serverId),
@@ -8251,11 +8393,13 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   }
 
   IdMappingRow copyWith({
+    String? tenantId,
     String? entity,
     String? localId,
     String? serverId,
     DateTime? syncedAt,
   }) => IdMappingRow(
+    tenantId: tenantId ?? this.tenantId,
     entity: entity ?? this.entity,
     localId: localId ?? this.localId,
     serverId: serverId ?? this.serverId,
@@ -8263,6 +8407,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   );
   IdMappingRow copyWithCompanion(IdMappingsCompanion data) {
     return IdMappingRow(
+      tenantId: data.tenantId.present ? data.tenantId.value : this.tenantId,
       entity: data.entity.present ? data.entity.value : this.entity,
       localId: data.localId.present ? data.localId.value : this.localId,
       serverId: data.serverId.present ? data.serverId.value : this.serverId,
@@ -8273,6 +8418,7 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   @override
   String toString() {
     return (StringBuffer('IdMappingRow(')
+          ..write('tenantId: $tenantId, ')
           ..write('entity: $entity, ')
           ..write('localId: $localId, ')
           ..write('serverId: $serverId, ')
@@ -8282,11 +8428,13 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
   }
 
   @override
-  int get hashCode => Object.hash(entity, localId, serverId, syncedAt);
+  int get hashCode =>
+      Object.hash(tenantId, entity, localId, serverId, syncedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is IdMappingRow &&
+          other.tenantId == this.tenantId &&
           other.entity == this.entity &&
           other.localId == this.localId &&
           other.serverId == this.serverId &&
@@ -8294,12 +8442,14 @@ class IdMappingRow extends DataClass implements Insertable<IdMappingRow> {
 }
 
 class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
+  final Value<String> tenantId;
   final Value<String> entity;
   final Value<String> localId;
   final Value<String> serverId;
   final Value<DateTime> syncedAt;
   final Value<int> rowid;
   const IdMappingsCompanion({
+    this.tenantId = const Value.absent(),
     this.entity = const Value.absent(),
     this.localId = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -8307,15 +8457,18 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
     this.rowid = const Value.absent(),
   });
   IdMappingsCompanion.insert({
+    required String tenantId,
     required String entity,
     required String localId,
     required String serverId,
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : entity = Value(entity),
+  }) : tenantId = Value(tenantId),
+       entity = Value(entity),
        localId = Value(localId),
        serverId = Value(serverId);
   static Insertable<IdMappingRow> custom({
+    Expression<String>? tenantId,
     Expression<String>? entity,
     Expression<String>? localId,
     Expression<String>? serverId,
@@ -8323,6 +8476,7 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (tenantId != null) 'tenant_id': tenantId,
       if (entity != null) 'entity': entity,
       if (localId != null) 'local_id': localId,
       if (serverId != null) 'server_id': serverId,
@@ -8332,6 +8486,7 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
   }
 
   IdMappingsCompanion copyWith({
+    Value<String>? tenantId,
     Value<String>? entity,
     Value<String>? localId,
     Value<String>? serverId,
@@ -8339,6 +8494,7 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
     Value<int>? rowid,
   }) {
     return IdMappingsCompanion(
+      tenantId: tenantId ?? this.tenantId,
       entity: entity ?? this.entity,
       localId: localId ?? this.localId,
       serverId: serverId ?? this.serverId,
@@ -8350,6 +8506,9 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (tenantId.present) {
+      map['tenant_id'] = Variable<String>(tenantId.value);
+    }
     if (entity.present) {
       map['entity'] = Variable<String>(entity.value);
     }
@@ -8371,6 +8530,7 @@ class IdMappingsCompanion extends UpdateCompanion<IdMappingRow> {
   @override
   String toString() {
     return (StringBuffer('IdMappingsCompanion(')
+          ..write('tenantId: $tenantId, ')
           ..write('entity: $entity, ')
           ..write('localId: $localId, ')
           ..write('serverId: $serverId, ')
@@ -9004,6 +9164,544 @@ class ReportCacheEntriesCompanion extends UpdateCompanion<ReportCacheRow> {
   }
 }
 
+class $LocalUserProfilesTable extends LocalUserProfiles
+    with TableInfo<$LocalUserProfilesTable, LocalUserProfileRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalUserProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _authUidMeta = const VerificationMeta(
+    'authUid',
+  );
+  @override
+  late final GeneratedColumn<String> authUid = GeneratedColumn<String>(
+    'auth_uid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [authUid, payload, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_user_profiles';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalUserProfileRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('auth_uid')) {
+      context.handle(
+        _authUidMeta,
+        authUid.isAcceptableOrUnknown(data['auth_uid']!, _authUidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_authUidMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {authUid};
+  @override
+  LocalUserProfileRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalUserProfileRow(
+      authUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auth_uid'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalUserProfilesTable createAlias(String alias) {
+    return $LocalUserProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class LocalUserProfileRow extends DataClass
+    implements Insertable<LocalUserProfileRow> {
+  final String authUid;
+  final String payload;
+  final DateTime updatedAt;
+  const LocalUserProfileRow({
+    required this.authUid,
+    required this.payload,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['auth_uid'] = Variable<String>(authUid);
+    map['payload'] = Variable<String>(payload);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalUserProfilesCompanion toCompanion(bool nullToAbsent) {
+    return LocalUserProfilesCompanion(
+      authUid: Value(authUid),
+      payload: Value(payload),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LocalUserProfileRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalUserProfileRow(
+      authUid: serializer.fromJson<String>(json['authUid']),
+      payload: serializer.fromJson<String>(json['payload']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'authUid': serializer.toJson<String>(authUid),
+      'payload': serializer.toJson<String>(payload),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LocalUserProfileRow copyWith({
+    String? authUid,
+    String? payload,
+    DateTime? updatedAt,
+  }) => LocalUserProfileRow(
+    authUid: authUid ?? this.authUid,
+    payload: payload ?? this.payload,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LocalUserProfileRow copyWithCompanion(LocalUserProfilesCompanion data) {
+    return LocalUserProfileRow(
+      authUid: data.authUid.present ? data.authUid.value : this.authUid,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalUserProfileRow(')
+          ..write('authUid: $authUid, ')
+          ..write('payload: $payload, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(authUid, payload, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalUserProfileRow &&
+          other.authUid == this.authUid &&
+          other.payload == this.payload &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalUserProfilesCompanion extends UpdateCompanion<LocalUserProfileRow> {
+  final Value<String> authUid;
+  final Value<String> payload;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalUserProfilesCompanion({
+    this.authUid = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalUserProfilesCompanion.insert({
+    required String authUid,
+    required String payload,
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : authUid = Value(authUid),
+       payload = Value(payload);
+  static Insertable<LocalUserProfileRow> custom({
+    Expression<String>? authUid,
+    Expression<String>? payload,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (authUid != null) 'auth_uid': authUid,
+      if (payload != null) 'payload': payload,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalUserProfilesCompanion copyWith({
+    Value<String>? authUid,
+    Value<String>? payload,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalUserProfilesCompanion(
+      authUid: authUid ?? this.authUid,
+      payload: payload ?? this.payload,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (authUid.present) {
+      map['auth_uid'] = Variable<String>(authUid.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalUserProfilesCompanion(')
+          ..write('authUid: $authUid, ')
+          ..write('payload: $payload, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalAccountTemplatesTable extends LocalAccountTemplates
+    with TableInfo<$LocalAccountTemplatesTable, LocalAccountTemplateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalAccountTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [code, name, type];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_account_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalAccountTemplateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {code};
+  @override
+  LocalAccountTemplateRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalAccountTemplateRow(
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalAccountTemplatesTable createAlias(String alias) {
+    return $LocalAccountTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class LocalAccountTemplateRow extends DataClass
+    implements Insertable<LocalAccountTemplateRow> {
+  final String code;
+  final String name;
+  final String type;
+  const LocalAccountTemplateRow({
+    required this.code,
+    required this.name,
+    required this.type,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['code'] = Variable<String>(code);
+    map['name'] = Variable<String>(name);
+    map['type'] = Variable<String>(type);
+    return map;
+  }
+
+  LocalAccountTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return LocalAccountTemplatesCompanion(
+      code: Value(code),
+      name: Value(name),
+      type: Value(type),
+    );
+  }
+
+  factory LocalAccountTemplateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalAccountTemplateRow(
+      code: serializer.fromJson<String>(json['code']),
+      name: serializer.fromJson<String>(json['name']),
+      type: serializer.fromJson<String>(json['type']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'code': serializer.toJson<String>(code),
+      'name': serializer.toJson<String>(name),
+      'type': serializer.toJson<String>(type),
+    };
+  }
+
+  LocalAccountTemplateRow copyWith({
+    String? code,
+    String? name,
+    String? type,
+  }) => LocalAccountTemplateRow(
+    code: code ?? this.code,
+    name: name ?? this.name,
+    type: type ?? this.type,
+  );
+  LocalAccountTemplateRow copyWithCompanion(
+    LocalAccountTemplatesCompanion data,
+  ) {
+    return LocalAccountTemplateRow(
+      code: data.code.present ? data.code.value : this.code,
+      name: data.name.present ? data.name.value : this.name,
+      type: data.type.present ? data.type.value : this.type,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalAccountTemplateRow(')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('type: $type')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(code, name, type);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalAccountTemplateRow &&
+          other.code == this.code &&
+          other.name == this.name &&
+          other.type == this.type);
+}
+
+class LocalAccountTemplatesCompanion
+    extends UpdateCompanion<LocalAccountTemplateRow> {
+  final Value<String> code;
+  final Value<String> name;
+  final Value<String> type;
+  final Value<int> rowid;
+  const LocalAccountTemplatesCompanion({
+    this.code = const Value.absent(),
+    this.name = const Value.absent(),
+    this.type = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalAccountTemplatesCompanion.insert({
+    required String code,
+    required String name,
+    required String type,
+    this.rowid = const Value.absent(),
+  }) : code = Value(code),
+       name = Value(name),
+       type = Value(type);
+  static Insertable<LocalAccountTemplateRow> custom({
+    Expression<String>? code,
+    Expression<String>? name,
+    Expression<String>? type,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (code != null) 'code': code,
+      if (name != null) 'name': name,
+      if (type != null) 'type': type,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalAccountTemplatesCompanion copyWith({
+    Value<String>? code,
+    Value<String>? name,
+    Value<String>? type,
+    Value<int>? rowid,
+  }) {
+    return LocalAccountTemplatesCompanion(
+      code: code ?? this.code,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalAccountTemplatesCompanion(')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9029,6 +9727,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LocalTenantSettingsTable(this);
   late final $ReportCacheEntriesTable reportCacheEntries =
       $ReportCacheEntriesTable(this);
+  late final $LocalUserProfilesTable localUserProfiles =
+      $LocalUserProfilesTable(this);
+  late final $LocalAccountTemplatesTable localAccountTemplates =
+      $LocalAccountTemplatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9050,6 +9752,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idMappings,
     localTenantSettings,
     reportCacheEntries,
+    localUserProfiles,
+    localAccountTemplates,
   ];
 }
 
@@ -10269,6 +10973,7 @@ typedef $$LocalAccountsTableCreateCompanionBuilder =
       required String name,
       required String type,
       Value<String?> parentCode,
+      Value<String?> parentId,
       Value<int> rowid,
     });
 typedef $$LocalAccountsTableUpdateCompanionBuilder =
@@ -10279,6 +10984,7 @@ typedef $$LocalAccountsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> type,
       Value<String?> parentCode,
+      Value<String?> parentId,
       Value<int> rowid,
     });
 
@@ -10318,6 +11024,11 @@ class $$LocalAccountsTableFilterComposer
 
   ColumnFilters<String> get parentCode => $composableBuilder(
     column: $table.parentCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10360,6 +11071,11 @@ class $$LocalAccountsTableOrderingComposer
     column: $table.parentCode,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalAccountsTableAnnotationComposer
@@ -10390,6 +11106,9 @@ class $$LocalAccountsTableAnnotationComposer
     column: $table.parentCode,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
 }
 
 class $$LocalAccountsTableTableManager
@@ -10429,6 +11148,7 @@ class $$LocalAccountsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<String?> parentCode = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalAccountsCompanion(
                 id: id,
@@ -10437,6 +11157,7 @@ class $$LocalAccountsTableTableManager
                 name: name,
                 type: type,
                 parentCode: parentCode,
+                parentId: parentId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10447,6 +11168,7 @@ class $$LocalAccountsTableTableManager
                 required String name,
                 required String type,
                 Value<String?> parentCode = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalAccountsCompanion.insert(
                 id: id,
@@ -10455,6 +11177,7 @@ class $$LocalAccountsTableTableManager
                 name: name,
                 type: type,
                 parentCode: parentCode,
+                parentId: parentId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -12852,6 +13575,7 @@ typedef $$SyncQueueItemsTableCreateCompanionBuilder =
       Value<String> status,
       Value<int> attempts,
       Value<String?> lastError,
+      Value<String?> dependsOn,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -12869,6 +13593,7 @@ typedef $$SyncQueueItemsTableUpdateCompanionBuilder =
       Value<String> status,
       Value<int> attempts,
       Value<String?> lastError,
+      Value<String?> dependsOn,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -12935,6 +13660,11 @@ class $$SyncQueueItemsTableFilterComposer
 
   ColumnFilters<String> get lastError => $composableBuilder(
     column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dependsOn => $composableBuilder(
+    column: $table.dependsOn,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13013,6 +13743,11 @@ class $$SyncQueueItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get dependsOn => $composableBuilder(
+    column: $table.dependsOn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -13066,6 +13801,9 @@ class $$SyncQueueItemsTableAnnotationComposer
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
 
+  GeneratedColumn<String> get dependsOn =>
+      $composableBuilder(column: $table.dependsOn, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -13117,6 +13855,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<String?> dependsOn = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13132,6 +13871,7 @@ class $$SyncQueueItemsTableTableManager
                 status: status,
                 attempts: attempts,
                 lastError: lastError,
+                dependsOn: dependsOn,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -13149,6 +13889,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
+                Value<String?> dependsOn = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13164,6 +13905,7 @@ class $$SyncQueueItemsTableTableManager
                 status: status,
                 attempts: attempts,
                 lastError: lastError,
+                dependsOn: dependsOn,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -13203,6 +13945,7 @@ typedef $$SyncQueueItemsTableProcessedTableManager =
       PrefetchHooks Function()
     >;
 typedef $$IdMappingsTableCreateCompanionBuilder = IdMappingsCompanion Function({
+  required String tenantId,
   required String entity,
   required String localId,
   required String serverId,
@@ -13210,6 +13953,7 @@ typedef $$IdMappingsTableCreateCompanionBuilder = IdMappingsCompanion Function({
   Value<int> rowid,
 });
 typedef $$IdMappingsTableUpdateCompanionBuilder = IdMappingsCompanion Function({
+  Value<String> tenantId,
   Value<String> entity,
   Value<String> localId,
   Value<String> serverId,
@@ -13226,6 +13970,11 @@ class $$IdMappingsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get tenantId => $composableBuilder(
+    column: $table.tenantId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get entity => $composableBuilder(
     column: $table.entity,
     builder: (column) => ColumnFilters(column),
@@ -13256,6 +14005,11 @@ class $$IdMappingsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get tenantId => $composableBuilder(
+    column: $table.tenantId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get entity => $composableBuilder(
     column: $table.entity,
     builder: (column) => ColumnOrderings(column),
@@ -13286,6 +14040,9 @@ class $$IdMappingsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get tenantId =>
+      $composableBuilder(column: $table.tenantId, builder: (column) => column);
+
   GeneratedColumn<String> get entity =>
       $composableBuilder(column: $table.entity, builder: (column) => column);
 
@@ -13330,12 +14087,14 @@ class $$IdMappingsTableTableManager
               $$IdMappingsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<String> tenantId = const Value.absent(),
                 Value<String> entity = const Value.absent(),
                 Value<String> localId = const Value.absent(),
                 Value<String> serverId = const Value.absent(),
                 Value<DateTime> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IdMappingsCompanion(
+                tenantId: tenantId,
                 entity: entity,
                 localId: localId,
                 serverId: serverId,
@@ -13344,12 +14103,14 @@ class $$IdMappingsTableTableManager
               ),
           createCompanionCallback:
               ({
+                required String tenantId,
                 required String entity,
                 required String localId,
                 required String serverId,
                 Value<DateTime> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IdMappingsCompanion.insert(
+                tenantId: tenantId,
                 entity: entity,
                 localId: localId,
                 serverId: serverId,
@@ -13797,6 +14558,385 @@ typedef $$ReportCacheEntriesTableProcessedTableManager =
       ReportCacheRow,
       PrefetchHooks Function()
     >;
+typedef $$LocalUserProfilesTableCreateCompanionBuilder =
+    LocalUserProfilesCompanion Function({
+      required String authUid,
+      required String payload,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalUserProfilesTableUpdateCompanionBuilder =
+    LocalUserProfilesCompanion Function({
+      Value<String> authUid,
+      Value<String> payload,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalUserProfilesTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalUserProfilesTable> {
+  $$LocalUserProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get authUid => $composableBuilder(
+    column: $table.authUid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalUserProfilesTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalUserProfilesTable> {
+  $$LocalUserProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get authUid => $composableBuilder(
+    column: $table.authUid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalUserProfilesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalUserProfilesTable> {
+  $$LocalUserProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get authUid =>
+      $composableBuilder(column: $table.authUid, builder: (column) => column);
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LocalUserProfilesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalUserProfilesTable,
+          LocalUserProfileRow,
+          $$LocalUserProfilesTableFilterComposer,
+          $$LocalUserProfilesTableOrderingComposer,
+          $$LocalUserProfilesTableAnnotationComposer,
+          $$LocalUserProfilesTableCreateCompanionBuilder,
+          $$LocalUserProfilesTableUpdateCompanionBuilder,
+          (
+            LocalUserProfileRow,
+            BaseReferences<
+              _$AppDatabase,
+              $LocalUserProfilesTable,
+              LocalUserProfileRow
+            >,
+          ),
+          LocalUserProfileRow,
+          PrefetchHooks Function()
+        > {
+  $$LocalUserProfilesTableTableManager(
+    _$AppDatabase db,
+    $LocalUserProfilesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalUserProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalUserProfilesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalUserProfilesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> authUid = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalUserProfilesCompanion(
+                authUid: authUid,
+                payload: payload,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String authUid,
+                required String payload,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalUserProfilesCompanion.insert(
+                authUid: authUid,
+                payload: payload,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalUserProfilesTable, LocalUserProfileRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LocalUserProfilesTable,
+                    LocalUserProfileRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalUserProfilesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalUserProfilesTable,
+      LocalUserProfileRow,
+      $$LocalUserProfilesTableFilterComposer,
+      $$LocalUserProfilesTableOrderingComposer,
+      $$LocalUserProfilesTableAnnotationComposer,
+      $$LocalUserProfilesTableCreateCompanionBuilder,
+      $$LocalUserProfilesTableUpdateCompanionBuilder,
+      (
+        LocalUserProfileRow,
+        BaseReferences<
+          _$AppDatabase,
+          $LocalUserProfilesTable,
+          LocalUserProfileRow
+        >,
+      ),
+      LocalUserProfileRow,
+      PrefetchHooks Function()
+    >;
+typedef $$LocalAccountTemplatesTableCreateCompanionBuilder =
+    LocalAccountTemplatesCompanion Function({
+      required String code,
+      required String name,
+      required String type,
+      Value<int> rowid,
+    });
+typedef $$LocalAccountTemplatesTableUpdateCompanionBuilder =
+    LocalAccountTemplatesCompanion Function({
+      Value<String> code,
+      Value<String> name,
+      Value<String> type,
+      Value<int> rowid,
+    });
+
+class $$LocalAccountTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalAccountTemplatesTable> {
+  $$LocalAccountTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalAccountTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalAccountTemplatesTable> {
+  $$LocalAccountTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalAccountTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalAccountTemplatesTable> {
+  $$LocalAccountTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+}
+
+class $$LocalAccountTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalAccountTemplatesTable,
+          LocalAccountTemplateRow,
+          $$LocalAccountTemplatesTableFilterComposer,
+          $$LocalAccountTemplatesTableOrderingComposer,
+          $$LocalAccountTemplatesTableAnnotationComposer,
+          $$LocalAccountTemplatesTableCreateCompanionBuilder,
+          $$LocalAccountTemplatesTableUpdateCompanionBuilder,
+          (
+            LocalAccountTemplateRow,
+            BaseReferences<
+              _$AppDatabase,
+              $LocalAccountTemplatesTable,
+              LocalAccountTemplateRow
+            >,
+          ),
+          LocalAccountTemplateRow,
+          PrefetchHooks Function()
+        > {
+  $$LocalAccountTemplatesTableTableManager(
+    _$AppDatabase db,
+    $LocalAccountTemplatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalAccountTemplatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LocalAccountTemplatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LocalAccountTemplatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> code = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalAccountTemplatesCompanion(
+                code: code,
+                name: name,
+                type: type,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String code,
+                required String name,
+                required String type,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalAccountTemplatesCompanion.insert(
+                code: code,
+                name: name,
+                type: type,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $LocalAccountTemplatesTable,
+                    LocalAccountTemplateRow
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LocalAccountTemplatesTable,
+                    LocalAccountTemplateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalAccountTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalAccountTemplatesTable,
+      LocalAccountTemplateRow,
+      $$LocalAccountTemplatesTableFilterComposer,
+      $$LocalAccountTemplatesTableOrderingComposer,
+      $$LocalAccountTemplatesTableAnnotationComposer,
+      $$LocalAccountTemplatesTableCreateCompanionBuilder,
+      $$LocalAccountTemplatesTableUpdateCompanionBuilder,
+      (
+        LocalAccountTemplateRow,
+        BaseReferences<
+          _$AppDatabase,
+          $LocalAccountTemplatesTable,
+          LocalAccountTemplateRow
+        >,
+      ),
+      LocalAccountTemplateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13836,4 +14976,8 @@ class $AppDatabaseManager {
       $$LocalTenantSettingsTableTableManager(_db, _db.localTenantSettings);
   $$ReportCacheEntriesTableTableManager get reportCacheEntries =>
       $$ReportCacheEntriesTableTableManager(_db, _db.reportCacheEntries);
+  $$LocalUserProfilesTableTableManager get localUserProfiles =>
+      $$LocalUserProfilesTableTableManager(_db, _db.localUserProfiles);
+  $$LocalAccountTemplatesTableTableManager get localAccountTemplates =>
+      $$LocalAccountTemplatesTableTableManager(_db, _db.localAccountTemplates);
 }
