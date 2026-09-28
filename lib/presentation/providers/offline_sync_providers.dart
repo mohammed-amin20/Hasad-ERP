@@ -9,23 +9,30 @@ import '../../../domain/invoices/invoice_sync.dart';
 import 'offline_providers.dart' as offline;
 import 'purchases_providers.dart';
 import 'sales_providers.dart';
+import 'statements_providers.dart';
 
 /// Refreshes every read that a completed drain invalidates: the pending count,
-/// the per-row sync badge, and the two invoice lists.
+/// the per-row sync badge, the two invoice lists, and the money views that a
+/// drained payment (or settlement) changes.
 ///
 /// The list refresh is the reason a row stops showing the *local* placeholder
 /// number: once the mirror row is `synced` it drops out of
 /// `OfflineInvoiceRepository._localDrafts()`, so the refetch is what replaces it
 /// with the official server copy. Without this the badge would say "synced" next
-/// to a number the server never issued.
+/// to a number the server never issued. The debt totals are included because a
+/// payment reduces what a customer owes and a settlement what we owe a supplier;
+/// they are top-level (non-family) providers, so a plain invalidate is safe.
 ///
-/// This is a refresh trigger only — it changes no business logic, and
-/// `SaleInvoicesList`/`PurchaseInvoicesList` keep owning how they load.
+/// This is a refresh trigger only — it changes no business logic, and the
+/// `SaleInvoicesList`/`PurchaseInvoicesList`/debt notifiers keep owning how they
+/// load.
 void _refreshAfterDrain(Ref ref) {
   ref.invalidate(pendingSyncCountProvider);
   ref.invalidate(invoiceSyncStatesProvider);
   ref.invalidate(saleInvoicesListProvider);
   ref.invalidate(purchaseInvoicesListProvider);
+  ref.invalidate(customerDebtsProvider);
+  ref.invalidate(supplierDebtsProvider);
 }
 
 /// Current signed-in tenant id (falls back to empty string so the flusher

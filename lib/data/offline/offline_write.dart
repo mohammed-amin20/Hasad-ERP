@@ -351,6 +351,13 @@ class OfflineWriteCoordinator {
       });
 
   /// Queues a payment mirroring `record_payment` (updates the local invoice).
+  ///
+  /// One transaction or nothing (parity with [writeSale]): the invoice's
+  /// paid/remaining/status, the payment row, the mirrored journal and the queue
+  /// leg commit together. The leg depends on the invoice's own pending leg, so
+  /// a replay never pays a parent the server has not seen yet — the RPC would
+  /// otherwise reject the payment for a missing invoice and burn its retry
+  /// budget on a pure ordering problem.
   Future<PaymentResult> recordPayment(PaymentDraft draft) => _guard(() async {
         final row = await _invoice(draft.invoiceId);
         final invoice = _invoiceFromRow(row);
@@ -373,34 +380,47 @@ class OfflineWriteCoordinator {
         final status = _statusFor(row.total, newPaid);
         final paymentId = _uuid.v4();
 
-        await _store.upsertInvoice(
-          row.copyWith(paid: newPaid, remaining: newRemaining, status: status),
-        );
-        await _store.upsertPayment(
-          LocalPaymentRow(
-            id: paymentId,
-            tenantId: _tenantId,
-            invoiceId: row.id,
-            partyId: row.partyId,
-            partyName: row.partyName,
-            amount: draft.amount,
-            method: draft.method,
-            date: date,
-            note: draft.note,
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
+        // Resolved BEFORE the transaction (it is a read, and the leg is written
+        // inside it): the payment names the invoice, so that invoice's pending
+        // leg is the prerequisite.
+        final invoiceLegs = await _pendingLegIdsFor([row.id]);
 
-        await _mirrorJournal(result.journalEntry, requestId: requestId);
-        await _enqueueRpc(
-          rpc: 'record_payment',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'payments',
-          localId: paymentId,
-        );
+        await _store.transaction((tx) async {
+          await tx.upsertInvoice(
+            row.copyWith(
+              paid: newPaid,
+              remaining: newRemaining,
+              status: status,
+            ),
+          );
+          await tx.upsertPayment(
+            LocalPaymentRow(
+              id: paymentId,
+              tenantId: _tenantId,
+              invoiceId: row.id,
+              partyId: row.partyId,
+              partyName: row.partyName,
+              amount: draft.amount,
+              method: draft.method,
+              date: date,
+              note: draft.note,
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+          await _mirrorJournal(result.journalEntry,
+              requestId: requestId, store: tx);
+          await _enqueueRpc(
+            rpc: 'record_payment',
+            params: draft.toJson(requestId: requestId),
+            requestId: requestId,
+            entity: 'payments',
+            localId: paymentId,
+            dependsOn: invoiceLegs,
+            store: tx,
+          );
+        });
 
         return PaymentResult(
           duplicate: false,
@@ -418,6 +438,10 @@ class OfflineWriteCoordinator {
 
   /// Queues a bulk settlement mirroring `settle_supplier` (oldest-first
   /// owned invoices, then commission dues).
+  ///
+  /// One transaction or nothing (parity with [writeSale]): every invoice
+  /// allocation, the flipped dues, the payment row, the mirrored journal and
+  /// the queue leg commit together.
   Future<SettlementResult> settleSupplier(SettlementDraft draft) =>
       _guard(() async {
         final supplier = await _supplier(draft.supplierId);
@@ -476,60 +500,79 @@ class OfflineWriteCoordinator {
             allocations.where((a) => a.dueId == null).length;
         final duesCount = allocations.where((a) => a.dueId != null).length;
 
-        // Apply invoice allocations (reduce remaining / paid on each row).
-        for (final a in allocations) {
-          if (a.dueId != null) continue;
-          for (final r in ownedRows) {
-            if (r.id == a.invoiceId) {
-              final newPaid = r.paid + a.amount;
-              final newRemaining = r.remaining - a.amount;
-              await _store.upsertInvoice(
-                r.copyWith(
-                  paid: newPaid,
-                  remaining: newRemaining,
-                  status: _statusFor(r.total, newPaid),
-                ),
-              );
-              break;
+        // The settlement allocates against specific owned invoices and the dues
+        // they spawn. Each of those parents may itself still be a pending
+        // offline leg, so the settlement replay waits for all of them — paying
+        // invoices the server has never seen would silently mis-allocate and
+        // burn the settlement in the process.
+        final parentIds = <String>{
+          for (final a in allocations)
+            if (a.dueId != null)
+              ...dueRows.where((r) => r.id == a.dueId).map((r) => r.invoiceId)
+            else
+              a.invoiceId,
+        };
+        final parentLegs = await _pendingLegIdsFor(parentIds.toList());
+
+        await _store.transaction((tx) async {
+          // Apply invoice allocations (reduce remaining / paid on each row).
+          for (final a in allocations) {
+            if (a.dueId != null) continue;
+            for (final r in ownedRows) {
+              if (r.id == a.invoiceId) {
+                final newPaid = r.paid + a.amount;
+                final newRemaining = r.remaining - a.amount;
+                await tx.upsertInvoice(
+                  r.copyWith(
+                    paid: newPaid,
+                    remaining: newRemaining,
+                    status: _statusFor(r.total, newPaid),
+                  ),
+                );
+                break;
+              }
             }
           }
-        }
-        // Full-coverage commission dues flip to paid.
-        for (final a in allocations) {
-          if (a.dueId == null) continue;
-          final due = dueRows.where((r) => r.id == a.dueId);
-          if (due.isNotEmpty && due.first.dueAmount == a.amount) {
-            await _store.upsertCommissionDue(
-              due.first.copyWith(status: 'paid'),
-            );
+          // Full-coverage commission dues flip to paid.
+          for (final a in allocations) {
+            if (a.dueId == null) continue;
+            final due = dueRows.where((r) => r.id == a.dueId);
+            if (due.isNotEmpty && due.first.dueAmount == a.amount) {
+              await tx.upsertCommissionDue(
+                due.first.copyWith(status: 'paid'),
+              );
+            }
           }
-        }
 
-        await _store.upsertPayment(
-          LocalPaymentRow(
-            id: _uuid.v4(),
-            tenantId: _tenantId,
-            invoiceId: null,
-            partyId: supplier.id,
-            partyName: supplier.name,
-            amount: draft.amount,
-            method: draft.method,
-            date: date,
-            note: draft.note,
+          await tx.upsertPayment(
+            LocalPaymentRow(
+              id: _uuid.v4(),
+              tenantId: _tenantId,
+              invoiceId: null,
+              partyId: supplier.id,
+              partyName: supplier.name,
+              amount: draft.amount,
+              method: draft.method,
+              date: date,
+              note: draft.note,
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+
+          await _mirrorJournal(result.journalEntry,
+              requestId: requestId, store: tx);
+          await _enqueueRpc(
+            rpc: 'settle_supplier',
+            params: draft.toJson(requestId: requestId),
             requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-
-        await _mirrorJournal(result.journalEntry, requestId: requestId);
-        await _enqueueRpc(
-          rpc: 'settle_supplier',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'payments',
-          localId: null,
-        );
+            entity: 'payments',
+            localId: null,
+            dependsOn: parentLegs,
+            store: tx,
+          );
+        });
 
         return SettlementResult(
           duplicate: false,
@@ -1092,8 +1135,10 @@ class OfflineWriteCoordinator {
     String? requestId,
     String? entity,
     String? localId,
+    List<String>? dependsOn,
+    LocalStore? store,
   }) async {
-    await _store.enqueue(
+    await (store ?? _store).enqueue(
       SyncQueueRow(
         id: _uuid.v4(),
         tenantId: _tenantId,
@@ -1108,6 +1153,9 @@ class OfflineWriteCoordinator {
         lastError: null,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        dependsOn: dependsOn == null || dependsOn.isEmpty
+            ? null
+            : jsonEncode(dependsOn),
       ),
     );
   }
@@ -1217,6 +1265,31 @@ class OfflineWriteCoordinator {
         // Only queue legs that are still pending and match the exact local rows
         // this sale referenced. A leg that is already `synced` is on the server,
         // so it is not a prerequisite.
+        if (leg.status == 'pending' &&
+            leg.localId != null &&
+            wanted.contains(leg.localId))
+          leg.id,
+    };
+    return ids.isEmpty ? null : ids.toList();
+  }
+
+  /// Queue ids of the pending legs whose `local_id` is one of [localIds], so a
+  /// financial follow-up (payment against an offline invoice, settlement of
+  /// offline invoices/dues) replays only after the parent server rows exist.
+  ///
+  /// A `create_sale_invoice`/`create_purchase_invoice` leg carries `localId =
+  /// invoiceId`, and a commission due carries `invoiceId` pointing at the sale
+  /// that created it, so resolving by invoice ids covers both invoice and due
+  /// prerequisites without a second `pendingSync` shape.
+  Future<List<String>?> _pendingLegIdsFor(List<String> localIds) async {
+    final wanted = localIds.toSet();
+    if (wanted.isEmpty) return null;
+    final pending = await _store.pendingSync(_tenantId);
+    final ids = <String>{
+      for (final leg in pending)
+        // Only queue legs that are still pending and match the exact local rows
+        // this financial write references. A leg that is already `synced` is on
+        // the server, so it is not a prerequisite.
         if (leg.status == 'pending' &&
             leg.localId != null &&
             wanted.contains(leg.localId))

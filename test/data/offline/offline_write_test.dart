@@ -17,6 +17,8 @@ import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
 
+import 'delegating_local_store.dart';
+
 void main() {
   late AppDatabase db;
   late DriftLocalStore store;
@@ -289,6 +291,98 @@ void main() {
       );
     });
 
+    test('no dependsOn when the invoice is already on the server', () async {
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'inv-1', tenantId: tenant, type: 'sale', no: 'SAL-001',
+        partyId: 'c1', partyName: 'عميل', date: DateTime(2026, 9, 1),
+        subtotal: 50000, total: 50000, paid: 0, remaining: 50000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r0', synced: true,
+        createdAt: null,
+      ));
+
+      await writer.recordPayment(PaymentDraft(
+        invoiceId: 'inv-1',
+        amount: 20000,
+        method: 'bank',
+      ));
+
+      final leg = (await store.pendingSync(tenant)).single;
+      expect(leg.dependsOn, isNull,
+          reason: 'a synced invoice has no queue leg, so there is no '
+              'prerequisite to defer on');
+    });
+
+    test('payment leg depends on the invoice leg when the invoice is pending',
+        () async {
+      // An offline sale leaves its invoice leg pending; a payment paying that
+      // invoice must replay only after the parent reaches the server, or the
+      // RPC rejects the payment for a missing invoice.
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'inv-1', tenantId: tenant, type: 'sale', no: 'D-ABC123',
+        partyId: 'c1', partyName: 'عميل', date: DateTime(2026, 9, 1),
+        subtotal: 50000, total: 50000, paid: 0, remaining: 50000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r0', synced: false,
+        createdAt: null,
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-inv', tenantId: tenant, rpc: 'create_sale_invoice',
+        op: 'rpc', params: '{}', requestId: 'r0', entity: 'invoices',
+        localId: 'inv-1', status: 'pending', attempts: 0, lastError: null,
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+      ));
+
+      await writer.recordPayment(PaymentDraft(
+        invoiceId: 'inv-1',
+        amount: 20000,
+        method: 'cash',
+      ));
+
+      final legs = await store.pendingSync(tenant)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final leg = legs.last;
+      expect(leg.rpc, 'record_payment');
+      expect(leg.dependsOn, jsonEncode(['q-inv']));
+    });
+
+    test('recordPayment rolls back everything when the enqueue throws',
+        () async {
+      // Atomicity pin: the coordinator's FINAL step is the queue `enqueue`. A
+      // store that throws there has already staged the invoice change, the
+      // payment row and the journal inside the transaction — none of it may
+      // survive a transaction that aborts.
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'inv-1', tenantId: tenant, type: 'sale', no: 'SAL-001',
+        partyId: 'c1', partyName: 'عميل', date: DateTime(2026, 9, 1),
+        subtotal: 50000, total: 50000, paid: 0, remaining: 50000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r0', synced: true,
+        createdAt: null,
+      ));
+
+      final poisoning = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoning.recordPayment(PaymentDraft(
+          invoiceId: 'inv-1',
+          amount: 20000,
+          method: 'cash',
+        )),
+        throwsA(isA<AppException>()),
+      );
+
+      final invoice = (await store.invoices(tenant)).single;
+      expect(invoice.paid, 0, reason: 'the payment must not outlive the leg');
+      expect(invoice.remaining, 50000);
+      expect(await store.payments(tenant), isEmpty);
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
     test('overpayment is rejected as ValidationException', () async {
       await seed();
       await store.upsertInvoice(LocalInvoiceRow(
@@ -378,6 +472,116 @@ void main() {
 
       final due = (await store.commissionDues(tenant, supplierId: 's1')).single;
       expect(due.status, 'paid');
+    });
+
+    test('settlement leg depends on pending parent legs it allocates',
+        () async {
+      // Two offline writes feed this settlement: a purchase invoice that is
+      // still a pending leg, and a commission due whose SALE invoice (the sale
+      // that created the commission) is also still pending. Both parents must
+      // reach the server before the settlement replays, or the money would
+      // mis-allocate against rows the server has never seen.
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'pi-1', tenantId: tenant, type: 'purchase', no: 'PUR-001',
+        partyId: 's1', partyName: 'مورد مباشر', date: DateTime(2026, 8, 1),
+        subtotal: 40000, total: 40000, paid: 0, remaining: 40000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r1', synced: false,
+        createdAt: DateTime(2026, 8, 1),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-pi', tenantId: tenant, rpc: 'create_purchase_invoice',
+        op: 'rpc', params: '{}', requestId: 'r1', entity: 'invoices',
+        localId: 'pi-1', status: 'pending', attempts: 0, lastError: null,
+        createdAt: DateTime.utc(2026, 8, 1),
+        updatedAt: DateTime.utc(2026, 8, 1),
+      ));
+      // The due was created by a sale leg that is also still pending.
+      await store.upsertCommissionDue(LocalCommissionDueRow(
+        id: 'due-1', tenantId: tenant, invoiceId: 'sale-1', productId: 'p2',
+        supplierId: 's1', dueAmount: 15000, status: 'pending',
+        createdAt: DateTime.utc(2026, 8, 10),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-sale', tenantId: tenant, rpc: 'create_sale_invoice',
+        op: 'rpc', params: '{}', requestId: 'r2', entity: 'invoices',
+        localId: 'sale-1', status: 'pending', attempts: 0, lastError: null,
+        createdAt: DateTime.utc(2026, 8, 10),
+        updatedAt: DateTime.utc(2026, 8, 10),
+      ));
+
+      await writer.settleSupplier(SettlementDraft(
+        supplierId: 's1',
+        amount: 50000, // covers the invoice (40000) + part of the due (10000)
+        method: 'bank',
+      ));
+
+      final legs = await store.pendingSync(tenant)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final leg = legs.last;
+      expect(leg.rpc, 'settle_supplier');
+      final deps = (jsonDecode(leg.dependsOn!) as List).cast<String>();
+      expect(deps, containsAll(<String>['q-pi', 'q-sale']));
+    });
+
+    test('no dependsOn when every parent is already on the server', () async {
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'pi-1', tenantId: tenant, type: 'purchase', no: 'PUR-001',
+        partyId: 's1', partyName: 'مورد مباشر', date: DateTime(2026, 8, 1),
+        subtotal: 40000, total: 40000, paid: 0, remaining: 40000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r1', synced: true,
+        createdAt: DateTime(2026, 8, 1),
+      ));
+
+      await writer.settleSupplier(SettlementDraft(
+        supplierId: 's1',
+        amount: 40000,
+        method: 'cash',
+      ));
+
+      final leg = (await store.pendingSync(tenant)).single;
+      expect(leg.rpc, 'settle_supplier');
+      expect(leg.dependsOn, isNull);
+    });
+
+    test('settleSupplier rolls back everything when the enqueue throws',
+        () async {
+      await seed();
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'pi-1', tenantId: tenant, type: 'purchase', no: 'PUR-001',
+        partyId: 's1', partyName: 'مورد مباشر', date: DateTime(2026, 8, 1),
+        subtotal: 40000, total: 40000, paid: 0, remaining: 40000,
+        status: 'unpaid', ownership: 'owned', requestId: 'r1', synced: true,
+        createdAt: DateTime(2026, 8, 1),
+      ));
+      await store.upsertCommissionDue(LocalCommissionDueRow(
+        id: 'due-1', tenantId: tenant, invoiceId: 'pi-1', productId: 'p2',
+        supplierId: 's1', dueAmount: 15000, status: 'pending',
+        createdAt: DateTime(2026, 8, 10),
+      ));
+
+      final poisoning = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoning.settleSupplier(SettlementDraft(
+          supplierId: 's1',
+          amount: 50000,
+          method: 'bank',
+        )),
+        throwsA(isA<AppException>()),
+      );
+
+      final invoice = (await store.invoices(tenant)).single;
+      expect(invoice.remaining, 40000, reason: 'allocation must not survive');
+      expect(invoice.status, 'unpaid');
+      final due = (await store.commissionDues(tenant, supplierId: 's1')).single;
+      expect(due.status, 'pending');
+      expect(await store.payments(tenant), isEmpty);
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
     });
   });
 
@@ -869,4 +1073,14 @@ void main() {
       expect(accounts.map((a) => a.id), everyElement(startsWith('server-')));
     });
   });
+}
+
+/// Throws on the coordinator's final `enqueue` inside the write, after every
+/// other statement in the transaction has already been staged.
+class _ThrowOnEnqueueStore extends DelegatingLocalStore {
+  _ThrowOnEnqueueStore(super.inner);
+
+  @override
+  Future<void> enqueue(SyncQueueRow row) =>
+      throw StateError('queue write failed after the write was staged');
 }

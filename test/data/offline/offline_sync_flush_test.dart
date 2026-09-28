@@ -429,6 +429,43 @@ void main() {
       expect(summary.blocked, 1);
     });
 
+    test('an offline payment replays only after its pending invoice leg',
+        () async {
+      // The exact graph the Phase 1B coordinator emits: a `record_payment` leg
+      // names the `create_sale_invoice` leg it was paid against. Enqueued
+      // payment-first to prove the flusher re-scans rather than relying on
+      // FIFO.
+      await store.enqueue(SyncQueueRow(
+        id: 'q-pay', tenantId: tenantId, rpc: 'record_payment', op: 'rpc',
+        params: '{"p_invoice_id":"inv-1"}', requestId: 'req-pay',
+        entity: 'payments', localId: 'pay-1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 0),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 0),
+        dependsOn: jsonEncode(['q-inv']),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-inv', tenantId: tenantId, rpc: 'create_sale_invoice', op: 'rpc',
+        params: '{"p_customer_id":"c1"}', requestId: 'req-inv',
+        entity: 'invoices', localId: 'inv-1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 1),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 1),
+      ));
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.blocked, 0);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      // The invoice must reach the server before the payment against it; paying
+      // an invoice the server has never seen would reject the RPC.
+      expect(target.calls, <String>[
+        'rpc:create_sale_invoice',
+        'rpc:record_payment',
+      ]);
+    });
+
     test('dependencies are tenant-scoped: another tenant\'s pending leg does not block',
         () async {
       await store.enqueue(SyncQueueRow(

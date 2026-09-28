@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ Not started |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments slice done**, remaining domains pending |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -217,6 +217,59 @@ Phase 0 and Phase 1A passed verification on a physical Android device.
 
 ---
 
+## ✅ M13 Phase 1B — payments slice (offline payment write path)
+
+**Delivered as the first slice of Phase 1B.** Payments are now local-first, in
+line with Phase 1A's sales path: record and settle queue a replay leg and only
+hit the server when the flusher drains.
+
+**Delivered**
+
+- `lib/data/payments/offline_aware_payment_repository.dart` — decorator over the
+  abstract `PaymentRepository`. `record` delegates to
+  `OfflineWriteCoordinator.recordPayment`, `settle` to `settleSupplier`; both live
+  in the queue/local-mirror path. No connectivity hint (Phase 1A rule: never
+  gate a write on the verdict).
+- `paymentRepositoryProvider` (`payments_providers.dart`) rewired to Phase 1A's
+  sales pattern: with a local store + tenant it returns the offline-aware
+  wrapper (injecting `() => ref.read(accountRepositoryProvider).chart()` as the
+  chart-seed closure), otherwise it falls back to the live `SupabasePaymentRepository`
+  — so the web/no-store build keeps a working payment path.
+- `recordPayment` / `settleSupplier` in `offline_write.dart` now run **inside one
+  `LocalStore.transaction`** (the same primitive Phase 1A proved): invoice
+  upserts, payment upsert, journal mirror (`_mirrorJournal(store: tx)`) and the
+  queue leg all commit together — a throw in `enqueue` rolls the payment back.
+- **Dependency-aware replay for payments.** `_enqueueRpc` gained optional
+  `dependsOn` (JSON only when non-empty) and `store` (same store as the ambient
+  transaction). `recordPayment` depends on the pending `create_sale_invoice`
+  leg; `settleSupplier` depends on every pending parent it allocates against
+  (owning purchase invoices via `a.invoiceId`, commission dues via the
+  due→invoice map). The flush service already re-scans until a graph drains
+  (Phase 1A), so a payment queued before its invoice still replays in order.
+- `_refreshAfterDrain` (`offline_sync_providers.dart`) now also invalidates
+  `customerDebtsProvider` + `supplierDebtsProvider`, so paying off a debtor /
+  settling a supplier refreshes the debts screens in both flush paths.
+- Server idempotency for payments is **already in place — no new migration**
+  (deviation from the "verify every new RPC" handoff item): `record_payment`
+  dedupes on `payments.request_id` and `settle_supplier` on
+  `processed_requests` since migration `0009`, and both drafts already carry
+  `p_request_id`. Verified by the existing flush tests, not by relying on 0009
+  alone.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub` **555/555**
+  (541 + 7 new payments tests + 6 new write/flush tests); `flutter build web
+  --dart-define=use_arabic=true` green; `flutter build apk --debug` green.
+
+**Sync badge for payments deliberately NOT delivered** — the discard-at-the-
+boundary gap (`_rowToInvoice` dropping the state) is one provider per domain via
+`queueLegsFor(entity:)`; payments join it only when the badge is wanted
+app-wide, per the Phase 1A.1 scope and user decision.
+
+**Still open for later Phase 1B slices:** products, customers, suppliers,
+employees, journal entries, salaries each need their own offline write routing
+(this slice covers payments only).
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -234,15 +287,20 @@ Phase 0 and Phase 1A passed verification on a physical Android device.
 
 **Must be built fresh**
 
-- Per-domain write wiring: payments, products, customers, suppliers, employees,
-  journal entries, salaries. Phase 1A deliberately excluded all of these.
+- Per-domain write wiring *not yet done*: products, customers, suppliers,
+  employees, journal entries, salaries. (The **payments slice of Phase 1B is
+  already delivered** — its exact transaction + dependency pattern is the
+  template to copy.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
   own sync indicator if the badge is wanted app-wide.
 - Server idempotency for any additional write RPC that is not already
   protected. `0025` covers only `adjust_inventory` and `create_account`; verify
   each new RPC for the "replay re-applies the effect" and "replay looks like a
-  validation error" failure modes before shipping it.
+  validation error" failure modes before shipping it. Payments needed no new
+  migration — `0009` already dedupes `record_payment` (by `request_id`) and
+  `settle_supplier` (by `processed_requests`); copy that verification style for
+  the remaining domains.
 
 **Carry-forward rules (do not regress these)**
 
@@ -262,3 +320,4 @@ Phase 0 and Phase 1A passed verification on a physical Android device.
 | Phase 0 — offline cold start | *(this checkpoint 1/3)* | drift `local_user_profiles` (schema 3) | 432 → 462 | `authRepositoryProvider` became a `FutureProvider`; call sites must `await .future` |
 | Phase 1A — queued sales writes | *(this checkpoint 2/3)* | drift `depends_on` (4), `id_mappings.tenant_id` (5), migration `0025` | 462 → 499 → 513 | `0025` adds a parameter with a default, so it **must** `drop function` the old signature first or PostgREST fails with "not unique" |
 | Phase 1A.1 — invoice sync badge | *(this checkpoint 3/3)* | none | 513 → 541 | Badge is text-only and absent when synced; `syncing` deliberately not rendered |
+| Phase 1B — payments write path | *(this checkpoint 4/4)* | none (driver `depends_on` reuse) | 541 → 555 | Payment sync badge out of scope; no new migration — `0009` already makes both payment RPCs idempotent |
