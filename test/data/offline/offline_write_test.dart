@@ -909,6 +909,121 @@ void main() {
       final queued = (await store.pendingSync(tenant)).single;
       expect(queued.rpc, 'create_journal_entry');
       expect(queued.localId, result.entryId);
+      // no accounts leg is pending, so no dependency is recorded
+      expect(queued.dependsOn, isNull);
+    });
+
+    test('an account missing from the local chart is rejected', () async {
+      await seed();
+      await expectLater(
+        writer.createJournal(ManualJournalDraft(
+          date: DateTime(2026, 9, 9),
+          memo: 'قيد',
+          lines: [
+            ManualJournalLineDraft(accountId: 'a1', debit: 1000),
+            ManualJournalLineDraft(accountId: 'ghost', credit: 1000),
+          ],
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          contains('أحد حسابات القيد غير موجود في دليل الحسابات (ghost)'),
+        )),
+      );
+      // nothing may be mirrored or queued for a rejected entry
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('a journal on a locally-created account depends on its pending leg',
+        () async {
+      await seed();
+      // The account was created offline: mirrored unsynced, its table_crud
+      // leg still pending. The journal must replay after it or the server
+      // would reject a missing account.
+      await store.upsertAccount(LocalAccountRow(
+        id: 'acc-offline', tenantId: tenant, code: '9999',
+        name: 'حساب محلي', type: 'asset', parentCode: null,
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-account', tenantId: tenant, rpc: 'table:accounts',
+        op: 'table_crud', params: '{}', requestId: 'req-acc',
+        entity: 'accounts', localId: 'acc-offline', status: 'pending',
+        attempts: 0, lastError: null,
+        createdAt: DateTime.utc(2026, 1, 1, 0, 0),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 0),
+      ));
+
+      final entry = await writer.createJournal(ManualJournalDraft(
+        date: DateTime(2026, 9, 9),
+        memo: 'قيد على حساب محلي',
+        lines: [
+          ManualJournalLineDraft(accountId: 'a1', debit: 1000),
+          ManualJournalLineDraft(accountId: 'a5', credit: 500),
+          ManualJournalLineDraft(accountId: 'acc-offline', credit: 500),
+        ],
+      ));
+
+      final legs = await store.pendingSync(tenant);
+      final leg = legs.singleWhere((r) => r.rpc == 'create_journal_entry');
+      expect(leg.localId, entry.entryId);
+      expect(jsonDecode(leg.dependsOn!), ['q-account']);
+    });
+
+    test('a failed queue leg rolls the entry back with its mirror', () async {
+      await seed();
+      final poisoning =
+          OfflineWriteCoordinator(_ThrowOnEnqueueStore(store), tenant);
+      await expectLater(
+        poisoning.createJournal(ManualJournalDraft(
+          date: DateTime(2026, 9, 9),
+          memo: 'قيد',
+          lines: [
+            ManualJournalLineDraft(accountId: 'a1', debit: 1500),
+            ManualJournalLineDraft(accountId: 'a5', credit: 1500),
+          ],
+        )),
+        throwsA(isA<ValidationException>()),
+      );
+      // neither the mirror row nor any leg may outlive the failed transaction
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('manual entries survive a restart with the queue intact', () async {
+      final dir =
+          await Directory.systemTemp.createTemp('journal_offline_restart');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/journal.sqlite');
+
+      final first = AppDatabase(NativeDatabase(file));
+      final firstStore = DriftLocalStore(first);
+      final firstWriter = OfflineWriteCoordinator(firstStore, tenant);
+      await seed(firstStore);
+      final result = await firstWriter.createJournal(ManualJournalDraft(
+        date: DateTime(2026, 9, 9),
+        memo: 'قيد يعيش عبر إعادة التشغيل',
+        lines: [
+          ManualJournalLineDraft(accountId: 'a1', debit: 2000),
+          ManualJournalLineDraft(accountId: 'a5', credit: 2000),
+        ],
+      ));
+      await first.close(); // drop the db and the in-memory object graph
+
+      final second = AppDatabase(NativeDatabase(file));
+      addTearDown(second.close);
+      final secondStore = DriftLocalStore(second);
+      final rows = await secondStore.journalEntries(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.synced, isFalse);
+      expect(rows.single.sourceType, 'manual');
+      expect(rows.single.requestId, isNotNull);
+      expect(rows.single.memo, 'قيد يعيش عبر إعادة التشغيل');
+
+      final queued = await secondStore.pendingSync(tenant);
+      expect(queued, hasLength(1));
+      expect(queued.single.rpc, 'create_journal_entry');
+      expect(queued.single.localId, result.entryId);
     });
   });
 

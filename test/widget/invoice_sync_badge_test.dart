@@ -11,11 +11,20 @@ import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/domain/invoices/invoice.dart';
 import 'package:hasad_erp/domain/invoices/invoice_sync.dart';
 import 'package:hasad_erp/domain/products/product.dart';
+import 'package:hasad_erp/domain/dashboard/dashboard.dart';
+import 'package:hasad_erp/domain/journal/journal.dart';
+import 'package:hasad_erp/domain/reports/balance_sheet.dart' as sheet_models;
+import 'package:hasad_erp/domain/reports/income_statement.dart' as pnl_models;
+import 'package:hasad_erp/domain/reports/ledger.dart' as ledger_models;
+import 'package:hasad_erp/domain/reports/trial_balance.dart' as tb_models;
 import 'package:hasad_erp/domain/statements/debts_repository.dart';
+import 'package:hasad_erp/presentation/providers/dashboard_providers.dart';
 import 'package:hasad_erp/presentation/providers/inventory_providers.dart';
+import 'package:hasad_erp/presentation/providers/journal_providers.dart';
 import 'package:hasad_erp/presentation/providers/offline_sync_providers.dart';
 import 'package:hasad_erp/presentation/providers/products_providers.dart';
 import 'package:hasad_erp/presentation/providers/purchases_providers.dart';
+import 'package:hasad_erp/presentation/providers/report_providers.dart';
 import 'package:hasad_erp/presentation/providers/sales_providers.dart';
 import 'package:hasad_erp/presentation/providers/statements_providers.dart';
 import 'package:hasad_erp/presentation/widgets/invoice_list.dart';
@@ -67,6 +76,27 @@ SyncQueueRow _leg(
   updatedAt: createdAt ?? DateTime.utc(2026, 1, 1),
 );
 
+/// The journal twin of [_leg]: a pending `create_journal_entry` replay leg.
+SyncQueueRow _journalLeg(
+  String id, {
+  String? localId,
+  String status = 'pending',
+}) => SyncQueueRow(
+  id: id,
+  tenantId: _tenant,
+  rpc: 'create_journal_entry',
+  op: 'rpc',
+  params: jsonEncode(<String, dynamic>{'p_request_id': 'req-$id'}),
+  requestId: 'req-$id',
+  entity: 'journal_entries',
+  localId: localId,
+  status: status,
+  attempts: 0,
+  lastError: null,
+  createdAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, 1),
+);
+
 /// A store that blows up on the one call the indicator makes, to prove the
 /// provider degrades instead of erroring.
 class _ThrowingLegsStore extends DelegatingLocalStore {
@@ -104,6 +134,114 @@ class _CountingPurchaseInvoicesList extends PurchaseInvoicesList {
   Future<List<Invoice>> build() {
     onBuild();
     return Future<List<Invoice>>.value(const []);
+  }
+}
+
+/// Counting notifier twins for the journal-derived providers, so a drain must
+/// invalidate each of them or its build count stays flat.
+class _CountingJournalList extends JournalList {
+  _CountingJournalList(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<List<JournalEntry>> build() {
+    onBuild();
+    return Future<List<JournalEntry>>.value(const []);
+  }
+}
+
+class _CountingLedgerStatement extends LedgerStatement {
+  _CountingLedgerStatement(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<ledger_models.LedgerStatement?> build() {
+    onBuild();
+    return Future<ledger_models.LedgerStatement?>.value();
+  }
+}
+
+class _CountingTrialBalance extends TrialBalance {
+  _CountingTrialBalance(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<tb_models.TrialBalanceReport> build() {
+    onBuild();
+    return Future.value(tb_models.TrialBalanceReport(
+      asOf: DateTime.utc(2026, 1, 1),
+      rows: const [],
+      totalDebit: 0,
+      totalCredit: 0,
+    ));
+  }
+}
+
+class _CountingIncomeStatement extends IncomeStatement {
+  _CountingIncomeStatement(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<pnl_models.IncomeStatement> build() {
+    onBuild();
+    return Future.value(pnl_models.IncomeStatement(
+      from: DateTime.utc(2026, 1, 1),
+      to: DateTime.utc(2026, 1, 31),
+      revenues: const [],
+      expenses: const [],
+      revenueTotal: 0,
+      expenseTotal: 0,
+      net: 0,
+    ));
+  }
+}
+
+class _CountingBalanceSheet extends BalanceSheet {
+  _CountingBalanceSheet(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<sheet_models.BalanceSheet> build() {
+    onBuild();
+    return Future.value(sheet_models.BalanceSheet(
+      asOf: DateTime.utc(2026, 1, 1),
+      assets: const [],
+      liabilities: const [],
+      equity: const [],
+      assetsTotal: 0,
+      liabilitiesTotal: 0,
+      equityTotal: 0,
+      netIncomeYtd: 0,
+      check: 0,
+    ));
+  }
+}
+
+class _CountingDashboardSummaryNotifier extends DashboardSummaryNotifier {
+  _CountingDashboardSummaryNotifier(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<DashboardSummary> build() {
+    onBuild();
+    return Future.value(const DashboardSummary(
+      todaySales: 0,
+      todayPurchases: 0,
+      customerDebts: 0,
+      supplierDebts: 0,
+      monthExpenses: 0,
+      monthSalaries: 0,
+      netProfitMonth: 0,
+      last7Days: [],
+      topDebtors: [],
+      lowStock: [],
+    ));
   }
 }
 
@@ -628,6 +766,129 @@ void main() {
       expect(productListBuilds, greaterThan(before.$1));
       expect(inventoryBuilds, greaterThan(before.$2));
       expect(debtsBuilds, greaterThan(before.$3));
+    });
+
+    test('also refreshes journal, reports and dashboard after a journal drain',
+        () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final store = DriftLocalStore(db);
+
+      // A genuine offline-created journal entry: unsynced mirror row + a
+      // pending `create_journal_entry` replay leg.
+      await store.insertJournalEntry(LocalJournalEntryRow(
+        id: 'je-1',
+        tenantId: _tenant,
+        date: DateTime.utc(2026, 1, 1),
+        memo: 'قيد محلي',
+        lines: '[]',
+        sourceType: 'manual',
+        sourceId: null,
+        requestId: 'req-j',
+        synced: false,
+        createdAt: DateTime.utc(2026, 1, 1),
+      ));
+      await store.enqueue(_journalLeg('q-j', localId: 'je-1'));
+
+      var journalBuilds = 0;
+      var ledgerBuilds = 0;
+      var trialBuilds = 0;
+      var incomeBuilds = 0;
+      var sheetBuilds = 0;
+      var dashBuilds = 0;
+      final container = ProviderContainer(
+        overrides: [
+          localStoreProvider.overrideWith((ref) async => store),
+          currentTenantIdProvider.overrideWithValue(_tenant),
+          // A real flusher over a no-op target: the leg genuinely drains.
+          syncFlusherProvider.overrideWith(
+            (ref) async => SyncFlusher(store, _tenant, ShellNoopSyncTarget()),
+          ),
+          journalListProvider.overrideWith(
+            () => _CountingJournalList(() => journalBuilds++),
+          ),
+          ledgerStatementProvider.overrideWith(
+            () => _CountingLedgerStatement(() => ledgerBuilds++),
+          ),
+          trialBalanceProvider.overrideWith(
+            () => _CountingTrialBalance(() => trialBuilds++),
+          ),
+          incomeStatementProvider.overrideWith(
+            () => _CountingIncomeStatement(() => incomeBuilds++),
+          ),
+          balanceSheetProvider.overrideWith(
+            () => _CountingBalanceSheet(() => sheetBuilds++),
+          ),
+          dashboardSummaryProvider.overrideWith(
+            () => _CountingDashboardSummaryNotifier(() => dashBuilds++),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Listen so the providers are actually built — invalidating a provider
+      // nobody has read is not observable.
+      final subs = [
+        container.listen(journalListProvider, (_, _) {}),
+        container.listen(ledgerStatementProvider, (_, _) {}),
+        container.listen(trialBalanceProvider, (_, _) {}),
+        container.listen(incomeStatementProvider, (_, _) {}),
+        container.listen(balanceSheetProvider, (_, _) {}),
+        container.listen(dashboardSummaryProvider, (_, _) {}),
+      ];
+      for (final sub in subs) {
+        addTearDown(sub.close);
+      }
+
+      // Let the initial builds land before snapshotting the counts.
+      await container.read(journalListProvider.future);
+      await container.read(ledgerStatementProvider.future);
+      await container.read(trialBalanceProvider.future);
+      await container.read(incomeStatementProvider.future);
+      await container.read(balanceSheetProvider.future);
+      await container.read(dashboardSummaryProvider.future);
+      final before = (
+        journalBuilds,
+        ledgerBuilds,
+        trialBuilds,
+        incomeBuilds,
+        sheetBuilds,
+        dashBuilds,
+      );
+      expect(before.$1, greaterThan(0));
+      expect(before.$2, greaterThan(0));
+      expect(before.$3, greaterThan(0));
+      expect(before.$4, greaterThan(0));
+      expect(before.$5, greaterThan(0));
+      expect(before.$6, greaterThan(0));
+
+      // A real drain (real drift async work, so this stays a plain test).
+      final summary = await container.read(manualSyncNowProvider.future);
+      expect(summary.synced, 1);
+      expect((await store.journalEntries(_tenant)).single.synced, isTrue);
+
+      // Re-reading an invalidated provider recomputes it, so the count grows.
+      await container.read(journalListProvider.future);
+      await container.read(ledgerStatementProvider.future);
+      await container.read(trialBalanceProvider.future);
+      await container.read(incomeStatementProvider.future);
+      await container.read(balanceSheetProvider.future);
+      await container.read(dashboardSummaryProvider.future);
+
+      final after = (
+        journalBuilds,
+        ledgerBuilds,
+        trialBuilds,
+        incomeBuilds,
+        sheetBuilds,
+        dashBuilds,
+      );
+      expect(after.$1, greaterThan(before.$1));
+      expect(after.$2, greaterThan(before.$2));
+      expect(after.$3, greaterThan(before.$3));
+      expect(after.$4, greaterThan(before.$4));
+      expect(after.$5, greaterThan(before.$5));
+      expect(after.$6, greaterThan(before.$6));
     });
   });
 }

@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments + purchases slices done**, remaining domains pending |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments + purchases + journal slices done**, remaining domains pending |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -326,6 +326,64 @@ app-wide.
 
 ---
 
+## ✅ M13 Phase 1B — journal entries slice (offline manual journal write path)
+
+**Delivered as the third slice of Phase 1B.** Manual journal entries are now
+local-first: the coordinator validates against the local chart, writes the entry
+and queue leg in one transaction, and only hits the server when the flusher
+drains. The journal list also merges locally-created entries so an offline entry
+shows up immediately.
+
+**Delivered**
+
+- **`OfflineWriteCoordinator.createJournal` is live — it was dead code.**
+  Previously `OfflineJournalRepository.createManual` delegated straight to
+  Supabase (network-first), and the coordinator's `createJournal` sat unused
+  with four defects: no transaction, an empty-string-account fallback that
+  silently accepted unknown accounts, no `dependsOn`, and no `store:` binding on
+  the enqueue. The rewrite validates the balanced/≥2-lines guard, **rejects any
+  line whose account is missing from the local chart** with
+  `'أحد حسابات القيد غير موجود في دليل الحسابات (${l.accountId})'`
+  (a `ValidationException` — never a silent accept, never an empty code), and
+  runs `_store.transaction(...)`: local entry insert + `create_journal_entry`
+  queue leg with `dependsOn: accountLegs` (`_pendingLegIdsFor` over the entry's
+  account legs, pre-transaction) + `store: tx`. It returns
+  `JournalEntryResult(entryId, entryNo: 0, total: debitTotal, pending: true)`.
+- **`OfflineJournalRepository.createManual` routes through the coordinator** when
+  one is present (falls back to the inner repo otherwise); `entries()` merges
+  **only unsynced `sourceType == 'manual'`** rows (never auto journals — those
+  stay owned by their flows) via `_localDrafts()` + `_merged()` (range-filter,
+  dedupe, newest-first), converting through `_rowToEntry`.
+- **Wiring:** `journalRepository` (`journal_providers.dart`) builds the offline
+  repo with an `OfflineWriteCoordinator(store, tenantId, () => ref.read(
+  accountRepositoryProvider).chart())` when a store + tenant are present, else
+  falls back to `SupabaseJournalRepository`.
+- **`_refreshAfterDrain` invalidation set extended with the journal-derived
+  providers:** `journalListProvider`, `ledgerStatementProvider`,
+  `trialBalanceProvider`, `incomeStatementProvider`, `balanceSheetProvider`,
+  `dashboardSummaryProvider` (journal/accounting scope only; party statements
+  deliberately excluded). Verified by a third drain test that overrides all six
+  with counting notifiers and asserts their builds grow after a real journal
+  drain (the leg enforced a real `create_journal_entry` replay).
+- **Pending-save message on the journal screen.** The manual-entry sheet pops and
+  the list screen shows `'تم حفظ القيد محليًا وستتم مزامنته عند عودة الاتصال'`
+  when the result is `pending`, else `'تم إضافة القيد رقم ${result.entryNo}'`.
+- **No new migration — `create_journal_entry` (0019) is already idempotent.**
+  It balances + resolves server-side and dedupes on `p_request_id`; the draft
+  already carries `requestId`. Zero SQL added.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub` **585/585**
+  (567 + 2 flush drain tests — one real-leg E2E, one duplicate-replay no-dup —
+  + 8 repository tests incl. routing and the manual-only merge + 2 widget
+  message tests + 6 write tests + 1 drain-invalidation test + the existing
+  badge drain cases); `flutter build web --dart-define=use_arabic=true` green;
+  `flutter build apk --debug` green.
+
+**Sync badge for journal entries deliberately NOT delivered** — same decision as
+payments/purchases: `queueLegsFor(entity: 'journal_entries')` is one provider
+once the badge is wanted app-wide.
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -344,8 +402,8 @@ app-wide.
 **Must be built fresh**
 
 - Per-domain write wiring *not yet done*: customers, suppliers, employees,
-  journal entries, salaries. (The **payments and purchases slices of Phase 1B
-  are already delivered** — their exact transaction + dependency pattern is the
+  salaries. (The **payments, purchases and journal slices of Phase 1B are
+  already delivered** — their exact transaction + dependency pattern is the
   template to copy.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
@@ -378,3 +436,4 @@ app-wide.
 | Phase 1A.1 — invoice sync badge | *(this checkpoint 3/3)* | none | 513 → 541 | Badge is text-only and absent when synced; `syncing` deliberately not rendered |
 | Phase 1B — payments write path | *(this checkpoint 4/4)* | none (driver `depends_on` reuse) | 541 → 555 | Payment sync badge out of scope; no new migration — `0009` already makes both payment RPCs idempotent |
 | Phase 1B — purchases write path | *(this checkpoint 5/5)* | none | 555 → 567 | Inline new products use `product_id` (client uuid), never `new_product`; `_enqueueWrite` gained `String? id` (fixes a phantom-`depends_on`); purchase sync badge out of scope; no new migration — `0008`/`0017`/`0018` already cover it |
+| Phase 1B — journal write path | *(this checkpoint 6/6)* | none | 567 → 585 | `createJournal` was dead code — rewired to validate against the local chart (missing account → Arabic `ValidationException`), one transaction with `dependsOn` on the account legs; journal list merges **manual-only** unsynced drafts |

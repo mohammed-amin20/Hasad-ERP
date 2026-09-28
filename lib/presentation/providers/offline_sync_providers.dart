@@ -6,17 +6,21 @@ import '../../../data/offline/offline_sync.dart';
 import '../../../data/offline/supabase_sync_target.dart';
 import '../../../data/supabase_client.dart' as data;
 import '../../../domain/invoices/invoice_sync.dart';
+import 'dashboard_providers.dart';
 import 'inventory_providers.dart';
+import 'journal_providers.dart';
 import 'offline_providers.dart' as offline;
 import 'products_providers.dart';
 import 'purchases_providers.dart';
+import 'report_providers.dart';
 import 'sales_providers.dart';
 import 'statements_providers.dart';
 
 /// Refreshes every read that a completed drain invalidates: the pending count,
 /// the per-row sync badge, the two invoice lists, the money views that a
-/// drained payment (or settlement) changes, and the product/inventory views
-/// that a drained purchase receipt (with new stock) changes.
+/// drained payment (or settlement) changes, the product/inventory views
+/// that a drained purchase receipt (with new stock) changes, and the
+/// journal/accounting views that any drained journal write changes.
 ///
 /// The list refresh is the reason a row stops showing the *local* placeholder
 /// number: once the mirror row is `synced` it drops out of
@@ -26,11 +30,15 @@ import 'statements_providers.dart';
 /// payment reduces what a customer owes and a settlement what we owe a supplier;
 /// they are top-level (non-family) providers, so a plain invalidate is safe.
 /// The product and inventory lists follow because a drained purchase receipt
-/// changed stock and may have created a product.
+/// changed stock and may have created a product. The journal list and the
+/// accounting reports (ledger, trial balance, income statement, balance sheet)
+/// and the dashboard KPI envelope are all journal-derived, so a drained manual
+/// journal entry refreshes them; party statements are deliberately NOT here
+/// (a manual journal is not linked to a party).
 ///
 /// This is a refresh trigger only — it changes no business logic, and the
-/// `SaleInvoicesList`/`PurchaseInvoicesList`/debt/product notifiers keep owning
-/// how they load.
+/// `SaleInvoicesList`/`PurchaseInvoicesList`/debt/product/journal/report
+/// notifiers keep owning how they load.
 void _refreshAfterDrain(Ref ref) {
   ref.invalidate(pendingSyncCountProvider);
   ref.invalidate(invoiceSyncStatesProvider);
@@ -40,6 +48,12 @@ void _refreshAfterDrain(Ref ref) {
   ref.invalidate(supplierDebtsProvider);
   ref.invalidate(productsListProvider);
   ref.invalidate(inventoryProductsProvider);
+  ref.invalidate(journalListProvider);
+  ref.invalidate(ledgerStatementProvider);
+  ref.invalidate(trialBalanceProvider);
+  ref.invalidate(incomeStatementProvider);
+  ref.invalidate(balanceSheetProvider);
+  ref.invalidate(dashboardSummaryProvider);
 }
 
 /// Current signed-in tenant id (falls back to empty string so the flusher

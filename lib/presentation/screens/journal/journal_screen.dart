@@ -224,7 +224,13 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
                 .createManual(draft);
             if (context.mounted) Navigator.of(context).pop();
             messenger.showSnackBar(
-              SnackBar(content: Text('تم إضافة القيد رقم ${result.entryNo}')),
+              SnackBar(
+                content: Text(
+                  result.pending
+                      ? 'تم حفظ القيد محليًا وستتم مزامنته عند عودة الاتصال'
+                      : 'تم إضافة القيد رقم ${result.entryNo}',
+                ),
+              ),
             );
           } on Object catch (error) {
             messenger.showSnackBar(

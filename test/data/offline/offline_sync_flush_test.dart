@@ -7,6 +7,7 @@ import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
+import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
 
@@ -804,6 +805,80 @@ void main() {
         }
       });
     }
+
+    test('a real create_journal_entry leg drains and maps the official entry_id',
+        () async {
+      await _seedMasterData(store, tenantId);
+      final entry = await OfflineWriteCoordinator(store, tenantId)
+          .createJournal(ManualJournalDraft(
+            date: DateTime.utc(2026, 1, 15),
+            memo: 'قيد يدوي',
+            lines: [
+              ManualJournalLineDraft(accountId: 'a1', debit: 3000),
+              ManualJournalLineDraft(accountId: 'a3', credit: 3000),
+            ],
+          ));
+
+      final flusher = SyncFlusher(
+        store,
+        tenantId,
+        _ShapedEnvelopeSyncTarget(envelopes: {
+          'create_journal_entry': <String, dynamic>{
+            'entry_id': 'sv-je-1',
+            'entry_no': 77,
+            'total': 3000,
+          },
+        }),
+      );
+      final summary = await flusher.flush();
+
+      expect(summary.synced, 1);
+      expect(await flusher.pendingCount(), 0);
+      final mirror = (await store.journalEntries(tenantId)).single;
+      expect(mirror.synced, isTrue);
+      expect(await store.serverIdFor(tenantId, 'journal_entries', entry.entryId),
+          'sv-je-1');
+      expect(await store.localIdFor(tenantId, 'journal_entries', 'sv-je-1'),
+          entry.entryId);
+    });
+
+    test('a duplicate journal replay maps entry_id without a second mirror row',
+        () async {
+      await _seedMasterData(store, tenantId);
+      final entry = await OfflineWriteCoordinator(store, tenantId)
+          .createJournal(ManualJournalDraft(
+            date: DateTime.utc(2026, 1, 15),
+            memo: 'قيد يدوي',
+            lines: [
+              ManualJournalLineDraft(accountId: 'a1', debit: 3000),
+              ManualJournalLineDraft(accountId: 'a3', credit: 3000),
+            ],
+          ));
+      expect(await store.journalEntries(tenantId), hasLength(1));
+
+      // First push: the server already committed this request, so it answers
+      // the nested duplicate envelope with the real entry_id (a timed-out
+      // original response looks exactly like this).
+      final flusher = SyncFlusher(
+        store,
+        tenantId,
+        _ShapedEnvelopeSyncTarget(envelopes: {
+          'create_journal_entry': <String, dynamic>{
+            'duplicate': true,
+            'entry': <String, dynamic>{'entry_id': 'sv-je-9', 'entry_no': 9},
+          },
+        }),
+      );
+      expect((await flusher.flush()).synced, 1);
+      expect(await store.journalEntries(tenantId), hasLength(1),
+          reason: 'a retried push must never create a second local entry');
+      expect(await store.serverIdFor(tenantId, 'journal_entries', entry.entryId),
+          'sv-je-9');
+
+      // Retry after success is a no-op: nothing left to replay, no duplicates.
+      expect((await flusher.flush()).synced, 0);
+      expect(await flusher.pendingCount(), 0);
+    });
 
     test('invoices: the official number is adopted from the NESTED shape',
         () async {

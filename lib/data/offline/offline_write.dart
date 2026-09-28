@@ -812,6 +812,12 @@ class OfflineWriteCoordinator {
 
   /// Queues a manual journal entry mirroring `create_journal_entry`
   /// (balanced-first; idempotent via p_request_id).
+  ///
+  /// Local-first like [recordPayment]: the entry and its queue leg commit in
+  /// one transaction, the leg replays after any pending `accounts` leg the
+  /// entry's lines reference (via [dependsOn]), and every account must resolve
+  /// against the local chart — a missing account is rejected here instead of
+  /// being silently emptied or hardcoded.
   Future<JournalEntryResult> createJournal(ManualJournalDraft draft) =>
       _guard(() async {
         if (!draft.hasAtLeastTwoLines || !draft.isBalanced) {
@@ -831,39 +837,55 @@ class OfflineWriteCoordinator {
                   break;
                 }
               }
+              if (account == null) {
+                throw ValidationException(
+                  'أحد حسابات القيد غير موجود في دليل الحسابات (${l.accountId})',
+                );
+              }
               return {
                 'account_id': l.accountId,
-                'account_code': account?.code ?? '',
-                'account_name': account?.name ?? '',
-                'account_type': account?.type.name ?? 'asset',
+                'account_code': account.code,
+                'account_name': account.name,
+                'account_type': account.type.name,
                 'debit': l.debit,
                 'credit': l.credit,
               };
             }(),
         ];
 
-        await _store.insertJournalEntry(
-          LocalJournalEntryRow(
-            id: entryId,
-            tenantId: _tenantId,
-            date: draft.date,
-            memo: draft.memo,
-            lines: jsonEncode(lineMaps),
-            sourceType: 'manual',
-            sourceId: null,
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
+        // Resolved BEFORE the transaction (a read, and the leg is written
+        // inside it): a journal drawn on a locally-created account waits for
+        // that account's pending `table_crud` leg.
+        final accountLegs = await _pendingLegIdsFor([
+          for (final l in draft.lines) l.accountId,
+        ]);
 
-        await _enqueueRpc(
-          rpc: 'create_journal_entry',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'journal_entries',
-          localId: entryId,
-        );
+        await _store.transaction((tx) async {
+          await tx.insertJournalEntry(
+            LocalJournalEntryRow(
+              id: entryId,
+              tenantId: _tenantId,
+              date: draft.date,
+              memo: draft.memo,
+              lines: jsonEncode(lineMaps),
+              sourceType: 'manual',
+              sourceId: null,
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+
+          await _enqueueRpc(
+            rpc: 'create_journal_entry',
+            params: draft.toJson(requestId: requestId),
+            requestId: requestId,
+            entity: 'journal_entries',
+            localId: entryId,
+            dependsOn: accountLegs,
+            store: tx,
+          );
+        });
 
         return JournalEntryResult(
           entryId: entryId,
