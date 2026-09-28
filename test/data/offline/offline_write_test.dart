@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,10 +35,11 @@ void main() {
 
   tearDown(() => db.close());
 
-  Future<void> seed() async {
+  Future<void> seed([DriftLocalStore? target]) async {
+    final s = target ?? store;
     Future<void> upsertAccount(
         String id, String code, String name, String type) async {
-      await store.upsertAccount(LocalAccountRow(
+      await s.upsertAccount(LocalAccountRow(
         id: id, tenantId: tenant, code: code, name: name, type: type,
         parentCode: null,
       ));
@@ -52,36 +54,36 @@ void main() {
     await upsertAccount('a7', '4010', 'إيرادات مبيعات', 'revenue');
     await upsertAccount('a8', '5030', 'أجور', 'expense');
 
-    await store.upsertCustomer(LocalCustomerRow(
+    await s.upsertCustomer(LocalCustomerRow(
       id: 'c1', tenantId: tenant, name: 'عميل', phone: '0599111222',
       notes: null, createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
-    await store.upsertSupplier(LocalSupplierRow(
+    await s.upsertSupplier(LocalSupplierRow(
       id: 's1', tenantId: tenant, name: 'مورد مباشر', phone: null, notes: null,
       dealType: 'direct', commissionRate: null, createdAt: DateTime(2026, 1, 1),
       synced: false,
     ));
-    await store.upsertSupplier(LocalSupplierRow(
+    await s.upsertSupplier(LocalSupplierRow(
       id: 's2', tenantId: tenant, name: 'مورد أمانة', phone: null, notes: null,
       dealType: 'commission', commissionRate: 20,
       createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
-    await store.upsertProduct(LocalProductRow(
+    await s.upsertProduct(LocalProductRow(
       id: 'p1', tenantId: tenant, name: 'سلعة مباشرة', barcode: null,
       unit: 'قطعة', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
       qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
       createdAt: DateTime(2026, 1, 1), synced: false,
     ));
-    await store.upsertProduct(LocalProductRow(
+    await s.upsertProduct(LocalProductRow(
       id: 'p2', tenantId: tenant, name: 'سلعة أمانة', barcode: null,
       unit: 'قطعة', unitType: 'count', salePrice: 15000, purchasePrice: 8000,
       qty: 50, reorderLevel: 5, supplierId: 's2', commissionRate: 20,
       createdAt: DateTime(2026, 1, 1), synced: false,
     ));
 
-    await store.upsertEmployee(LocalEmployeeRow(
+    await s.upsertEmployee(LocalEmployeeRow(
       id: 'e1', tenantId: tenant, name: 'موظف', jobTitle: 'sales',
       phone: null, baseSalary: 500000, createdAt: DateTime(2026, 1, 1),
       synced: false,
@@ -222,7 +224,9 @@ void main() {
       expect(await store.journalEntries(tenant), isEmpty);
     });
 
-    test('inline new product lands in the mirror with received qty', () async {
+    test(
+        'inline new product queues a table:products leg and the purchase leg'
+        ' refers to it by product_id', () async {
       await seed();
 
       final result = await writer.writePurchase(PurchaseInvoiceDraft(
@@ -241,14 +245,193 @@ void main() {
       ));
 
       final products = await store.products(tenant);
-      final product =
-          products.firstWhere((r) => r.name == 'سلعة المستوردة');
+      final product = products.firstWhere((r) => r.name == 'سلعة المستوردة');
       expect(product.qty, 15);
       expect(product.purchasePrice, 7000);
       expect(product.supplierId, 's1');
 
       final items = await store.invoiceItems(result.invoiceId);
       expect(items.single.productId, product.id);
+
+      // TWO legs: the inline product's `table:products` leg and the purchase
+      // RPC that names that same product id instead of `new_product`.
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+
+      final productLeg = legs.firstWhere((l) => l.rpc == 'table:products');
+      expect(productLeg.op, 'table_crud');
+      expect(productLeg.entity, 'products');
+      // The server mirrors this uuid via tableUpsert's `onConflict: 'id'`, so
+      // the server row id == local mirror id — no duplicate after a refresh.
+      expect(productLeg.localId, product.id);
+      final pParams = jsonDecode(productLeg.params) as Map<String, dynamic>;
+      expect(pParams['name'], 'سلعة المستوردة');
+      expect(pParams['purchase_price'], 7000);
+      expect(pParams['qty'], 0);
+      expect(pParams['supplier_id'], 's1');
+      expect(pParams['commission_rate'], isNull);
+
+      final rpcLeg =
+          legs.firstWhere((l) => l.rpc == 'create_purchase_invoice');
+      expect(jsonDecode(rpcLeg.dependsOn!), [productLeg.id]);
+      final params = jsonDecode(rpcLeg.params) as Map<String, dynamic>;
+      final item = (params['p_items'] as List).single as Map<String, dynamic>;
+      expect(item['product_id'], product.id);
+      expect(item.containsKey('new_product'), isFalse);
+    });
+
+    test('owned purchase paid by bank posts Dr stock, Cr bank + Cr AP',
+        () async {
+      await seed();
+
+      final result = await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: 's1',
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 10, price: 6000)],
+        paid: 20000,
+        paymentMethod: 'bank',
+      ));
+
+      expect(result.pending, isTrue);
+      expect(result.total, 60000);
+      expect(result.remaining, 40000);
+
+      final invoice = (await store.invoices(tenant, type: 'purchase')).single;
+      expect(invoice.paid, 20000);
+      expect(invoice.remaining, 40000);
+      expect(invoice.status, 'partial');
+
+      final qty =
+          (await store.products(tenant)).firstWhere((r) => r.id == 'p1');
+      expect(qty.qty, 110);
+
+      final entry = (await store.journalEntries(tenant)).single;
+      final lines = jsonDecode(entry.lines) as List;
+      expect(lines, hasLength(3));
+      final byCode = {
+        for (final l in lines) l['account_code'] as String: l as Map,
+      };
+      expect(byCode['1030']!['debit'], 60000);
+      expect(byCode['1015']!['credit'], 20000);
+      expect(byCode['2010']!['credit'], 40000);
+      final debitSum =
+          lines.fold<int>(0, (sum, l) => sum + (l['debit'] as int));
+      final creditSum =
+          lines.fold<int>(0, (sum, l) => sum + (l['credit'] as int));
+      expect(debitSum, creditSum);
+    });
+
+    test('the purchase leg depends on pending supplier and product legs',
+        () async {
+      await seed();
+      // The supplier and the product were created offline earlier, so their
+      // table_crud legs are still pending; the invoice must replay after them
+      // or the server would reject a missing supplier/product.
+      await store.enqueue(SyncQueueRow(
+        id: 'q-supplier', tenantId: tenant, rpc: 'table:suppliers',
+        op: 'table_crud', params: '{}', requestId: 'req-sup',
+        entity: 'suppliers', localId: 's1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 0),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 0),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-product', tenantId: tenant, rpc: 'table:products',
+        op: 'table_crud', params: '{}', requestId: 'req-prod',
+        entity: 'products', localId: 'p1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 1),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 1),
+      ));
+
+      final result = await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: 's1',
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 1, price: 6000)],
+      ));
+
+      final legs = await store.pendingSync(tenant);
+      final rpcLeg =
+          legs.firstWhere((l) => l.rpc == 'create_purchase_invoice');
+      expect(rpcLeg.localId, result.invoiceId);
+      final deps = jsonDecode(rpcLeg.dependsOn!) as List;
+      expect(deps, containsAll(['q-supplier', 'q-product']));
+    });
+
+    test('inline new product rollback leaves nothing behind', () async {
+      await seed();
+
+      // The FIRST enqueue is a table:products leg, so a store that throws on
+      // enqueue proves none of the transaction — invoice, stock, journal or
+      // the new product mirror row — survives.
+      final poisoning = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoning.writePurchase(PurchaseInvoiceDraft(
+          supplierId: 's1',
+          lines: [
+            PurchaseLineDraft(
+              newProduct: NewProductDraft(
+                name: 'منتج محلي',
+                unit: 'قطعة',
+                salePrice: 12000,
+              ),
+              qty: 2,
+              price: 7000,
+            ),
+          ],
+        )),
+        throwsA(isA<AppException>()),
+      );
+
+      expect(await store.invoices(tenant, type: 'purchase'), isEmpty);
+      expect(
+        (await store.products(tenant)).where((r) => r.name == 'منتج محلي'),
+        isEmpty,
+      );
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('an offline purchase survives a restart (file-backed)', () async {
+      final dir = await Directory.systemTemp.createTemp('purchase_offline');
+      final file = File('${dir.path}/test.db');
+
+      final db1 = AppDatabase(NativeDatabase(file));
+      final s1 = DriftLocalStore(db1);
+      final w1 = OfflineWriteCoordinator(s1, tenant);
+      await seed(s1);
+
+      final result = await w1.writePurchase(PurchaseInvoiceDraft(
+        supplierId: 's1',
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 10, price: 6000)],
+      ));
+      await db1.close();
+
+      // Reopen the same file as a fresh database: everything the offline write
+      // staged must be durable across the restart.
+      final db2 = AppDatabase(NativeDatabase(file));
+      addTearDown(() async {
+        await db2.close();
+        await dir.delete(recursive: true);
+      });
+      final s2 = DriftLocalStore(db2);
+
+      final invoices = await s2.invoices(tenant, type: 'purchase');
+      expect(invoices.single.id, result.invoiceId);
+      expect(invoices.single.synced, isFalse);
+      expect(invoices.single.requestId, isNotNull);
+
+      final items = await s2.invoiceItems(result.invoiceId);
+      expect(items.single.qty, 10);
+
+      final qty =
+          (await s2.products(tenant)).firstWhere((r) => r.id == 'p1');
+      expect(qty.qty, 110);
+
+      expect((await s2.journalEntries(tenant)).single.sourceType, 'purchase');
+
+      final legs = await s2.pendingSync(tenant);
+      expect(legs.single.rpc, 'create_purchase_invoice');
+      expect(legs.single.localId, result.invoiceId);
     });
   });
 

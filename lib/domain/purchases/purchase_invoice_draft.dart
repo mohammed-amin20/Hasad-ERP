@@ -41,9 +41,18 @@ class PurchaseLineDraft {
   final double qty;
   final int? price;
 
-  Map<String, dynamic> toJson() => {
-    if (productId != null) 'product_id': productId,
-    if (newProduct != null) 'new_product': newProduct!.toJson(),
+  /// Encodes this line. When [productIdOverride] is non-null the line is sent
+  /// as an **existing** product (the inline-created one's client uuid) instead
+  /// of a `new_product`, so the replayed RPC finds the product the offline
+  /// writer already mirrored to the server — never letting Supabase mint a
+  /// second, independent uuid for the same product.
+  Map<String, dynamic> toJson({String? productIdOverride}) => {
+    if (productIdOverride != null)
+      'product_id': productIdOverride
+    else if (productId != null)
+      'product_id': productId,
+    if (productIdOverride == null && newProduct != null)
+      'new_product': newProduct!.toJson(),
     'qty': qty,
     if (price != null) 'price': price,
   };
@@ -68,10 +77,23 @@ class PurchaseInvoiceDraft {
   final String? memo;
 
   /// Stable request id so a retried call is idempotent server-side.
-  Map<String, dynamic> toJson({String? requestId}) => {
+  ///
+  /// [lineProductIds] names an existing product id for the line at the given
+  /// index (an inline new product's client uuid, which the offline writer also
+  /// queues as a `table:products` leg). Supplying it makes that line encode
+  /// `product_id` instead of `new_product`. The online repository never passes
+  /// it, so the live path keeps creating products inline. When absent the
+  /// payload is byte-identical to the online one.
+  Map<String, dynamic> toJson({
+    String? requestId,
+    Map<int, String>? lineProductIds,
+  }) => {
     'p_request_id': requestId ?? const Uuid().v4(),
     'p_supplier_id': supplierId,
-    'p_items': [for (final line in lines) line.toJson()],
+    'p_items': [
+      for (var i = 0; i < lines.length; i++)
+        lines[i].toJson(productIdOverride: lineProductIds?[i]),
+    ],
     if (date != null)
       'p_invoice_date': date != null
           ? '${date!.year.toString().padLeft(4, '0')}-'

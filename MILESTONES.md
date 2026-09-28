@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments slice done**, remaining domains pending |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments + purchases slices done**, remaining domains pending |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -264,9 +264,65 @@ boundary gap (`_rowToInvoice` dropping the state) is one provider per domain via
 `queueLegsFor(entity:)`; payments join it only when the badge is wanted
 app-wide, per the Phase 1A.1 scope and user decision.
 
-**Still open for later Phase 1B slices:** products, customers, suppliers,
-employees, journal entries, salaries each need their own offline write routing
-(this slice covers payments only).
+**Still open for later Phase 1B slices:** customers, suppliers, employees,
+journal entries, salaries, products each need their own offline write routing
+(this slice covers payments only; the purchases slice follows).
+
+---
+
+## ✅ M13 Phase 1B — purchases slice (offline purchase write path)
+
+**Delivered as the second slice of Phase 1B.** Purchases are now local-first,
+copying the payments/sales pattern: a purchase invoice and its inline new
+products enqueue replay legs and only hit the server when the flusher drains.
+
+**Delivered**
+
+- `lib/data/purchases/offline_aware_purchase_repository.dart` — decorator over
+  the abstract `PurchaseRepository`; `create` delegates to
+  `OfflineWriteCoordinator.createPurchaseInvoice`. `purchaseRepositoryProvider`
+  (`purchases_providers.dart`) returns the offline wrapper when a local store +
+  tenant are present, otherwise falls back to `SupabasePurchaseRepository` — the
+  same wiring shape as `sales_providers.dart` / `payments_providers.dart`.
+- **Inline NEW products map by an explicit `product_id`, never `new_product`**
+  (user-confirmed decision). `writePurchase` now generates one `legId` per inline
+  product and enqueues **two** legs in one transaction: a `table:products`
+  `table_crud` leg whose stored row `id` IS `legId`, plus the
+  `create_purchase_invoice` RPC leg with `dependsOn: [legId]` and
+  `p_items[0].product_id` equal to that same client uuid. The queue keeps the
+  table_crud payload in the legacy `new_product` shape; the RPC never sees it.
+- **The phantom-uuid `depends_on` bug this exposed, found and fixed.**
+  `writePurchase` pre-generated `legId`, but `_enqueueWrite` minted its **own**
+  row `id: _uuid.v4()` and reused `legId` only as `entityId` — so the purchase
+  leg's `depends_on` referenced a uuid that never existed in `sync_queue`, and
+  the flusher parked the purchase (flush F: synced 1 vs expected 2; the write
+  test's `dependsOn` never equalled the product leg's stored id). `_enqueueWrite`
+  gained an optional `String? id` (`id ?? _uuid.v4()`), and `writePurchase`
+  passes `id: legId`. `DriftLocalStore.enqueue` inserts the row id as-is
+  (`local_store.dart:785-787`), so the stored id now matches `depends_on`.
+- **No new migration — `create_purchase_invoice` is already idempotent.** `0008`
+  dedupes on `p_request_id` (the draft already carries `requestId`); `0017`'s
+  trigger stamps `tenant_id` on the products mirror insert; `0018` relinks
+  existing-product consignment receipts server-side. Zero SQL added.
+- **`_refreshAfterDrain`'s full invalidation set** now also covers
+  `supplierDebtsProvider`, `productsListProvider` and `inventoryProductsProvider`
+  (on top of the badge, both invoice lists and `customerDebtsProvider`) in both
+  flush paths. Verified by a badge drain test that overrides the three with
+  counting providers and asserts their builds grow after a drain.
+- **Pending-save message lives on the parent list.** `purchase_invoices_screen.dart`
+  `_newInvoice` shows `'تم حفظ فاتورة الشراء محليًا وستتم مزامنتها عند عودة الاتصال'`
+  when the form pops with `pending: true`, else `'تم إنشاء فاتورة الشراء رقم
+  ${result.no}'`. Widget-test fact: the purchase form body is a `ListView`, so
+  below-fold controls are not mounted at 800×600 — the test drives it at
+  `Size(600, 1600)`.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub` **567/567**
+  (555 + 3 repository tests + 1 widget message test + 1 drain-invalidation test +
+  7 write/flush test cases); `flutter build web --dart-define=use_arabic=true`
+  green; `flutter build apk --debug` green.
+
+**Sync badge for purchases deliberately NOT delivered** — same decision as
+payments: `queueLegsFor(entity:)` makes it one provider once the badge is wanted
+app-wide.
 
 ---
 
@@ -287,9 +343,9 @@ employees, journal entries, salaries each need their own offline write routing
 
 **Must be built fresh**
 
-- Per-domain write wiring *not yet done*: products, customers, suppliers,
-  employees, journal entries, salaries. (The **payments slice of Phase 1B is
-  already delivered** — its exact transaction + dependency pattern is the
+- Per-domain write wiring *not yet done*: customers, suppliers, employees,
+  journal entries, salaries. (The **payments and purchases slices of Phase 1B
+  are already delivered** — their exact transaction + dependency pattern is the
   template to copy.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
@@ -321,3 +377,4 @@ employees, journal entries, salaries each need their own offline write routing
 | Phase 1A — queued sales writes | *(this checkpoint 2/3)* | drift `depends_on` (4), `id_mappings.tenant_id` (5), migration `0025` | 462 → 499 → 513 | `0025` adds a parameter with a default, so it **must** `drop function` the old signature first or PostgREST fails with "not unique" |
 | Phase 1A.1 — invoice sync badge | *(this checkpoint 3/3)* | none | 513 → 541 | Badge is text-only and absent when synced; `syncing` deliberately not rendered |
 | Phase 1B — payments write path | *(this checkpoint 4/4)* | none (driver `depends_on` reuse) | 541 → 555 | Payment sync badge out of scope; no new migration — `0009` already makes both payment RPCs idempotent |
+| Phase 1B — purchases write path | *(this checkpoint 5/5)* | none | 555 → 567 | Inline new products use `product_id` (client uuid), never `new_product`; `_enqueueWrite` gained `String? id` (fixes a phantom-`depends_on`); purchase sync badge out of scope; no new migration — `0008`/`0017`/`0018` already cover it |

@@ -206,6 +206,20 @@ class OfflineWriteCoordinator {
       });
 
   /// Queues a purchase invoice mirroring `create_purchase_invoice`.
+  ///
+  /// One transaction or nothing (parity with [writeSale] and payments): the
+  /// invoice, its lines, the stock effects, the mirrored journal and **all**
+  /// queue legs commit together. A throw inside enqueues rolls the invoice back
+  /// rather than leaving a receipt that can never reach the server.
+  ///
+  /// Inline new products become real rows on the server **before** this
+  /// invoice: each one enqueues its own `table:products` leg carrying the
+  /// client uuid, and the purchase RPC leg depends on all of them and encodes
+  /// `product_id` instead of `new_product`. The server therefore creates the
+  /// product under the same uuid the local mirror uses — no phantom local
+  /// product, no duplicate after a mirror refresh, and the stock/price the RPC
+  /// applies land on the identical row. The online repository (which has no
+  /// store) keeps sending `new_product` untouched.
   Future<PurchaseInvoiceResult> writePurchase(PurchaseInvoiceDraft draft) =>
       _guard(() async {
         final supplier = await _supplier(draft.supplierId);
@@ -214,10 +228,13 @@ class OfflineWriteCoordinator {
         final products = await _productsMap();
         final brandNewRows = <LocalProductRow>[];
         final engineLines = <PurchaseInvoiceLine>[];
+        final newProductIds = <int, String>{};
 
+        var lineIndex = 0;
         for (final line in draft.lines) {
           if (line.newProduct != null) {
             final newId = _uuid.v4();
+            newProductIds[lineIndex] = newId;
             final np = line.newProduct!;
             final newPrice = line.price ?? np.salePrice;
             final product = Product(
@@ -257,6 +274,7 @@ class OfflineWriteCoordinator {
               ),
             );
           }
+          lineIndex++;
         }
 
         final requestId = _uuid.v4();
@@ -281,59 +299,116 @@ class OfflineWriteCoordinator {
         final no = 'D-${invoiceId.substring(0, 8)}';
         final date = draft.date ?? DateTime.now();
 
-        await _store.upsertInvoice(
-          LocalInvoiceRow(
-            id: invoiceId,
-            tenantId: _tenantId,
-            type: 'purchase',
-            no: no,
-            partyId: supplier.id,
-            partyName: supplier.name,
-            date: date,
-            subtotal: total,
-            total: total,
-            paid: isConsignment ? 0 : draft.paid,
-            remaining: remaining,
-            status: status,
-            ownership: isConsignment ? 'consignment' : 'owned',
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
+        // The receipt names the supplier and the product rows it priced from
+        // (including the inline ones, whose client uuids the engine put in
+        // `updatedEntities`), so any of them still queued offline is a server
+        // prerequisite. Resolved BEFORE the transaction (it is a read) and
+        // written into the leg inside it; the inline product legs enqueued in
+        // the same transaction are appended explicitly.
+        final masterDeps = await _pendingMasterLegIds(
+          result.updatedEntities,
+          localIds: [supplier.id, ...engineLines.map((l) => l.productId!)],
         );
-        await _store.upsertInvoiceItems([
-          for (final l in engineLines)
-            LocalInvoiceItemRow(
-              id: _uuid.v4(),
+
+        // ATOMIC: invoice + lines + stock + journal + every queue leg commit
+        // together. See [writeSale].
+        await _store.transaction((tx) async {
+          await tx.upsertInvoice(
+            LocalInvoiceRow(
+              id: invoiceId,
               tenantId: _tenantId,
-              invoiceId: invoiceId,
-              productId: l.productId,
-              productName: products[l.productId]!.name,
-              productUnit: products[l.productId]!.unit,
-              productUnitType: products[l.productId]!.unitType.name,
-              qty: l.qty,
-              price: l.price,
-              total: l.lineTotal,
+              type: 'purchase',
+              no: no,
+              partyId: supplier.id,
+              partyName: supplier.name,
+              date: date,
+              subtotal: total,
+              total: total,
+              paid: isConsignment ? 0 : draft.paid,
+              remaining: remaining,
+              status: status,
+              ownership: isConsignment ? 'consignment' : 'owned',
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
             ),
-        ]);
+          );
+          await tx.upsertInvoiceItems([
+            for (final l in engineLines)
+              LocalInvoiceItemRow(
+                id: _uuid.v4(),
+                tenantId: _tenantId,
+                invoiceId: invoiceId,
+                productId: l.productId,
+                productName: products[l.productId]!.name,
+                productUnit: products[l.productId]!.unit,
+                productUnitType: products[l.productId]!.unitType.name,
+                qty: l.qty,
+                price: l.price,
+                total: l.lineTotal,
+              ),
+          ]);
 
-        // Existing products first, then any inline-created products with their
-        // received quantity.
-        await _applyProducts(result.updatedEntities);
-        for (final row in brandNewRows) {
-          final qty = result.updatedEntities?['products']?[row.id] as double? ??
-              row.qty;
-          await _store.upsertProduct(row.copyWith(qty: qty));
-        }
+          // Existing products first, then any inline-created products with their
+          // received quantity.
+          await _applyProducts(result.updatedEntities, tx);
+          for (final row in brandNewRows) {
+            final qty = result.updatedEntities?['products']?[row.id] as double? ??
+                row.qty;
+            await tx.upsertProduct(row.copyWith(qty: qty));
+          }
 
-        await _mirrorJournal(result.journalEntry, requestId: requestId);
-        await _enqueueRpc(
-          rpc: 'create_purchase_invoice',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'invoices',
-          localId: invoiceId,
-        );
+          await _mirrorJournal(
+            result.journalEntry,
+            requestId: requestId,
+            store: tx,
+          );
+
+          // Inline new products become server products FIRST: one table_crud
+          // leg per new product (client uuid as id, so the server row inherits
+          // it via tableUpsert's `onConflict: 'id'`), and the purchase RPC leg
+          // below depends on every one of them.
+          final productLegIds = <String>[];
+          for (final entry in newProductIds.entries) {
+            final legId = _uuid.v4();
+            productLegIds.add(legId);
+            final np = draft.lines[entry.key].newProduct!;
+            final newPrice = draft.lines[entry.key].price ?? np.salePrice;
+            await _enqueueWrite(
+              rpc: 'table:products',
+              id: legId,
+              params: ProductDraft(
+                name: np.name,
+                unit: np.unit,
+                unitType: np.unitType,
+                salePrice: np.salePrice,
+                purchasePrice: newPrice,
+                qty: 0,
+                reorderLevel: 0,
+                supplierId: supplier.id,
+                commissionRate: np.commissionRate ?? supplier.commissionRate,
+              ).toJson(),
+              requestId: _uuid.v4(),
+              entity: 'products',
+              localId: entry.value,
+              op: 'table_crud',
+              store: tx,
+            );
+          }
+
+          await _enqueueRpc(
+            rpc: 'create_purchase_invoice',
+            params: draft.toJson(
+              requestId: requestId,
+              lineProductIds: newProductIds,
+            ),
+            requestId: requestId,
+            entity: 'invoices',
+            localId: invoiceId,
+            dependsOn: [...?masterDeps, ...productLegIds],
+            store: tx,
+          );
+        });
 
         return PurchaseInvoiceResult(
           invoiceId: invoiceId,
@@ -1162,18 +1237,21 @@ class OfflineWriteCoordinator {
 
   /// Queues a master-table write for replay against `.from(<entity>)` with
   /// `op: 'table_crud'` (mirrors `_enqueueRpc` but tags the row as table_crud
-  /// so the flush service replays it as a direct table upsert).
+  /// so the flush service replays it as a direct table upsert). [store] is the
+  /// transaction-bound store when enqueued inside an atomic write.
   Future<void> _enqueueWrite({
     required String rpc,
     required Map<String, dynamic> params,
+    String? id,
     String? requestId,
     String? entity,
     String? localId,
     required String op,
+    LocalStore? store,
   }) async {
-    await _store.enqueue(
+    await (store ?? _store).enqueue(
       SyncQueueRow(
-        id: _uuid.v4(),
+        id: id ?? _uuid.v4(),
         tenantId: _tenantId,
         rpc: rpc,
         op: op,

@@ -10,9 +10,14 @@ import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/domain/invoices/invoice.dart';
 import 'package:hasad_erp/domain/invoices/invoice_sync.dart';
+import 'package:hasad_erp/domain/products/product.dart';
+import 'package:hasad_erp/domain/statements/debts_repository.dart';
+import 'package:hasad_erp/presentation/providers/inventory_providers.dart';
 import 'package:hasad_erp/presentation/providers/offline_sync_providers.dart';
+import 'package:hasad_erp/presentation/providers/products_providers.dart';
 import 'package:hasad_erp/presentation/providers/purchases_providers.dart';
 import 'package:hasad_erp/presentation/providers/sales_providers.dart';
+import 'package:hasad_erp/presentation/providers/statements_providers.dart';
 import 'package:hasad_erp/presentation/widgets/invoice_list.dart';
 
 import '../data/offline/delegating_local_store.dart';
@@ -99,6 +104,20 @@ class _CountingPurchaseInvoicesList extends PurchaseInvoicesList {
   Future<List<Invoice>> build() {
     onBuild();
     return Future<List<Invoice>>.value(const []);
+  }
+}
+
+/// Same trick for the product list: a real notifier subclass that counts
+/// `build()` calls and never touches Supabase.
+class _CountingProductsList extends ProductsList {
+  _CountingProductsList(this.onBuild);
+
+  final void Function() onBuild;
+
+  @override
+  Future<List<Product>> build() {
+    onBuild();
+    return Future<List<Product>>.value(const []);
   }
 }
 
@@ -519,6 +538,96 @@ void main() {
       // because the list was invalidated rather than left stale.
       expect(saleBuilds, greaterThan(saleBuildsBefore));
       expect(purchaseBuilds, greaterThan(purchaseBuildsBefore));
+    });
+
+    test(
+        'also refreshes inventory products, the products list and supplier debts',
+        () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final store = DriftLocalStore(db);
+
+      // A genuine offline draft: unsynced mirror row + a pending replay leg.
+      await store.upsertInvoice(
+        LocalInvoiceRow(
+          id: 'draft-h',
+          tenantId: _tenant,
+          type: 'sale',
+          no: 'D-H0000001',
+          partyId: 'c1',
+          partyName: 'مؤسسة النخيل',
+          date: DateTime.utc(2026, 1, 1),
+          subtotal: 20000,
+          total: 20000,
+          paid: 0,
+          remaining: 20000,
+          status: 'unpaid',
+          ownership: 'owned',
+          requestId: 'req-h',
+          synced: false,
+          createdAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await store.enqueue(_leg('q-h', localId: 'draft-h'));
+
+      var productListBuilds = 0;
+      var inventoryBuilds = 0;
+      var debtsBuilds = 0;
+      final container = ProviderContainer(
+        overrides: [
+          localStoreProvider.overrideWith((ref) async => store),
+          currentTenantIdProvider.overrideWithValue(_tenant),
+          // A real flusher over a no-op target: the leg genuinely drains.
+          syncFlusherProvider.overrideWith(
+            (ref) async => SyncFlusher(store, _tenant, ShellNoopSyncTarget()),
+          ),
+          productsListProvider.overrideWith(
+            () => _CountingProductsList(() => productListBuilds++),
+          ),
+          inventoryProductsProvider.overrideWith((ref) async {
+            inventoryBuilds++;
+            return const <Product>[];
+          }),
+          supplierDebtsProvider.overrideWith((ref) async {
+            debtsBuilds++;
+            return const <PartyBalance>[];
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Listen so the providers are actually built — invalidating a provider
+      // nobody has read is not observable.
+      final productListSub =
+          container.listen(productsListProvider, (_, _) {});
+      final inventorySub =
+          container.listen(inventoryProductsProvider, (_, _) {});
+      final debtsSub = container.listen(supplierDebtsProvider, (_, _) {});
+      addTearDown(productListSub.close);
+      addTearDown(inventorySub.close);
+      addTearDown(debtsSub.close);
+
+      // Let the initial builds land before snapshotting the counts.
+      await container.read(productsListProvider.future);
+      await container.read(inventoryProductsProvider.future);
+      await container.read(supplierDebtsProvider.future);
+      final before = (productListBuilds, inventoryBuilds, debtsBuilds);
+      expect(before.$1, greaterThan(0));
+      expect(before.$2, greaterThan(0));
+      expect(before.$3, greaterThan(0));
+
+      // A real drain (real drift async work, so this stays a plain test).
+      final summary = await container.read(manualSyncNowProvider.future);
+      expect(summary.synced, 1);
+
+      // Re-reading an invalidated provider recomputes it, so the count grows.
+      await container.read(productsListProvider.future);
+      await container.read(inventoryProductsProvider.future);
+      await container.read(supplierDebtsProvider.future);
+
+      expect(productListBuilds, greaterThan(before.$1));
+      expect(inventoryBuilds, greaterThan(before.$2));
+      expect(debtsBuilds, greaterThan(before.$3));
     });
   });
 }

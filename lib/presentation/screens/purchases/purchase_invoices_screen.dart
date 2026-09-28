@@ -50,18 +50,22 @@ class _PurchaseInvoicesScreenState
   }
 
   Future<void> _newInvoice() async {
-    final no = await Navigator.of(context).push<String>(
+    final result = await Navigator.of(context).push<({String no, bool pending})>(
       MaterialPageRoute(
         builder: (_) => const _NewPurchaseInvoicePage(),
         fullscreenDialog: true,
       ),
     );
-    if (!mounted || no == null) return;
+    if (!mounted || result == null) return;
 
     final messenger = ScaffoldMessenger.of(context);
     ref.read(purchaseInvoicesListProvider.notifier).refresh();
     messenger.showSnackBar(
-      SnackBar(content: Text('تم إنشاء فاتورة الشراء رقم $no')),
+      SnackBar(
+        content: Text(result.pending
+            ? 'تم حفظ فاتورة الشراء محليًا وستتم مزامنتها عند عودة الاتصال'
+            : 'تم إنشاء فاتورة الشراء رقم ${result.no}'),
+      ),
     );
   }
 
@@ -357,7 +361,10 @@ class _NewPurchaseInvoicePageState
                   : _memoCtrl.text.trim(),
             ),
           );
-      if (mounted) Navigator.of(context).pop(result.no);
+      if (mounted) {
+        Navigator.of(context)
+            .pop((no: result.no, pending: result.pending));
+      }
     } on Object catch (error) {
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);

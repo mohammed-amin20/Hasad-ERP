@@ -7,6 +7,7 @@ import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
+import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
 
 /// Records every replay leg the flusher sends, so a test can assert the queue
@@ -519,6 +520,161 @@ void main() {
       // A corrupt column must not wedge the queue shut.
       expect(summary.synced, 1);
       expect(summary.remaining, 0);
+    });
+  });
+
+  group('offline purchase flush', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+    });
+
+    tearDown(() => db.close());
+
+    test('an inline new product syncs before the purchase in one pass',
+        () async {
+      await _seedMasterData(store, tenantId);
+      final writer = OfflineWriteCoordinator(store, tenantId);
+
+      final purchase = await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: 's1',
+        lines: [
+          PurchaseLineDraft(
+            newProduct: NewProductDraft(
+              name: 'سلعة جديدة',
+              unit: 'قطعة',
+              salePrice: 12000,
+            ),
+            qty: 5,
+            price: 7000,
+          ),
+        ],
+        paid: 35000, // fully paid -> Cr 1010 cash, so no 2010 is needed
+        paymentMethod: 'cash',
+      ));
+      expect(purchase.pending, isTrue);
+      expect(await store.pendingCount(tenantId), 2);
+      final purchaseRequestId =
+          (await store.invoices(tenantId, type: 'purchase')).single.requestId!;
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.blocked, 0);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+
+      final product = (await store.products(tenantId))
+          .firstWhere((r) => r.name == 'سلعة جديدة');
+      // tableUpsert echoed the client uuid (`onConflict: 'id'`), so the synced
+      // product keeps the id the invoice item references.
+      expect(product.synced, isTrue);
+      expect(product.qty, 5);
+      // The product leg replayed FIRST (it is a dependsOn of the purchase), and
+      // the purchase then adopted the official number + server id.
+      expect(target.calls, <String>[
+        'tableUpsert:products:${product.id}',
+        'rpc:create_purchase_invoice',
+      ]);
+      final invoice = (await store.invoices(tenantId, type: 'purchase')).single;
+      expect(invoice.synced, isTrue);
+      expect(invoice.no, 'PUR-$purchaseRequestId');
+      expect(await store.serverIdFor(tenantId, 'invoices', purchase.invoiceId),
+          'server-$purchaseRequestId');
+    });
+
+    test('a purchase replays after its pending supplier and product legs',
+        () async {
+      await _seedMasterData(store, tenantId);
+      await store.enqueue(SyncQueueRow(
+        id: 'q-s1', tenantId: tenantId, rpc: 'table:suppliers',
+        op: 'table_crud', params: '{}', requestId: 'req-s1',
+        entity: 'suppliers', localId: 's1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 0),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 0),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-p1', tenantId: tenantId, rpc: 'table:products',
+        op: 'table_crud', params: '{}', requestId: 'req-p1',
+        entity: 'products', localId: 'p1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 1),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 1),
+      ));
+
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final purchase = await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: 's1',
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 1, price: 6000)],
+        paid: 6000, // full payment -> Cr 1010 cash
+        paymentMethod: 'cash',
+      ));
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.blocked, 0);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+
+      // The two master legs replay first (in either order), the purchase last.
+      expect(
+        target.calls.indexOf('rpc:create_purchase_invoice'),
+        target.calls.length - 1,
+      );
+      expect(
+        target.calls,
+        containsAll(
+            ['tableUpsert:suppliers:s1', 'tableUpsert:products:p1']),
+      );
+      final requestId =
+          (await store.invoices(tenantId, type: 'purchase')).single.requestId;
+      expect(
+        await store.serverIdFor(tenantId, 'invoices', purchase.invoiceId),
+        'server-$requestId',
+      );
+    });
+
+    test(
+        'a duplicate purchase replay adopts the official number from the'
+        ' nested envelope', () async {
+      const c = _EnvelopeCase(
+        entity: 'invoices',
+        rpc: 'create_purchase_invoice',
+        serverId: 'sv-77',
+        officialNo: 'PUR-000077',
+        flat: <String, dynamic>{},
+        nested: <String, dynamic>{},
+      );
+      await _seedMirrorRow(store, tenantId, c, 'local-1');
+      await _enqueueLeg(store, tenantId, c, 'local-1');
+
+      final flusher = SyncFlusher(
+        store,
+        tenantId,
+        _ShapedEnvelopeSyncTarget(envelopes: {
+          c.rpc: <String, dynamic>{
+            'duplicate': true,
+            'invoice': <String, dynamic>{
+              'id': 'sv-77',
+              'no': 'PUR-000077',
+              'total': 60000,
+            },
+          },
+        }),
+      );
+      expect((await flusher.flush()).synced, 1);
+
+      final invoice = (await store.invoices(tenantId)).single;
+      expect(invoice.no, 'PUR-000077');
+      expect(invoice.synced, isTrue);
+      expect(await store.serverIdFor(tenantId, 'invoices', 'local-1'), 'sv-77');
     });
   });
 
