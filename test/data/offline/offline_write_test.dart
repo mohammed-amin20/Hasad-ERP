@@ -684,47 +684,47 @@ void main() {
   group('writeSale on empty chart mirror seeds via _chart', () {
     test('fresh device sale leg succeeds after one-off chart seed', () async {
       await store.upsertCustomer(LocalCustomerRow(
-        id: 'c1', tenantId: tenant, name: '�?�?�?�?', phone: '0599111222',
+        id: 'c1', tenantId: tenant, name: 'عميل', phone: '0599111222',
         notes: null, createdAt: DateTime(2026, 1, 1), synced: false,
       ));
       await store.upsertProduct(LocalProductRow(
-        id: 'p1', tenantId: tenant, name: '�?�?�?�? �?�?�?�?�?', barcode: null,
-        unit: '�?���?�?', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
+        id: 'p1', tenantId: tenant, name: 'قمح للاختبار', barcode: null,
+        unit: 'كيلوجرام', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
         qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
         createdAt: DateTime(2026, 1, 1), synced: false,
       ));
 
       final coordinator = OfflineWriteCoordinator(store, tenant, () async => [
         ch.Account(
-          id: 'a1', code: '1010', name: '�???�???�??????',
+          id: 'a1', code: '1010', name: 'النقدية',
           type: ch.AccountType.asset, balance: 0,
         ),
         ch.Account(
-          id: 'a2', code: '1015', name: '�???�???????',
+          id: 'a2', code: '1015', name: 'البنك',
           type: ch.AccountType.asset, balance: 0,
         ),
         ch.Account(
-          id: 'a3', code: '1020', name: '�??????�??? �???�???????',
+          id: 'a3', code: '1020', name: 'الذمم المدينة',
           type: ch.AccountType.asset, balance: 0,
         ),
         ch.Account(
-          id: 'a4', code: '1030', name: '�???�???????',
+          id: 'a4', code: '1030', name: 'المخزون',
           type: ch.AccountType.asset, balance: 0,
         ),
         ch.Account(
-          id: 'a5', code: '2010', name: '�??????�??? �???�???????',
+          id: 'a5', code: '2010', name: 'الذمم الدائنة',
           type: ch.AccountType.liability, balance: 0,
         ),
         ch.Account(
-          id: 'a6', code: '2030', name: '�???�??????? �???�???????',
+          id: 'a6', code: '2030', name: 'رواتب مستحقة',
           type: ch.AccountType.liability, balance: 0,
         ),
         ch.Account(
-          id: 'a7', code: '4010', name: '�???�??????? �???�???????',
+          id: 'a7', code: '4010', name: 'إيرادات المبيعات',
           type: ch.AccountType.revenue, balance: 0,
         ),
         ch.Account(
-          id: 'a8', code: '5030', name: '�??????',
+          id: 'a8', code: '5030', name: 'الأجور والرواتب',
           type: ch.AccountType.expense, balance: 0,
         ),
       ]);
@@ -735,7 +735,7 @@ void main() {
         date: DateTime(2026, 9, 9),
         paid: 20000,
         paymentMethod: 'cash',
-        memo: '�?�?�?�?', // placeholder byte-slot reserved for the real Arabic memo during doc ceremony
+        memo: 'فاتورة اختبار',
       ));
 
       expect(result.pending, isTrue);
@@ -745,6 +745,128 @@ void main() {
       final accounts = await store.accounts(tenant);
       expect(accounts, isNotEmpty);
       expect(accounts.firstWhere((a) => a.code == '1010').code, '1010');
+    });
+  });
+
+  group('writeSale with no chart and no seed closure (never-online device)',
+      () {
+    // This is the reported production defect: a device that has never reached
+    // the server had an empty local chart, the seed closure could not resolve
+    // anything offline, and the leg died with
+    // "دليل الحسابات غير متوفر محليا" / "Required account not found in chart
+    // of accounts". The embedded 14-account baseline must make it succeed.
+    late OfflineWriteCoordinator offlineOnly;
+
+    setUp(() async {
+      offlineOnly = OfflineWriteCoordinator(store, tenant);
+      await store.upsertCustomer(LocalCustomerRow(
+        id: 'c1', tenantId: tenant, name: 'عميل', phone: '0599111222',
+        notes: null, createdAt: DateTime(2026, 1, 1), synced: false,
+      ));
+      await store.upsertProduct(LocalProductRow(
+        id: 'p1', tenantId: tenant, name: 'منتج', barcode: null,
+        unit: 'قطعة', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
+        qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
+        createdAt: DateTime(2026, 1, 1), synced: false,
+      ));
+    });
+
+    test('succeeds and posts a balanced journal via the embedded baseline',
+        () async {
+      // No chart has ever been mirrored, and there is no seed closure at all.
+      expect(await store.accounts(tenant), isEmpty);
+
+      final result = await offlineOnly.writeSale(SaleInvoiceDraft(
+        customerId: 'c1',
+        lines: [SaleLineDraft(productId: 'p1', qty: 2, price: 10000)],
+        date: DateTime(2026, 9, 9),
+        paid: 20000,
+        paymentMethod: 'cash',
+        memo: 'فاتورة',
+      ));
+
+      expect(result.pending, isTrue);
+      expect(result.total, 20000);
+      expect(result.remaining, 0);
+
+      // The baseline provisioned all 14 defaults, not just the 3-4 the sale
+      // leg touched, so later accounting features find their accounts too.
+      final accounts = await store.accounts(tenant);
+      expect(accounts, hasLength(14));
+      expect(
+        accounts.map((a) => a.code).toSet(),
+        containsAll(<String>{
+          '1010', '1015', '1020', '1030', '1040',
+          '2010', '2030',
+          '3010', '3020',
+          '4010', '4020',
+          '5010', '5020', '5030',
+        }),
+      );
+    });
+
+    test('a balanced journal entry was written locally', () async {
+      await offlineOnly.writeSale(SaleInvoiceDraft(
+        customerId: 'c1',
+        lines: [SaleLineDraft(productId: 'p1', qty: 2, price: 10000)],
+        date: DateTime(2026, 9, 9),
+        paid: 20000,
+        paymentMethod: 'cash',
+        memo: 'فاتورة',
+      ));
+
+      final journals = await store.journalEntries(tenant);
+      expect(journals, isNotEmpty);
+      final lines = jsonDecode(journals.single.lines) as List;
+      // Dr cash (1010) 20000 / Cr revenue (4010) 20000 — the revenue-only
+      // sale posting the server RPC also performs. The account ids are the
+      // baseline placeholders, which is the honest representation for a
+      // never-online device.
+      expect(
+        lines,
+        contains(
+          allOf(
+            containsPair('account_code', '1010'),
+            containsPair('debit', 20000),
+          ),
+        ),
+      );
+      expect(
+        lines,
+        contains(
+          allOf(
+            containsPair('account_code', '4010'),
+            containsPair('credit', 20000),
+          ),
+        ),
+      );
+    });
+
+    test('baseline is not re-seeded over an existing real chart', () async {
+      // A real (server) chart already present must be left completely alone —
+      // the baseline must not be layered on top of it.
+      await store.upsertAccount(LocalAccountRow(
+        id: 'server-1', tenantId: tenant, code: '1010', name: 'النقدية',
+        type: 'asset', parentCode: null, parentId: null,
+      ));
+      await store.upsertAccount(LocalAccountRow(
+        id: 'server-2', tenantId: tenant, code: '4010', name: 'إيرادات المبيعات',
+        type: 'revenue', parentCode: null, parentId: null,
+      ));
+
+      await offlineOnly.writeSale(SaleInvoiceDraft(
+        customerId: 'c1',
+        lines: [SaleLineDraft(productId: 'p1', qty: 2, price: 10000)],
+        date: DateTime(2026, 9, 9),
+        paid: 20000,
+        paymentMethod: 'cash',
+        memo: 'فاتورة',
+      ));
+
+      final accounts = await store.accounts(tenant);
+      // Exactly the two real rows: the baseline was not injected.
+      expect(accounts, hasLength(2));
+      expect(accounts.map((a) => a.id), everyElement(startsWith('server-')));
     });
   });
 }

@@ -18,12 +18,15 @@ part 'sales_providers.g.dart';
 
 @riverpod
 SaleRepository saleRepository(Ref ref) {
-  final supabase = SupabaseSaleRepository(ref.watch(supabaseClientProvider));
   final store = ref.watch(localStoreProvider).value;
   final tenantId = ref.watch(authStateProvider).value?.tenantId;
-  if (store == null || tenantId == null) return supabase;
+  // No local store means nothing can be queued, so fall back to the live RPC
+  // rather than pretending the write is durable. Writes are local-first
+  // otherwise — see OfflineAwareSaleRepository.
+  if (store == null || tenantId == null) {
+    return SupabaseSaleRepository(ref.watch(supabaseClientProvider));
+  }
   return OfflineAwareSaleRepository(
-    supabase,
     OfflineWriteCoordinator(
       store,
       tenantId,

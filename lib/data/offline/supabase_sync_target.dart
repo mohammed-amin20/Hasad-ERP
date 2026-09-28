@@ -1,4 +1,4 @@
-﻿import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'offline_sync.dart';
 
@@ -6,7 +6,7 @@ import 'offline_sync.dart';
 /// composition root (`supabaseClientProvider` in `data/supabase_client.dart`).
 ///
 /// All operations are the replay-safe "on-line" half of the queue protocol:
-///  - `rpc` legs pass client params through verbatim â€” the RPC contracts accept
+///  - `rpc` legs pass client params through verbatim — the RPC contracts accept
 ///    a client `request_id` so a replay is idempotent server-side;
 ///  - `tableUpsert` upserts by the client-supplied primary key (`id`) with
 ///    `onConflict: 'id'`, making a replay a no-op-diff;

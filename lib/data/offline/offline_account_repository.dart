@@ -24,6 +24,29 @@ class OfflineAccountRepository implements AccountRepository {
         tenantId: tenantId,
         key: chartOfAccountsKey,
         network: _inner.chart,
+        mirror: (accounts) async {
+          final s = store;
+          final t = tenantId;
+          if (s == null || t == null) return;
+          // Protect unsynced rows — do not overwrite accounts created offline.
+          final hasUnsynced = await s.hasUnsyncedAccounts(t);
+          if (hasUnsynced) return;
+          await s.mirrorAccounts(
+            t,
+            [
+              for (final a in accounts)
+                LocalAccountRow(
+                  id: a.id,
+                  tenantId: t,
+                  code: a.code,
+                  name: a.name,
+                  type: a.type.apiValue,
+                  parentCode: a.parentCode,
+                  parentId: a.parentId,
+                ),
+            ],
+          );
+        },
         fromCached: (payload) => [
           for (final m in jsonDecode(payload) as List)
             if (m is Map) Account.fromJson(m.cast<String, dynamic>()),

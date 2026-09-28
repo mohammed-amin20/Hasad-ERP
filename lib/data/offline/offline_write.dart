@@ -98,66 +98,100 @@ class OfflineWriteCoordinator {
         final no = 'D-${invoiceId.substring(0, 8)}';
         final date = draft.date ?? DateTime.now();
 
-        await _store.upsertInvoice(
-          LocalInvoiceRow(
-            id: invoiceId,
-            tenantId: _tenantId,
-            type: 'sale',
-            no: no,
-            partyId: customer.id,
-            partyName: customer.name,
-            date: date,
-            subtotal: total,
-            total: total,
-            paid: draft.paid,
-            remaining: remaining,
-            status: status,
-            ownership: 'owned',
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
+        // The invoice names the customer + product rows it was priced from, so
+        // any of them that is still queued offline is a server-side
+        // prerequisite. Resolved BEFORE the transaction (it is a read) and
+        // written into the leg inside it.
+        final masterDeps = await _pendingMasterLegIds(
+          result.updatedEntities,
+          localIds: [customer.id, ...engineLines.map((l) => l.productId)],
         );
-        await _store.upsertInvoiceItems([
-          for (final l in engineLines)
-            LocalInvoiceItemRow(
-              id: _uuid.v4(),
-              tenantId: _tenantId,
-              invoiceId: invoiceId,
-              productId: l.productId,
-              productName: products[l.productId]!.name,
-              productUnit: products[l.productId]!.unit,
-              productUnitType: products[l.productId]!.unitType.name,
-              qty: l.qty,
-              price: l.price,
-              total: l.lineTotal,
-            ),
-        ]);
-        await _applyProducts(result.updatedEntities);
 
-        for (final due in result.commissionDues ?? const <CommissionDue>[]) {
-          await _store.upsertCommissionDue(
-            LocalCommissionDueRow(
-              id: due.id,
+        // ATOMIC: the invoice, its lines, the stock/commission effects, the
+        // double-entry journal row and the queue leg are ONE commit. Before
+        // this, a crash between two of the awaits left a half-written sale
+        // (e.g. an invoice with no journal) that nothing would ever repair,
+        // because the queue leg — the only thing that replays it — was the
+        // last write. Either the whole offline sale exists, or none of it does.
+        await _store.transaction((tx) async {
+          await tx.upsertInvoice(
+            LocalInvoiceRow(
+              id: invoiceId,
               tenantId: _tenantId,
-              invoiceId: invoiceId,
-              productId: due.productId,
-              supplierId: due.supplierId,
-              dueAmount: due.dueAmount,
-              status: due.status,
-              createdAt: due.createdAt ?? DateTime.now(),
+              type: 'sale',
+              no: no,
+              partyId: customer.id,
+              partyName: customer.name,
+              date: date,
+              subtotal: total,
+              total: total,
+              paid: draft.paid,
+              remaining: remaining,
+              status: status,
+              ownership: 'owned',
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
             ),
           );
-        }
+          await tx.upsertInvoiceItems([
+            for (final l in engineLines)
+              LocalInvoiceItemRow(
+                id: _uuid.v4(),
+                tenantId: _tenantId,
+                invoiceId: invoiceId,
+                productId: l.productId,
+                productName: products[l.productId]!.name,
+                productUnit: products[l.productId]!.unit,
+                productUnitType: products[l.productId]!.unitType.name,
+                qty: l.qty,
+                price: l.price,
+                total: l.lineTotal,
+              ),
+          ]);
+          await _applyProducts(result.updatedEntities, tx);
 
-        await _mirrorJournal(result.journalEntry, requestId: requestId);
-        await _enqueueRpc(
-          rpc: 'create_sale_invoice',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'invoices',
-          localId: invoiceId,
-        );
+          for (final due
+              in result.commissionDues ?? const <CommissionDue>[]) {
+            await tx.upsertCommissionDue(
+              LocalCommissionDueRow(
+                id: due.id,
+                tenantId: _tenantId,
+                invoiceId: invoiceId,
+                productId: due.productId,
+                supplierId: due.supplierId,
+                dueAmount: due.dueAmount,
+                status: due.status,
+                createdAt: due.createdAt ?? DateTime.now(),
+              ),
+            );
+          }
+
+          await _mirrorJournal(
+            result.journalEntry,
+            requestId: requestId,
+            store: tx,
+          );
+          await tx.enqueue(SyncQueueRow(
+            id: _uuid.v4(),
+            tenantId: _tenantId,
+            rpc: 'create_sale_invoice',
+            op: 'rpc',
+            params: jsonEncode(draft.toJson(requestId: requestId)),
+            requestId: requestId,
+            entity: 'invoices',
+            localId: invoiceId,
+            status: 'pending',
+            attempts: 0,
+            lastError: null,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            // The invoice names the local product/customer rows it was priced
+            // from, so a product created offline in the same session is
+            // created on the server BEFORE this leg is replayed.
+            dependsOn: masterDeps == null ? null : jsonEncode(masterDeps),
+          ));
+        });
 
         return SaleInvoiceResult(
           invoiceId: invoiceId,
@@ -1111,9 +1145,10 @@ class OfflineWriteCoordinator {
   Future<void> _mirrorJournal(
     ae.JournalEntry entry, {
     required String requestId,
+    LocalStore? store,
   }) async {
     if (entry.lines.isEmpty) return;
-    await _store.insertJournalEntry(
+    await (store ?? _store).insertJournalEntry(
       LocalJournalEntryRow(
         id: entry.id,
         tenantId: _tenantId,
@@ -1139,43 +1174,97 @@ class OfflineWriteCoordinator {
     );
   }
 
-  Future<void> _applyProducts(Map<String, dynamic>? updatedEntities) async {
+  /// Applies the engine's product stock deltas. [store] is the transaction-bound
+  /// store when called from inside an atomic write, so the stock move commits
+  /// with the invoice that caused it.
+  Future<void> _applyProducts(
+    Map<String, dynamic>? updatedEntities, [
+    LocalStore? store,
+  ]) async {
+    final target = store ?? _store;
     final updates = updatedEntities?['products'] as Map<String, double>?;
     if (updates == null) return;
     for (final entry in updates.entries) {
       final row = await _productRow(entry.key);
       if (row != null) {
-        await _store.upsertProduct(row.copyWith(qty: entry.value));
+        await target.upsertProduct(row.copyWith(qty: entry.value));
       }
     }
   }
 
+  /// Queue ids of the master-data legs this sale depends on, so the flusher
+  /// creates them on the server first.
+  ///
+  /// A sale priced from a product that was itself created offline would be
+  /// rejected server-side on a missing product, and the invoice would burn its
+  /// retry budget for a purely local ordering reason. The invoice names the
+  /// product/customer rows it was priced from, and their `table_crud` legs
+  /// carry `localId`, so the prerequisite queue ids can be resolved.
+  Future<List<String>?> _pendingMasterLegIds(
+    Map<String, dynamic>? updatedEntities, {
+    List<String> localIds = const [],
+  }) async {
+    final stockUpdates = updatedEntities?['products'];
+    final wanted = <String>{
+      ...localIds,
+      if (stockUpdates is Map) ...stockUpdates.keys.cast<String>(),
+    };
+    if (wanted.isEmpty) return null;
+
+    final pending = await _store.pendingSync(_tenantId);
+    final ids = <String>{
+      for (final leg in pending)
+        // Only queue legs that are still pending and match the exact local rows
+        // this sale referenced. A leg that is already `synced` is on the server,
+        // so it is not a prerequisite.
+        if (leg.status == 'pending' &&
+            leg.localId != null &&
+            wanted.contains(leg.localId))
+          leg.id,
+    };
+    return ids.isEmpty ? null : ids.toList();
+  }
+
   Future<Map<String, acc.Account>> _chart() async {
     var rows = await _store.accounts(_tenantId);
-    if (rows.isEmpty && _seedChart != null) {
-      try {
-        final seed = await _seedChart();
-        if (seed.isNotEmpty) {
-          await _store.mirrorAccounts(
-            _tenantId,
-            [
-              for (final a in seed)
-                LocalAccountRow(
-                  id: a.id,
-                  tenantId: _tenantId,
-                  code: a.code,
-                  name: a.name,
-                  type: a.type.apiValue,
-                  parentCode: a.parentCode,
-                ),
-            ],
-          );
+    if (rows.isEmpty) {
+      // 1) Prefer the real chart: a live read, or the last successful RPC
+      //    payload from `report_cache` (the closure swallows a
+      //    NetworkException internally and returns whatever it has).
+      if (_seedChart != null) {
+        try {
+          final seed = await _seedChart();
+          if (seed.isNotEmpty) {
+            await _store.mirrorAccounts(
+              _tenantId,
+              [
+                for (final a in seed)
+                  LocalAccountRow(
+                    id: a.id,
+                    tenantId: _tenantId,
+                    code: a.code,
+                    name: a.name,
+                    type: a.type.apiValue,
+                    parentCode: a.parentCode,
+                    parentId: a.parentId,
+                  ),
+              ],
+            );
+          }
+        } on Object {
+          // Best-effort seed: a seed failure must never fail the leg — it just
+          // falls through to the embedded baseline below.
         }
-      } on Object {
-        // Best-effort seed: a seed failure must never fail the leg — it just
-        // falls through to the honest local-only error below.
+        rows = await _store.accounts(_tenantId);
       }
-      rows = await _store.accounts(_tenantId);
+      // 2) Still nothing (a device that has never been online, or an empty
+      //    cache): fall back to the 14 default accounts embedded in the
+      //    schema. This is what makes an offline sale invoice on a fresh device
+      //    post a balanced journal instead of failing with
+      //    "دليل الحسابات غير متوفر محليا" / "Required account not found".
+      if (rows.isEmpty) {
+        rows = await _store.ensureBaselineChart(_tenantId);
+      }
     }
     if (rows.isEmpty) {
       throw ValidationException('دليل الحسابات غير متوفر محليا');
@@ -1188,6 +1277,7 @@ class OfflineWriteCoordinator {
           name: r.name,
           type: _accType(r.type),
           parentCode: r.parentCode,
+          parentId: r.parentId,
         ),
     };
   }

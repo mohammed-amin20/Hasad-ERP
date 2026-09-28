@@ -9,10 +9,13 @@ import '../../core/error/app_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
+import '../../data/offline/local_store.dart';
 import '../../domain/auth/app_role.dart';
 import '../../domain/auth/tenant_ref.dart';
 import '../providers/auth_providers.dart';
 import '../providers/navigation_providers.dart';
+import '../providers/offline_providers.dart';
+import '../widgets/confirm_dialog.dart';
 import 'app_tabs.dart';
 
 /// Sidebar content shared by the fixed/collapsible sidebar and the drawer.
@@ -565,15 +568,7 @@ class _LogoutButton extends ConsumerWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           hoverColor: AppColors.danger,
-          onTap: () async {
-            final messenger = ScaffoldMessenger.of(context);
-            try {
-              await ref.read(authRepositoryProvider).signOut();
-            } on Object catch (error) {
-              final message = mapErrorToAppException(error).message;
-              messenger.showSnackBar(SnackBar(content: Text(message)));
-            }
-          },
+          onTap: () => signOutAndWipeLocalData(context, ref),
           child: const SizedBox(
             width: 40,
             height: 40,
@@ -586,5 +581,77 @@ class _LogoutButton extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Signs the user out, first wiping that workspace's offline data from the
+/// device.
+///
+/// A shared tablet is the reason this exists: a tenant's invoices, customers
+/// and stock sit in sqlite, and a sign-out that left them behind hands the next
+/// person the previous workspace's data.
+///
+/// The rule is that **sign-out always succeeds**. It is the one action a user
+/// must never be locked out of, so a stuck queue can never refuse it — if the
+/// count cannot be read, or the wipe throws, the sign-out proceeds anyway and
+/// the error is surfaced. Blocking sign-out to protect unsynced writes would
+/// mean a user with a permanently-failing queue could never sign out at all.
+///
+/// Pending work is never discarded silently. When queued legs exist the user
+/// is told exactly how many, and told plainly that continuing deletes them from
+/// this device with no way to recover them client-side. Choosing to continue is
+/// an informed decision, not an accident.
+Future<void> signOutAndWipeLocalData(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final store = ref.read(localStoreProvider).value;
+  final tenantId = ref.read(currentTenantIdProvider);
+
+  // The wipe is attempted in its own scope so a failure cannot abort the
+  // sign-out. Sharing one try-block here was a real defect: `clearTenant`
+  // throwing skipped the `signOut()` below entirely, which is the lockout this
+  // function exists to prevent.
+  String? wipeFailure;
+  try {
+    if (store != null && tenantId != null && tenantId.isNotEmpty) {
+      final pending = await store.pendingCount(tenantId);
+      // Only a genuine "keep working" answer aborts. A `null` mount is not a
+      // veto — the user is already gone from this screen, so the sign-out
+      // proceeds and the data is still cleared.
+      if (pending > 0 && context.mounted) {
+        final confirmed = await showConfirmDialog(
+          context,
+          title: 'تسجيل الخروج مع وجود عمليات غير مزامنة',
+          message: 'يوجد $pending عملية غير مزامنة على هذا الجهاز.\n'
+              'سيؤدي تسجيل الخروج إلى حذفها نهائياً من الجهاز،'
+              ' ولا يمكن استعادتها بعد ذلك.\n'
+              'هل تريد المتابعة؟',
+          confirmLabel: 'خروج وحذف',
+          cancelLabel: 'إلغاء',
+          icon: FontAwesomeIcons.triangleExclamation,
+          tone: ConfirmTone.danger,
+        );
+        if (!confirmed) return;
+      }
+
+      // `force: true` is correct here precisely because the user just confirmed
+      // (or had nothing pending). A refusal is impossible because there is
+      // nothing left to refuse.
+      await store.clearTenant(tenantId, force: true);
+    }
+  } on Object catch (error) {
+    wipeFailure = mapErrorToAppException(error).message;
+  }
+
+  try {
+    final repo = await ref.read(authRepositoryProvider.future);
+    await repo.signOut();
+  } on Object catch (error) {
+    messenger.showSnackBar(SnackBar(content: Text(mapErrorToAppException(error).message)));
+  }
+
+  // A failed wipe is reported only after the sign-out, so the user is not left
+  // staring at an error on a screen they have already been routed off.
+  if (wipeFailure != null) {
+    messenger.showSnackBar(SnackBar(content: Text(wipeFailure)));
   }
 }

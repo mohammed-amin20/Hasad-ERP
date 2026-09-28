@@ -94,6 +94,7 @@ Future<T> cacheLast<T>({
   required Future<T> Function() network,
   required T Function(String payload) fromCached,
   required String Function(T value) toPayload,
+  Future<void> Function(T value)? mirror,
 }) async {
   final T value;
   try {
@@ -112,6 +113,14 @@ Future<T> cacheLast<T>({
   if (s != null && t != null) {
     try {
       await s.putReport(t, key, toPayload(value));
+      final m = mirror;
+      if (m != null) {
+        try {
+          await m(value);
+        } on Object {
+          // Never fail a successful live read because mirroring failed.
+        }
+      }
     } on Object {
       // Never fail a successful live read because caching failed.
     }

@@ -5,7 +5,28 @@ import '../../../data/offline/local_store.dart';
 import '../../../data/offline/offline_sync.dart';
 import '../../../data/offline/supabase_sync_target.dart';
 import '../../../data/supabase_client.dart' as data;
+import '../../../domain/invoices/invoice_sync.dart';
 import 'offline_providers.dart' as offline;
+import 'purchases_providers.dart';
+import 'sales_providers.dart';
+
+/// Refreshes every read that a completed drain invalidates: the pending count,
+/// the per-row sync badge, and the two invoice lists.
+///
+/// The list refresh is the reason a row stops showing the *local* placeholder
+/// number: once the mirror row is `synced` it drops out of
+/// `OfflineInvoiceRepository._localDrafts()`, so the refetch is what replaces it
+/// with the official server copy. Without this the badge would say "synced" next
+/// to a number the server never issued.
+///
+/// This is a refresh trigger only — it changes no business logic, and
+/// `SaleInvoicesList`/`PurchaseInvoicesList` keep owning how they load.
+void _refreshAfterDrain(Ref ref) {
+  ref.invalidate(pendingSyncCountProvider);
+  ref.invalidate(invoiceSyncStatesProvider);
+  ref.invalidate(saleInvoicesListProvider);
+  ref.invalidate(purchaseInvoicesListProvider);
+}
 
 /// Current signed-in tenant id (falls back to empty string so the flusher
 /// providers stay constructible before auth resolves).
@@ -23,6 +44,36 @@ final FutureProvider<int> pendingSyncCountProvider = FutureProvider<int>(
   },
 );
 
+/// Per-invoice sync state for the invoice lists, keyed by the **local** invoice
+/// id (the `sync_queue.localId` of the leg), read live from the queue.
+///
+/// A synced invoice gets no badge at all, so an invoice missing from the map is
+/// treated as [InvoiceSyncState.synced]. That also makes the join correct after
+/// a drain for free: the list refetches from the server under a *different* id,
+/// so nothing matches and the row reads as synced.
+///
+/// Ordering note: a spread overwrite means the newest leg for a local id wins,
+/// which is the right precedence if a retry re-enqueues one.
+final FutureProvider<Map<String, InvoiceSyncState>> invoiceSyncStatesProvider =
+    FutureProvider<Map<String, InvoiceSyncState>>((ref) async {
+      final tenantId = ref.watch(currentTenantIdProvider);
+      if (tenantId.isEmpty) return const <String, InvoiceSyncState>{};
+      try {
+        final store = await ref.watch(localStoreProvider.future);
+        final legs = await store.queueLegsFor(tenantId, entity: 'invoices');
+        return {
+          for (final leg in legs)
+            if (leg.localId != null)
+              leg.localId!: InvoiceSyncState.fromQueueStatus(leg.status),
+        };
+      } catch (_) {
+        // A sync *indicator* must never be able to take down the list it
+        // annotates, and an uncaught provider error surfaces in its own zone
+        // where a widget test cannot drain it. Degrade to "no badges".
+        return const <String, InvoiceSyncState>{};
+      }
+    });
+
 /// The tenant's queue flusher, bound to the Supabase-backed [SyncTarget].
 final FutureProvider<SyncFlusher> syncFlusherProvider =
     FutureProvider<SyncFlusher>((ref) async {
@@ -34,14 +85,15 @@ final FutureProvider<SyncFlusher> syncFlusherProvider =
 });
 
 /// One-shot manual flush trigger: reads it to start a pass (returns the
-/// [SyncFlushSummary]). Also refreshes the pending count so the badge tracks
-/// the resulting state immediately.
+/// [SyncFlushSummary]). Also refreshes everything a completed drain
+/// invalidates (see [_refreshAfterDrain]) so the badge tracks the resulting
+/// state immediately.
 final FutureProvider<SyncFlushSummary> manualSyncNowProvider =
     FutureProvider<SyncFlushSummary>((ref) async {
   await Future<void>.delayed(Duration.zero);
   final flusher = await ref.watch(syncFlusherProvider.future);
   final summary = await flusher.flush();
-  ref.invalidate(pendingSyncCountProvider);
+  _refreshAfterDrain(ref);
   return summary;
 });
 
@@ -56,7 +108,7 @@ final Provider<AutoSyncRunner> autoSyncRunnerProvider =
     flush: () async {
       final flusher = await ref.read(syncFlusherProvider.future);
       final summary = await flusher.flush();
-      ref.invalidate(pendingSyncCountProvider);
+      _refreshAfterDrain(ref);
       return summary;
     },
     pendingCount: () async {

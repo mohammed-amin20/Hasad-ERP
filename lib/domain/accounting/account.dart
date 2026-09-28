@@ -6,6 +6,7 @@ class Account extends Equatable {
     required this.code,
     required this.name,
     required this.type,
+    this.parentId,
     this.parentCode,
     this.balance = 0,
   });
@@ -14,17 +15,27 @@ class Account extends Equatable {
   final String code;
   final String name;
   final AccountType type;
+  final String? parentId;
   final String? parentCode;
   final int balance;
 
   @override
-  List<Object?> get props => [id, code, name, type, parentCode, balance];
+  List<Object?> get props => [
+    id,
+    code,
+    name,
+    type,
+    parentId,
+    parentCode,
+    balance,
+  ];
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'code': code,
     'name': name,
     'type': type.name,
+    'parent_id': parentId,
     'parent_code': parentCode,
     'balance': balance,
   };
@@ -34,6 +45,7 @@ class Account extends Equatable {
     code: json['code'] as String,
     name: json['name'] as String,
     type: AccountType.values.byName(json['type'] as String),
+    parentId: json['parent_id'] as String?,
     parentCode: json['parent_code'] as String?,
     balance: json['balance'] as int? ?? 0,
   );

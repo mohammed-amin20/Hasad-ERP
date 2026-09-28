@@ -48,7 +48,7 @@ final class SaleRepositoryProvider
   }
 }
 
-String _$saleRepositoryHash() => r'3feed26b76fdf3a2617ccd61d5f86633c8bdd0b1';
+String _$saleRepositoryHash() => r'9f08a5b2a62756cb46d0012fec1d2ef7c8e3e68f';
 
 @ProviderFor(invoiceRepository)
 final invoiceRepositoryProvider = InvoiceRepositoryProvider._();

@@ -17,14 +17,15 @@ void main() {
   const tenantA = 'tenant-a';
   const tenantB = 'tenant-b';
 
-  LocalCustomerRow customer(String id, String tenant) => LocalCustomerRow(
+  LocalCustomerRow customer(String id, String tenant, {bool synced = false}) =>
+      LocalCustomerRow(
         id: id,
         tenantId: tenant,
         name: 'عميل $id',
         phone: '0599$id',
         notes: null,
         createdAt: DateTime(2026, 1, 1),
-        synced: false,
+        synced: synced,
       );
 
   test('store reports availability and exposes the database', () {
@@ -41,6 +42,181 @@ void main() {
     final list = await store.customers(tenantA);
     expect(list.map((r) => r.id), containsAll(['c1', 'c2']));
     expect(await store.customers(tenantB), hasLength(1));
+  });
+
+  group('background refresh never destroys pending local work', () {
+    // A mirror is a server snapshot applied with delete+insert. When a write is
+    // still queued, that is a data-loss bug: the user's offline record vanishes
+    // and the replay then references a row that no longer exists locally.
+    // Pending local rows are authoritative until the server acknowledges them.
+
+    test('an offline-created customer survives a server refresh', () async {
+      await store.upsertCustomer(customer('local-new', tenantA)); // synced:false
+      await store.mirrorCustomers(tenantA, [customer('srv-1', tenantA, synced: true)]);
+
+      final ids = (await store.customers(tenantA)).map((r) => r.id).toList();
+      expect(ids, contains('local-new'),
+          reason: 'the pending offline row must not be deleted by a refresh');
+      expect(ids, contains('srv-1'), reason: 'the server row is applied');
+    });
+
+    test('a synced customer the server dropped is removed by the refresh',
+        () async {
+      await store.upsertCustomer(customer('gone', tenantA, synced: true));
+      await store.mirrorCustomers(tenantA, [customer('kept', tenantA, synced: true)]);
+
+      final ids = (await store.customers(tenantA)).map((r) => r.id).toList();
+      expect(ids, isNot(contains('gone')),
+          reason: 'the server is the truth for rows it has acknowledged');
+      expect(ids, contains('kept'));
+    });
+
+    test('an offline EDIT is not reverted by a stale server copy', () async {
+      // The user renamed the customer offline; the server snapshot still has
+      // the old name because the edit has not replayed yet.
+      await store.upsertCustomer(customer('c1', tenantA));
+      await store.mirrorCustomers(tenantA, [
+        customer('c1', tenantA, synced: true).copyWith(name: 'الاسم القديم'),
+      ]);
+
+      final row = (await store.customers(tenantA)).singleWhere((r) => r.id == 'c1');
+      expect(row.name, 'عميل c1', reason: 'the local edit wins until it syncs');
+      expect(row.synced, isFalse);
+    });
+
+    test('once the row is synced the server copy becomes authoritative',
+        () async {
+      await store.upsertCustomer(customer('c1', tenantA, synced: true));
+      await store.mirrorCustomers(tenantA, [
+        customer('c1', tenantA, synced: true).copyWith(name: 'من الخادم'),
+      ]);
+
+      final row = (await store.customers(tenantA)).single;
+      expect(row.name, 'من الخادم');
+    });
+
+    test('the same protection applies to suppliers, products and employees',
+        () async {
+      await store.upsertSupplier(LocalSupplierRow(
+        id: 's-local', tenantId: tenantA, name: 'مورد محلي', phone: null,
+        notes: null, dealType: 'commission', commissionRate: 20,
+        createdAt: DateTime(2026), synced: false,
+      ));
+      await store.upsertProduct(LocalProductRow(
+        id: 'p-local', tenantId: tenantA, name: 'سلعة محلية', barcode: null,
+        unit: 'قطعة', unitType: 'count', salePrice: 1, purchasePrice: 1, qty: 5,
+        reorderLevel: 0, supplierId: null, commissionRate: null,
+        createdAt: null, synced: false,
+      ));
+      await store.upsertEmployee(LocalEmployeeRow(
+        id: 'e-local', tenantId: tenantA, name: 'موظف محلي', jobTitle: null,
+        phone: null, baseSalary: 100, createdAt: DateTime(2026), synced: false,
+      ));
+
+      // Each refresh carries only a server row; the pending local rows must
+      // still be there afterwards.
+      await store.mirrorSuppliers(tenantA, [
+        LocalSupplierRow(
+          id: 's-srv', tenantId: tenantA, name: 'مورد خادمي', phone: null,
+          notes: null, dealType: 'commission', commissionRate: 10,
+          createdAt: DateTime(2026), synced: true,
+        ),
+      ]);
+      await store.mirrorProducts(tenantA, [
+        LocalProductRow(
+          id: 'p-srv', tenantId: tenantA, name: 'سلعة خادمية', barcode: null,
+          unit: 'قطعة', unitType: 'count', salePrice: 2, purchasePrice: 2,
+          qty: 9, reorderLevel: 0, supplierId: null, commissionRate: null,
+          createdAt: null, synced: true,
+        ),
+      ]);
+      await store.mirrorEmployees(tenantA, [
+        LocalEmployeeRow(
+          id: 'e-srv', tenantId: tenantA, name: 'موظف خادمي', jobTitle: null,
+          phone: null, baseSalary: 200, createdAt: DateTime(2026), synced: true,
+        ),
+      ]);
+
+      expect((await store.suppliers(tenantA)).map((r) => r.id),
+          containsAll(['s-local', 's-srv']));
+      expect((await store.products(tenantA)).map((r) => r.id),
+          containsAll(['p-local', 'p-srv']));
+      expect((await store.employees(tenantA)).map((r) => r.id),
+          containsAll(['e-local', 'e-srv']));
+    });
+
+    test('a refresh for one tenant never resurrects or drops another', () async {
+      await store.upsertCustomer(customer('a-pending', tenantA));
+      await store.upsertCustomer(customer('b-pending', tenantB));
+
+      await store.mirrorCustomers(tenantA, [customer('a-srv', tenantA, synced: true)]);
+
+      expect((await store.customers(tenantA)).map((r) => r.id),
+          containsAll(['a-pending', 'a-srv']));
+      expect((await store.customers(tenantB)).map((r) => r.id), ['b-pending'],
+          reason: "another tenant's pending row is untouched");
+    });
+  });
+
+  group('chart of accounts baseline', () {
+    test('provisions the 14 defaults on a device that has never synced', () async {
+      expect(await store.accounts(tenantA), isEmpty);
+
+      final chart = await store.ensureBaselineChart(tenantA);
+
+      expect(chart, hasLength(14));
+      expect(
+        chart.map((a) => a.code).toSet(),
+        {
+          '1010', '1015', '1020', '1030', '1040',
+          '2010', '2030', '3010', '3020',
+          '4010', '4020', '5010', '5020', '5030',
+        },
+      );
+    });
+
+    test('is a no-op when the tenant already has a real chart', () async {
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a1', tenantId: tenantA, code: '1010', name: 'نقدية',
+        type: 'asset', parentCode: null,
+      ));
+
+      final chart = await store.ensureBaselineChart(tenantA);
+
+      expect(chart.map((a) => a.code), ['1010'],
+          reason: 'defaults must never be layered over real accounts');
+    });
+
+    test('is per-tenant: one tenant\'s baseline does not leak into another',
+        () async {
+      await store.ensureBaselineChart(tenantA);
+      await store.ensureBaselineChart(tenantB);
+
+      final a = await store.accounts(tenantA);
+      final b = await store.accounts(tenantB);
+
+      expect(a, hasLength(14));
+      expect(b, hasLength(14));
+      expect(a.map((r) => r.code).toSet(), b.map((r) => r.code).toSet(),
+          reason: 'both tenants get the same 14 codes');
+
+      // The regression this pins: a fixed id like `baseline:1010` is the same
+      // primary key in both tenants, so the second tenant's baseline either
+      // collides with or overwrites the first tenant's rows.
+      final shared = a.map((r) => r.id).toSet().intersection(b.map((r) => r.id).toSet());
+      expect(shared, isEmpty, reason: 'baseline account ids must not be shared across tenants');
+      expect(a.every((r) => r.tenantId == tenantA), isTrue);
+      expect(b.every((r) => r.tenantId == tenantB), isTrue);
+    });
+
+    test('is idempotent: a second call does not duplicate or re-id rows',
+        () async {
+      final first = await store.ensureBaselineChart(tenantA);
+      final second = await store.ensureBaselineChart(tenantA);
+
+      expect(second.map((r) => r.id).toSet(), first.map((r) => r.id).toSet());
+      expect(second, hasLength(14));
+    });
   });
 
   test('master data upserts and reads for each entity', () async {
@@ -76,7 +252,11 @@ void main() {
         dealType: 'direct', commissionRate: null, createdAt: null, synced: true,
       ),
     ]);
-    expect((await store.suppliers(tenantA)).single.id, 's2');
+    expect((await store.suppliers(tenantA)).map((r) => r.id), containsAll(['s1', 's2']),
+        reason: 's1 is still queued, so the refresh must not delete it');
+    expect((await store.suppliers(tenantA))
+        .firstWhere((r) => r.id == 's2')
+        .dealType, 'direct');
   });
 
   test('invoices with items round-trip and delete cascades', () async {
@@ -163,12 +343,25 @@ void main() {
   });
 
   test('id map resolves both directions and survives repeat put', () async {
-    await store.putMapping(entity: 'customers', localId: 'l1', serverId: 'sv1');
-    await store.putMapping(entity: 'customers', localId: 'l1', serverId: 'sv2');
+    await store.putMapping(
+        tenantId: tenantA, entity: 'customers', localId: 'l1', serverId: 'sv1');
+    await store.putMapping(
+        tenantId: tenantA, entity: 'customers', localId: 'l1', serverId: 'sv2');
 
-    expect(await store.serverIdFor('customers', 'l1'), 'sv2');
-    expect(await store.localIdFor('customers', 'sv2'), 'l1');
-    expect(await store.serverIdFor('products', 'l1'), isNull);
+    expect(await store.serverIdFor(tenantA, 'customers', 'l1'), 'sv2');
+    expect(await store.localIdFor(tenantA, 'customers', 'sv2'), 'l1');
+    expect(await store.serverIdFor(tenantA, 'products', 'l1'), isNull);
+  });
+
+  test('id map is tenant-scoped: the same localId in two tenants is distinct',
+      () async {
+    await store.putMapping(
+        tenantId: tenantA, entity: 'customers', localId: 'l1', serverId: 'sv-a');
+    await store.putMapping(
+        tenantId: tenantB, entity: 'customers', localId: 'l1', serverId: 'sv-b');
+
+    expect(await store.serverIdFor(tenantA, 'customers', 'l1'), 'sv-a');
+    expect(await store.serverIdFor(tenantB, 'customers', 'l1'), 'sv-b');
   });
 
   test('report cache and settings round-trip and fall back to null', () async {
@@ -184,15 +377,240 @@ void main() {
   });
 
   test('clearTenant wipes only the requested tenant', () async {
-    await store.upsertCustomer(customer('c1', tenantA));
-    await store.upsertCustomer(customer('c2', tenantB));
+    // Synced rows only: nothing local is at risk, so the clear proceeds.
+    await store.upsertCustomer(customer('c1', tenantA, synced: true));
+    await store.upsertCustomer(customer('c2', tenantB, synced: true));
     await store.putReport(tenantA, 'dashboard', 'x');
 
-    await store.clearTenant(tenantA);
+    final report = await store.clearTenant(tenantA);
+    expect(report.cleared, isTrue);
 
     expect(await store.customers(tenantA), isEmpty);
     expect(await store.report(tenantA, 'dashboard'), isNull);
     expect((await store.customers(tenantB)).single.id, 'c2');
+  });
+
+  group('clearTenant refuses to destroy unsynced work', () {
+    Future<void> enqueuePending() => store.enqueue(SyncQueueRow(
+          id: 'q1',
+          tenantId: tenantA,
+          rpc: 'create_sale_invoice',
+          op: 'rpc',
+          params: '{}',
+          requestId: 'r1',
+          entity: 'invoices',
+          localId: 'i1',
+          status: 'pending',
+          attempts: 0,
+          lastError: null,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ));
+
+    test('a pending queue item blocks the clear and reports the count',
+        () async {
+      await store.upsertCustomer(customer('c1', tenantA));
+      await enqueuePending();
+
+      final report = await store.clearTenant(tenantA);
+
+      // Refused, and the caller is told exactly what is at stake.
+      expect(report.cleared, isFalse);
+      expect(report.pendingQueueItems, 1);
+      expect(report.unsyncedMirrorRows, greaterThanOrEqualTo(0));
+      expect(report.atRisk, greaterThan(0));
+
+      // Nothing was destroyed.
+      expect((await store.customers(tenantA)).single.id, 'c1');
+      expect(await store.pendingCount(tenantA), 1);
+    });
+
+    test('a synced-only mirror does not block the clear', () async {
+      await store.upsertCustomer(customer('c1', tenantA, synced: true));
+      await store.enqueue(SyncQueueRow(
+        id: 'q1',
+        tenantId: tenantA,
+        rpc: 'x',
+        op: 'rpc',
+        params: '{}',
+        requestId: null,
+        entity: null,
+        localId: null,
+        status: 'synced',
+        attempts: 1,
+        lastError: null,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ));
+
+      final report = await store.clearTenant(tenantA);
+
+      // Already-synced data is safe to drop: nothing local is at risk.
+      expect(report.cleared, isTrue);
+      expect(report.atRisk, 0);
+      expect(await store.customers(tenantA), isEmpty);
+    });
+
+    test('force: true discards pending work and still reports what was lost',
+        () async {
+      await store.upsertCustomer(customer('c1', tenantA));
+      await enqueuePending();
+
+      final report = await store.clearTenant(tenantA, force: true);
+
+      expect(report.cleared, isTrue);
+      // The report still records the loss, so the UI can log/confirm it.
+      expect(report.pendingQueueItems, 1);
+      expect(await store.customers(tenantA), isEmpty);
+      expect(await store.pendingCount(tenantA), 0);
+    });
+
+    test('a clear of one tenant never touches another tenant queue', () async {
+      await enqueuePending();
+      await store.enqueue(SyncQueueRow(
+        id: 'q2',
+        tenantId: tenantB,
+        rpc: 'create_sale_invoice',
+        op: 'rpc',
+        params: '{}',
+        requestId: 'r2',
+        entity: 'invoices',
+        localId: 'i2',
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ));
+
+      await store.clearTenant(tenantA, force: true);
+
+      expect(await store.pendingCount(tenantA), 0);
+      expect(await store.pendingCount(tenantB), 1);
+    });
+  });
+
+  group('sign-out wipe (clearTenant force:true)', () {
+    // Signing out must leave nothing of that workspace on a shared device:
+    // not the mirrors, not the queue, and not the local->server id mappings.
+    // The mappings are the easy one to forget -- they had no tenant column
+    // until schema 5, so a sign-out silently left every resolved id behind.
+
+    SyncQueueRow leg(String id, String tenant) => SyncQueueRow(
+          id: id,
+          tenantId: tenant,
+          rpc: 'create_sale_invoice',
+          op: 'rpc',
+          params: '{}',
+          requestId: 'req-$id',
+          entity: 'invoices',
+          localId: 'inv-$id',
+          status: 'pending',
+          attempts: 0,
+          lastError: null,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        );
+
+    test('with nothing pending it clears and reports zero losses', () async {
+      await store.upsertCustomer(customer('c1', tenantA, synced: true));
+      await store.putMapping(
+          tenantId: tenantA, entity: 'customers', localId: 'l1', serverId: 'sv1');
+
+      final report = await store.clearTenant(tenantA, force: true);
+
+      expect(report.cleared, isTrue);
+      expect(report.pendingQueueItems, 0);
+      expect(report.unsyncedMirrorRows, 0);
+      expect(await store.customers(tenantA), isEmpty);
+      expect(await store.serverIdFor(tenantA, 'customers', 'l1'), isNull);
+    });
+
+    test('with pending work it reports the exact loss counts', () async {
+      await store.enqueue(leg('q1', tenantA));
+      await store.enqueue(leg('q2', tenantA));
+      // synced:false so it counts as unsynced mirror data too
+      await store.upsertCustomer(customer('c1', tenantA));
+
+      final report = await store.clearTenant(tenantA, force: true);
+
+      expect(report.cleared, isTrue);
+      expect(report.pendingQueueItems, 2);
+      expect(report.unsyncedMirrorRows, 1);
+      expect(report.atRisk, 3, reason: '2 queued legs + 1 unsynced mirror row');
+    });
+
+    test('the queue is cleared, not marked synced', () async {
+      await store.enqueue(leg('q1', tenantA));
+      await store.clearTenant(tenantA, force: true);
+
+      // A 'synced' leftover would be worse than nothing: the flusher would
+      // believe the write reached the server.
+      expect(await db.select(db.syncQueueItems).get(), isEmpty);
+      expect(await store.pendingCount(tenantA), 0);
+    });
+
+    test('id mappings are cleared -- a stale one would resolve to a dead row',
+        () async {
+      await store.putMapping(
+          tenantId: tenantA, entity: 'invoices', localId: 'l1', serverId: 'sv-a');
+      await store.clearTenant(tenantA, force: true);
+
+      expect(await store.serverIdFor(tenantA, 'invoices', 'l1'), isNull,
+          reason: 'signing out must not leave a localId -> serverId remap behind');
+    });
+
+    test('a sign-out cannot touch another tenant\'s mirrors, queue or mappings',
+        () async {
+      await store.upsertCustomer(customer('a', tenantA));
+      await store.upsertCustomer(customer('b', tenantB));
+      await store.enqueue(leg('qa', tenantA));
+      await store.enqueue(leg('qb', tenantB));
+      await store.putMapping(
+          tenantId: tenantA, entity: 'customers', localId: 'l1', serverId: 'sv-a');
+      await store.putMapping(
+          tenantId: tenantB, entity: 'customers', localId: 'l1', serverId: 'sv-b');
+
+      await store.clearTenant(tenantA, force: true);
+
+      expect(await store.customers(tenantA), isEmpty);
+      expect((await store.customers(tenantB)).single.id, 'b');
+      expect(await store.pendingCount(tenantA), 0);
+      expect(await store.pendingCount(tenantB), 1);
+      expect(await store.serverIdFor(tenantA, 'customers', 'l1'), isNull);
+      expect(await store.serverIdFor(tenantB, 'customers', 'l1'), 'sv-b',
+          reason: 'the same localId in another tenant must survive');
+    });
+
+    test('an orphaned pre-schema-5 mapping is not swept up by any tenant',
+        () async {
+      // The migration parks unattributable rows under a sentinel tenant. No
+      // real sign-out may delete them (a wrong guess would delete another
+      // workspace's mappings) and no lookup may return them.
+      await store.putMapping(
+          tenantId: '__unknown_tenant__',
+          entity: 'customers',
+          localId: 'l1',
+          serverId: 'sv-old');
+
+      await store.clearTenant(tenantA, force: true);
+
+      expect(await store.serverIdFor(tenantA, 'customers', 'l1'), isNull);
+      final remaining = await db.select(db.idMappings).get();
+      expect(remaining, hasLength(1));
+      expect(remaining.single.serverId, 'sv-old');
+    });
+
+    test('a second sign-out on the same tenant is a harmless no-op', () async {
+      await store.upsertCustomer(customer('c1', tenantA));
+
+      final first = await store.clearTenant(tenantA, force: true);
+      final second = await store.clearTenant(tenantA, force: true);
+
+      expect(first.cleared, isTrue);
+      expect(second.cleared, isTrue);
+      expect(second.pendingQueueItems, 0);
+    });
   });
 
   test('NullLocalStore degrades gracefully', () async {
@@ -206,6 +624,6 @@ void main() {
       lastError: null, createdAt: DateTime(2026), updatedAt: DateTime(2026),
     ));
     expect(await none.pendingCount(tenantA), 0);
-    expect(await none.serverIdFor('customers', 'l1'), 'l1');
+    expect(await none.serverIdFor(tenantA, 'customers', 'l1'), 'l1');
   });
 }
