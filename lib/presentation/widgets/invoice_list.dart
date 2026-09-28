@@ -7,13 +7,15 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/money.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../domain/invoices/invoice.dart';
+import '../../domain/invoices/invoice_sync.dart';
 import '../../domain/products/product.dart';
 import '../providers/auth_providers.dart';
+import '../providers/offline_sync_providers.dart';
 import '../providers/sales_providers.dart';
 import 'payment_sheets.dart';
 import 'record_table.dart';
 import 'state_views.dart';
-class InvoiceListView extends StatelessWidget {
+class InvoiceListView extends ConsumerWidget {
   const InvoiceListView({
     super.key,
     required this.invoices,
@@ -24,7 +26,13 @@ class InvoiceListView extends StatelessWidget {
   final ValueChanged<Invoice> onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // No `valueOrNull` in this project's Riverpod; an error/loading state
+    // degrades to "no badges" rather than an empty list.
+    final syncStates = ref.watch(invoiceSyncStatesProvider).maybeWhen(
+      data: (v) => v,
+      orElse: () => const <String, InvoiceSyncState>{},
+    );
     return RecordTable<Invoice>(
       items: invoices,
       onTap: onTap,
@@ -83,22 +91,35 @@ class InvoiceListView extends StatelessWidget {
         RecordColumn<Invoice>(
           label: 'الحالة',
           flex: 2,
-          cell: (context, invoice) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              StatusBadge(
-                label: invoice.status.label,
-                palette: badgeForStatus(invoice.status),
-              ),
-              if (invoice.ownership == InvoiceOwnership.consignment) ...[
-                const SizedBox(width: 4),
+          cell: (context, invoice) {
+            // Absence of a badge means fully synced, so only the states that
+            // still need attention are rendered.
+            final sync =
+                syncStates[invoice.id] ?? InvoiceSyncState.synced;
+            // `Wrap`, not a `Row`: this cell is `flex: 2` (~155px at 768, the
+            // narrowest the table layout ever gets) and an unsynced
+            // consignment invoice makes three badges. Wrap degrades to a
+            // second line; a `mainAxisSize.min` Row would throw
+            // RenderFlex overflow. Spacing is a multiple of 4 per DESIGN_SYSTEM.
+            return Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
                 StatusBadge(
-                  label: invoice.ownership.label,
-                  palette: badgeForOwnership(invoice.ownership),
+                  label: invoice.status.label,
+                  palette: badgeForStatus(invoice.status),
                 ),
+                if (invoice.ownership == InvoiceOwnership.consignment)
+                  StatusBadge(
+                    label: invoice.ownership.label,
+                    palette: badgeForOwnership(invoice.ownership),
+                  ),
+                if (sync != InvoiceSyncState.synced)
+                  StatusBadge(label: sync.label, palette: badgeForSync(sync)),
               ],
-            ],
-          ),
+            );
+          },
         ),
         RecordColumn<Invoice>(
           label: 'الإجمالي',
