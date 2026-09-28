@@ -1,15 +1,40 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../data/offline/local_store.dart';
+import '../../data/offline/offline_salary_repository.dart';
+import '../../data/offline/offline_write.dart';
 import '../../data/salaries/supabase_salary_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/salaries/salary_repository.dart';
+import 'accounts_providers.dart';
+import 'auth_providers.dart';
 import 'inventory_providers.dart';
 
 part 'salaries_providers.g.dart';
 
+/// Salary repository — offline reads (live-first with local fallbacks and
+/// unsynced-local merges) and, when a local store exists, local-first writes
+/// routed through [OfflineWriteCoordinator.addMovement] / [paySalary]. No
+/// local store (web/unauthenticated) means nothing can be queued, so writes
+/// fall back to the live RPCs — same shape as the sales/journals providers.
 @riverpod
-SalaryRepository salaryRepository(Ref ref) =>
-    SupabaseSalaryRepository(ref.watch(supabaseClientProvider));
+SalaryRepository salaryRepository(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  if (store == null || tenantId == null) {
+    return SupabaseSalaryRepository(ref.watch(supabaseClientProvider));
+  }
+  return OfflineSalaryRepository(
+    SupabaseSalaryRepository(ref.watch(supabaseClientProvider)),
+    store: store,
+    tenantId: tenantId,
+    coordinator: OfflineWriteCoordinator(
+      store,
+      tenantId,
+      () => ref.read(accountRepositoryProvider).chart(),
+    ),
+  );
+}
 
 /// Entitlement preview for one employee+month, recomputed after any write.
 @riverpod

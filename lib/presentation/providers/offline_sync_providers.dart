@@ -13,6 +13,7 @@ import 'offline_providers.dart' as offline;
 import 'products_providers.dart';
 import 'purchases_providers.dart';
 import 'report_providers.dart';
+import 'salaries_providers.dart';
 import 'sales_providers.dart';
 import 'statements_providers.dart';
 
@@ -34,7 +35,11 @@ import 'statements_providers.dart';
 /// accounting reports (ledger, trial balance, income statement, balance sheet)
 /// and the dashboard KPI envelope are all journal-derived, so a drained manual
 /// journal entry refreshes them; party statements are deliberately NOT here
-/// (a manual journal is not linked to a party).
+/// (a manual journal is not linked to a party). The salary history list is top
+/// level (non-family) and a drained salary payment marks its row synced, so it
+/// is invalidated too; the per-employee `salaryRun`/`employeeStatement`
+/// families cannot be drain-invalidated without keys and are instead refreshed
+/// by [SalaryActions] on each write.
 ///
 /// This is a refresh trigger only — it changes no business logic, and the
 /// `SaleInvoicesList`/`PurchaseInvoicesList`/debt/product/journal/report
@@ -54,6 +59,7 @@ void _refreshAfterDrain(Ref ref) {
   ref.invalidate(incomeStatementProvider);
   ref.invalidate(balanceSheetProvider);
   ref.invalidate(dashboardSummaryProvider);
+  ref.invalidate(salaryHistoryProvider);
 }
 
 /// Current signed-in tenant id (falls back to empty string so the flusher

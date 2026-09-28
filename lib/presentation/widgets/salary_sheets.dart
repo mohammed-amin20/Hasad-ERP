@@ -179,7 +179,9 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
           content: Text(
             result.duplicate
                 ? 'هذه الحركة مسجلة بالفعل'
-                : 'تم تسجيل الحركة — بمبلغ ${Money.format(result.amount)}',
+                : result.pending
+                    ? 'تم حفظ الحركة محليًا وستتم مزامنتها عند عودة الاتصال'
+                    : 'تم تسجيل الحركة — بمبلغ ${Money.format(result.amount)}',
           ),
         ),
       );
@@ -427,8 +429,10 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
           content: Text(
             result.duplicate
                 ? 'راتب هذا الشهر مسجل بالفعل'
-                : 'تم صرف الراتب — قيد ${result.entryNo}'
-                      '${result.arrearsCarried > 0 ? ' (متبقي ${Money.format(result.arrearsCarried)})' : ''}',
+                : result.pending
+                    ? 'تم حفظ عملية الصرف محليًا وستتم مزامنتها عند عودة الاتصال'
+                    : 'تم صرف الراتب — قيد ${result.entryNo}'
+                          '${result.arrearsCarried > 0 ? ' (متبقي ${Money.format(result.arrearsCarried)})' : ''}',
           ),
         ),
       );

@@ -8,9 +8,20 @@ part of 'salaries_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Salary repository — offline reads (live-first with local fallbacks and
+/// unsynced-local merges) and, when a local store exists, local-first writes
+/// routed through [OfflineWriteCoordinator.addMovement] / [paySalary]. No
+/// local store (web/unauthenticated) means nothing can be queued, so writes
+/// fall back to the live RPCs — same shape as the sales/journals providers.
 
 @ProviderFor(salaryRepository)
 final salaryRepositoryProvider = SalaryRepositoryProvider._();
+
+/// Salary repository — offline reads (live-first with local fallbacks and
+/// unsynced-local merges) and, when a local store exists, local-first writes
+/// routed through [OfflineWriteCoordinator.addMovement] / [paySalary]. No
+/// local store (web/unauthenticated) means nothing can be queued, so writes
+/// fall back to the live RPCs — same shape as the sales/journals providers.
 
 final class SalaryRepositoryProvider
     extends
@@ -20,6 +31,11 @@ final class SalaryRepositoryProvider
           SalaryRepository
         >
     with $Provider<SalaryRepository> {
+  /// Salary repository — offline reads (live-first with local fallbacks and
+  /// unsynced-local merges) and, when a local store exists, local-first writes
+  /// routed through [OfflineWriteCoordinator.addMovement] / [paySalary]. No
+  /// local store (web/unauthenticated) means nothing can be queued, so writes
+  /// fall back to the live RPCs — same shape as the sales/journals providers.
   SalaryRepositoryProvider._()
     : super(
         from: null,
@@ -53,7 +69,7 @@ final class SalaryRepositoryProvider
   }
 }
 
-String _$salaryRepositoryHash() => r'4abad2dce5eafeee4b9f368cee96dec11dc9d920';
+String _$salaryRepositoryHash() => r'43a4697a8bd97885ef7989ccabb651c0a9688f1c';
 
 /// Entitlement preview for one employee+month, recomputed after any write.
 

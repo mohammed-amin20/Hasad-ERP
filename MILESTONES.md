@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments + purchases + journal slices done**, remaining domains pending |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal + salaries slices done**; customers/suppliers/employees offline CRUD remain |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -384,6 +384,80 @@ once the badge is wanted app-wide.
 
 ---
 
+## ✅ M13 Phase 1B — salaries & employee movements slice (offline salary write path)
+
+**Delivered as the fourth slice of Phase 1B.** `pay_salary` and
+`add_employee_movement` are now local-first: the coordinator validates against
+the local chart/employee mirror, persists the mirror + queue leg + mirrored
+journal in **one drift transaction**, and returns a `pending` result
+immediately. Reads stay live-first with local fallbacks and unsynced merges, so
+an offline salary/movement shows up before it drains and survives restarts.
+
+**Delivered**
+
+- **`OfflineWriteCoordinator.paySalary` rewritten** (was network-first RPC):
+  - **Local duplicate-month guard first**: any local salary row for the same
+    employee+month (synced or not) → `ValidationException('تم صرف راتب هذا
+    الشهر مسبقاً')` — never enqueue a leg guaranteed to replay as a duplicate.
+    The server's own `salaries` rows are **not** mirrored by design, so the guard
+    covers only what this device ever wrote (documented non-goal).
+  - **Arabic account pre-validation** against the local chart for `2030` +
+    `5030` + (`1010` cash | `1015` bank): missing code →
+    `ValidationException('الحساب غير موجود في دليل الحسابات: $code')`. This
+    kills the English `StateError` that `DoubleEntryEngine._getAccount` would
+    otherwise leak on a never-online device (the balanced-journal loss falls to
+    the `_guard` mapping that only translated it).
+  - Local entitlement math (base − previous-month `max(base − paid, 0)` arrears,
+    `in`/`out` movements) mirrors the `get_employee_entitlement` RPC; one
+    `_store.transaction`: `upsertSalary` + `_mirrorJournal(store: tx)` + a
+    `pay_salary` leg with `dependsOn: _pendingLegIdsFor([employee.id])` computed
+    **before** the tx, enqueued with `store: tx`. Returns
+    `SalaryResult(..., pending: true)` — a throw in the final `enqueue` rolls
+    everything back (strategy proven by the earlier slices).
+- **`OfflineWriteCoordinator.addMovement` rewritten** the same way: `dependsOn:`
+  `_pendingLegIdsFor([employee.id, if (product != null) product.id])` resolved
+  before the tx; one transaction of `upsertEmployeeMovement` +
+  `_applyProducts(store: tx)` (stock deduction for `product` movements) + the
+  `add_employee_movement` leg with `store: tx`; missing employee →
+  `ValidationException('الموظف غير موجود محلياً')`.
+- **`OfflineSalaryRepository`** (`lib/data/offline/offline_salary_repository.dart`)
+  implements `SalaryRepository`: `addMovement`/`pay` route to the coordinator
+  (fall back to the live RPCs when no coordinator — web/unauthenticated);
+  `entitlement`/`employeeStatement` are live-first and fall back on
+  `NetworkException` to local mirror math via the domain's `buildEmployeeStatement`;
+  `salaryHistory` is live-first and **merges only `!synced`** local rows
+  (base salary from the employee mirror, date from `createdAt`), newest-first, and
+  serves local rows — else rethrows — on `NetworkException`.
+- **Wiring:** `salaryRepository` (`salaries_providers.dart`) returns the offline
+  repo with an `OfflineWriteCoordinator(store, tenantId, () => ref.read(
+  accountRepositoryProvider).chart())` when a store + tenant are present, else
+  falls back to `SupabaseSalaryRepository`.
+- **`_refreshAfterDrain` invalidates `salaryHistoryProvider`** (both flush paths),
+  so an offline-paid salary stops reading as a draft once the queue clears.
+  `salaryRun`/`employeeStatement` families are refreshed by `SalaryActions` on
+  write and cannot be drain-invalidated (deliberate).
+- **Pending-save SnackBars on the salary sheets.** Movement:
+  `'تم حفظ الحركة محليًا وستتم مزامنتها عند عودة الاتصال'`; pay:
+  `'تم حفظ عملية الصرف محليًا وستتم مزامنتها عند عودة الاتصال'` — shown only
+  when `result.pending`; online messages unchanged.
+- **No new migration** — `add_employee_movement` and `pay_salary` (0010) already
+  dedupe on `p_request_id`; both drafts already carry `requestId`. Zero SQL
+  added (`0025`'s "verify each new RPC" pass: verified green in the flush tests).
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub` **611/611**
+  (585 + 10 offline_write cases incl. Arabic account/missing-employee rejects and
+  rollback through `_ThrowOnEnqueueStore` + 9 repository tests incl. file-backed
+  restart persistence + 2 flush tests — dependency ordering after a pending
+  employee leg and nested duplicate-replay no-dup — + 4 widget message tests + 1
+  drain-invalidation test); `flutter build web --dart-define=use_arabic=true`
+  green; `flutter build apk --debug` green.
+
+**Sync badge for salaries/movements deliberately NOT delivered** — same decision
+as payments/purchases/journal: `queueLegsFor(entity: 'salaries')` /
+`entity: 'employee_movements'` are one provider each once the badge is wanted
+app-wide.
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -401,10 +475,11 @@ once the badge is wanted app-wide.
 
 **Must be built fresh**
 
-- Per-domain write wiring *not yet done*: customers, suppliers, employees,
-  salaries. (The **payments, purchases and journal slices of Phase 1B are
-  already delivered** — their exact transaction + dependency pattern is the
-  template to copy.)
+- Per-domain write wiring *not yet done*: customers, suppliers, employees
+  (master CRUD — the coordinator owns their table_crud legs already, so these
+  are lighter than the RPC slices). (The **payments, purchases, journal and
+  salaries slices of Phase 1B are already delivered** — their exact transaction
+  + dependency pattern is the template to copy.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
   own sync indicator if the badge is wanted app-wide.
@@ -413,7 +488,8 @@ once the badge is wanted app-wide.
   each new RPC for the "replay re-applies the effect" and "replay looks like a
   validation error" failure modes before shipping it. Payments needed no new
   migration — `0009` already dedupes `record_payment` (by `request_id`) and
-  `settle_supplier` (by `processed_requests`); copy that verification style for
+  `settle_supplier` (by `processed_requests`); the salaries slice verified
+  `0010`'s salary RPCs the same way (zero SQL); copy that verification style for
   the remaining domains.
 
 **Carry-forward rules (do not regress these)**
@@ -437,3 +513,4 @@ once the badge is wanted app-wide.
 | Phase 1B — payments write path | *(this checkpoint 4/4)* | none (driver `depends_on` reuse) | 541 → 555 | Payment sync badge out of scope; no new migration — `0009` already makes both payment RPCs idempotent |
 | Phase 1B — purchases write path | *(this checkpoint 5/5)* | none | 555 → 567 | Inline new products use `product_id` (client uuid), never `new_product`; `_enqueueWrite` gained `String? id` (fixes a phantom-`depends_on`); purchase sync badge out of scope; no new migration — `0008`/`0017`/`0018` already cover it |
 | Phase 1B — journal write path | *(this checkpoint 6/6)* | none | 567 → 585 | `createJournal` was dead code — rewired to validate against the local chart (missing account → Arabic `ValidationException`), one transaction with `dependsOn` on the account legs; journal list merges **manual-only** unsynced drafts |
+| Phase 1B — salaries write path | *(this checkpoint 7/7)* | none | 585 → 611 | `paySalary`/`addMovement` rewritten local-first (Arabic account + missing-employee rejects, local dup-month guard, one transaction, `dependsOn` on pending employee/product legs, rollback-proven); salary sync badge out of scope; no new migration — `0010` salary RPCs already idempotent; server salary rows deliberately NOT mirrored, so the dup-month guard only knows this device's own rows |

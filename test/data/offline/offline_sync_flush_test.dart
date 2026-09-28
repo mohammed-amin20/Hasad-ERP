@@ -9,6 +9,7 @@ import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
+import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
 
 /// Records every replay leg the flusher sends, so a test can assert the queue
@@ -676,6 +677,139 @@ void main() {
       expect(invoice.no, 'PUR-000077');
       expect(invoice.synced, isTrue);
       expect(await store.serverIdFor(tenantId, 'invoices', 'local-1'), 'sv-77');
+    });
+  });
+
+  group('offline salaries & movements flush', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+      await _seedMasterData(store, tenantId);
+    });
+
+    tearDown(() => db.close());
+
+    Future<void> seedEmployeeAndSalaryAccounts() async {
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a6', tenantId: tenantId, code: '2030', name: 'ذمم دائنة للرواتب',
+        type: 'liability', parentCode: null,
+      ));
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a8', tenantId: tenantId, code: '5030', name: 'أجور',
+        type: 'expense', parentCode: null,
+      ));
+      await store.upsertEmployee(LocalEmployeeRow(
+        id: 'e1', tenantId: tenantId, name: 'موظف', jobTitle: 'sales',
+        phone: null, baseSalary: 500000, createdAt: DateTime.utc(2026, 1, 1),
+        synced: false,
+      ));
+    }
+
+    test('a movement and a salary drain after a pending employee leg',
+        () async {
+      await seedEmployeeAndSalaryAccounts();
+      await store.enqueue(SyncQueueRow(
+        id: 'q-empl', tenantId: tenantId, rpc: 'table:employees',
+        op: 'table_crud', params: '{}', requestId: 'req-e',
+        entity: 'employees', localId: 'e1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1, 0, 0),
+        updatedAt: DateTime.utc(2026, 1, 1, 0, 0),
+      ));
+
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      await writer.addMovement(MovementDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        direction: 'out',
+        category: 'advance',
+        amount: 100000,
+      ));
+      await writer.paySalary(SalaryDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        paid: 400000,
+        method: 'cash',
+      ));
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.blocked, 0);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+
+      // The employee (a dependsOn of both legs) replays before the salary RPCs.
+      final employeeAt = target.calls.indexOf('tableUpsert:employees:e1');
+      expect(employeeAt, isNot(-1));
+      for (final rpc in ['rpc:add_employee_movement', 'rpc:pay_salary']) {
+        final at = target.calls.indexOf(rpc);
+        expect(at, greaterThan(employeeAt), reason: '$rpc must replay after the employee');
+      }
+      expect(await store.employeeMovements(tenantId), hasLength(1));
+      expect(await store.salaries(tenantId), hasLength(1));
+    });
+
+    test('a nested duplicate replay maps id and never duplicates mirror rows',
+        () async {
+      await seedEmployeeAndSalaryAccounts();
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final movement = await writer.addMovement(MovementDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        direction: 'out',
+        category: 'advance',
+        amount: 100000,
+      ));
+      final salary = await writer.paySalary(SalaryDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        paid: 400000,
+        method: 'cash',
+      ));
+      expect(await store.employeeMovements(tenantId), hasLength(1));
+      expect(await store.salaries(tenantId), hasLength(1));
+
+      // The server already committed both requests (timed-out originals), so it
+      // answers the nested duplicate envelopes with its stamped ids.
+      final flusher = SyncFlusher(
+        store,
+        tenantId,
+        _ShapedEnvelopeSyncTarget(envelopes: {
+          'add_employee_movement': <String, dynamic>{
+            'duplicate': true,
+            'movement': <String, dynamic>{'id': 'sv-mov', 'amount': 100000},
+          },
+          'pay_salary': <String, dynamic>{
+            'duplicate': true,
+            'salary': <String, dynamic>{'id': 'sv-sal'},
+          },
+        }),
+      );
+      expect((await flusher.flush()).synced, 2);
+      expect(await store.employeeMovements(tenantId), hasLength(1),
+          reason: 'a retried push must never create a second local movement');
+      expect(await store.salaries(tenantId), hasLength(1),
+          reason: 'a retried push must never create a second local salary');
+      expect(await store.pendingCount(tenantId), 0);
+      expect(
+        await store.serverIdFor(tenantId, 'employee_movements',
+            movement.movementId!),
+        'sv-mov',
+      );
+      expect(
+        await store.serverIdFor(tenantId, 'salaries', salary.salaryId!),
+        'sv-sal',
+      );
+
+      // Retry after success is a no-op.
+      expect((await flusher.flush()).synced, 0);
+      expect(await store.pendingCount(tenantId), 0);
     });
   });
 

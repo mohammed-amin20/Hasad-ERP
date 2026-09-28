@@ -867,6 +867,259 @@ void main() {
 
       expect((await store.pendingSync(tenant)).single.rpc, 'pay_salary');
     });
+
+    test('paySalary rejects a second payment for the same employee+month locally',
+        () async {
+      await seed();
+      await writer.paySalary(SalaryDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        paid: 400000,
+        method: 'cash',
+      ));
+      await expectLater(
+        writer.paySalary(SalaryDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          paid: 500000,
+          method: 'bank',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'تم صرف راتب هذا الشهر مسبقاً',
+        )),
+      );
+      expect((await store.pendingSync(tenant)).single.rpc, 'pay_salary');
+      expect(await store.salaries(tenant, employeeId: 'e1'), hasLength(1));
+    });
+
+    test('addMovement rejects a missing employee locally', () async {
+      await seed();
+      await expectLater(
+        writer.addMovement(MovementDraft(
+          employeeId: 'nope',
+          month: DateTime(2026, 9, 1),
+          direction: 'out',
+          category: 'advance',
+          amount: 1000,
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'الموظف غير موجود محلياً',
+        )),
+      );
+      expect(await store.pendingSync(tenant), isEmpty);
+      expect(await store.employeeMovements(tenant), isEmpty);
+    });
+
+    test('paySalary rejects a missing employee locally', () async {
+      await seed();
+      await expectLater(
+        writer.paySalary(SalaryDraft(
+          employeeId: 'nope',
+          month: DateTime(2026, 9, 1),
+          paid: 400000,
+          method: 'cash',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'الموظف غير موجود محلياً',
+        )),
+      );
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('paySalary rejects a missing chart code with an Arabic error',
+        () async {
+      final db2 = AppDatabase(NativeDatabase.memory());
+      addTearDown(() => db2.close());
+      final store2 = DriftLocalStore(db2);
+      Future<void> account(String id, String code, String type) =>
+          store2.upsertAccount(LocalAccountRow(
+            id: id, tenantId: tenant, code: code, name: code, type: type,
+            parentCode: null,
+          ));
+      await account('a1', '1010', 'asset');
+      await account('a2', '1015', 'asset');
+      await account('a8', '5030', 'expense');
+      // 2030 deliberately missing.
+      await store2.upsertEmployee(LocalEmployeeRow(
+        id: 'e1', tenantId: tenant, name: 'موظف', jobTitle: 'sales',
+        phone: null, baseSalary: 500000, createdAt: DateTime(2026, 1, 1),
+        synced: false,
+      ));
+      final w2 = OfflineWriteCoordinator(store2, tenant);
+
+      await expectLater(
+        w2.paySalary(SalaryDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          paid: 400000,
+          method: 'cash',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'الحساب غير موجود في دليل الحسابات: 2030',
+        )),
+      );
+      expect(await store2.pendingSync(tenant), isEmpty);
+      expect(await store2.salaries(tenant), isEmpty);
+      expect(await store2.journalEntries(tenant), isEmpty);
+    });
+
+    test('paySalary rejects a missing payment-method code with an Arabic error',
+        () async {
+      final db2 = AppDatabase(NativeDatabase.memory());
+      addTearDown(() => db2.close());
+      final store2 = DriftLocalStore(db2);
+      Future<void> account(String id, String code, String type) =>
+          store2.upsertAccount(LocalAccountRow(
+            id: id, tenantId: tenant, code: code, name: code, type: type,
+            parentCode: null,
+          ));
+      await account('a1', '1010', 'asset');
+      await account('a6', '2030', 'liability');
+      await account('a8', '5030', 'expense');
+      // 1015 (bank) deliberately missing.
+      await store2.upsertEmployee(LocalEmployeeRow(
+        id: 'e1', tenantId: tenant, name: 'موظف', jobTitle: 'sales',
+        phone: null, baseSalary: 500000, createdAt: DateTime(2026, 1, 1),
+        synced: false,
+      ));
+      final w2 = OfflineWriteCoordinator(store2, tenant);
+
+      await expectLater(
+        w2.paySalary(SalaryDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          paid: 400000,
+          method: 'bank',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'الحساب غير موجود في دليل الحسابات: 1015',
+        )),
+      );
+      expect(await store2.pendingSync(tenant), isEmpty);
+    });
+
+    test('addMovement rolls back everything when the enqueue throws',
+        () async {
+      await seed();
+      final poisoning = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoning.addMovement(MovementDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          direction: 'out',
+          category: 'product',
+          productId: 'p1',
+          qty: 5,
+        )),
+        throwsA(isA<AppException>()),
+      );
+      expect(await store.employeeMovements(tenant), isEmpty);
+      final qty = (await store.products(tenant)).firstWhere((r) => r.id == 'p1');
+      expect(qty.qty, 100, reason: 'stock move must roll back with the leg');
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('paySalary rolls back everything when the enqueue throws',
+        () async {
+      await seed();
+      final poisoning = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoning.paySalary(SalaryDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          paid: 400000,
+          method: 'cash',
+        )),
+        throwsA(isA<AppException>()),
+      );
+      expect(await store.salaries(tenant), isEmpty);
+      expect(await store.journalEntries(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('the movement leg depends on pending employee and product legs',
+        () async {
+      await seed();
+      await store.enqueue(SyncQueueRow(
+        id: 'q-empl', tenantId: tenant, rpc: 'table:employees',
+        op: 'table_crud', params: '{}', requestId: 'req-e',
+        entity: 'employees', localId: 'e1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+      ));
+      await store.enqueue(SyncQueueRow(
+        id: 'q-prod', tenantId: tenant, rpc: 'table:products',
+        op: 'table_crud', params: '{}', requestId: 'req-p',
+        entity: 'products', localId: 'p1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+      ));
+
+      final result = await writer.addMovement(MovementDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        direction: 'out',
+        category: 'product',
+        productId: 'p1',
+        qty: 1,
+      ));
+
+      final leg = (await store.pendingSync(tenant))
+          .firstWhere((l) => l.rpc == 'add_employee_movement');
+      expect(leg.localId, result.movementId);
+      final deps = jsonDecode(leg.dependsOn!) as List;
+      expect(deps, containsAll(['q-empl', 'q-prod']));
+    });
+
+    test('the salary leg depends on the pending employee leg', () async {
+      await seed();
+      await store.enqueue(SyncQueueRow(
+        id: 'q-empl', tenantId: tenant, rpc: 'table:employees',
+        op: 'table_crud', params: '{}', requestId: 'req-e',
+        entity: 'employees', localId: 'e1', status: 'pending', attempts: 0,
+        lastError: null, createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+      ));
+
+      await writer.paySalary(SalaryDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        paid: 400000,
+        method: 'cash',
+      ));
+
+      final leg =
+          (await store.pendingSync(tenant)).firstWhere((l) => l.rpc == 'pay_salary');
+      expect(leg.dependsOn, jsonEncode(['q-empl']));
+    });
+
+    test('no dependsOn when the employee is already on the server', () async {
+      await seed();
+      await writer.addMovement(MovementDraft(
+        employeeId: 'e1',
+        month: DateTime(2026, 9, 1),
+        direction: 'out',
+        category: 'advance',
+        amount: 1000,
+      ));
+      expect((await store.pendingSync(tenant)).single.dependsOn, isNull);
+    });
   });
 
   group('createJournal', () {

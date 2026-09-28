@@ -662,6 +662,11 @@ class OfflineWriteCoordinator {
 
   /// Queues an employee movement mirroring `add_employee_movement`
   /// (movements never journal; product deductions move stock by cost).
+  ///
+  /// Atomic like [writeSale]: the mirror row, the stock move and the queue leg
+  /// commit in ONE [LocalStore.transaction]. The movement names the employee
+  /// (and product for product deductions) it was built from, so the leg waits
+  /// on any of their still-pending master legs via [dependsOn] — never FIFO.
   Future<MovementResult> addMovement(MovementDraft draft) => _guard(() async {
         final employee = await _employee(draft.employeeId);
         final chart = await _chart();
@@ -687,31 +692,44 @@ class OfflineWriteCoordinator {
 
         final movementId = _uuid.v4();
         final month = firstOfMonth(draft.month);
-        await _store.upsertEmployeeMovement(
-          LocalEmployeeMovementRow(
-            id: movementId,
-            tenantId: _tenantId,
-            employeeId: draft.employeeId,
-            month: _monthKey(month),
-            direction: draft.direction,
-            category: draft.category,
-            amount: result.amount ?? 0,
-            date: date,
-            note: draft.description,
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
 
-        await _applyProducts(result.updatedEntities);
-        await _enqueueRpc(
-          rpc: 'add_employee_movement',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'employee_movements',
-          localId: movementId,
-        );
+        // Resolved BEFORE the transaction (a read, and the leg is written
+        // inside it): a movement on an employee/product created offline waits
+        // for their `table_crud` legs to create the rows on the server first.
+        final deps = await _pendingLegIdsFor([
+          employee.id,
+          if (product != null) product.id,
+        ]);
+
+        await _store.transaction((tx) async {
+          await tx.upsertEmployeeMovement(
+            LocalEmployeeMovementRow(
+              id: movementId,
+              tenantId: _tenantId,
+              employeeId: draft.employeeId,
+              month: _monthKey(month),
+              direction: draft.direction,
+              category: draft.category,
+              amount: result.amount ?? 0,
+              date: date,
+              note: draft.description,
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+
+          await _applyProducts(result.updatedEntities, tx);
+          await _enqueueRpc(
+            rpc: 'add_employee_movement',
+            params: draft.toJson(requestId: requestId),
+            requestId: requestId,
+            entity: 'employee_movements',
+            localId: movementId,
+            dependsOn: deps,
+            store: tx,
+          );
+        });
 
         return MovementResult(
           movementId: movementId,
@@ -722,15 +740,29 @@ class OfflineWriteCoordinator {
 
   /// Queues a salary payment mirroring `pay_salary` (arrears cleared at the
   /// top of the entry). The entitlement is recomputed from the local mirrors.
+  ///
+  /// Atomic like [addMovement]: the salary row, the mirrored journal entry and
+  /// the queue leg commit in ONE [LocalStore.transaction]. Two guards mirror
+  /// `0010` locally so a doomed leg is never queued: one payment per
+  /// employee+month (`'تم صرف راتب هذا الشهر مسبقاً'`), and every account the
+  /// entry needs (2030 / 5030 / 1010-or-1015) must resolve in the local chart
+  /// with a clear Arabic error instead of the engine's English `StateError`.
   Future<SalaryResult> paySalary(SalaryDraft draft) => _guard(() async {
         final employee = await _employee(draft.employeeId);
         final chart = await _chart();
 
         final targetMonth = firstOfMonth(draft.month);
+        final monthKey = _monthKey(targetMonth);
         final salaries = await _store.salaries(_tenantId,
             employeeId: draft.employeeId);
         final movements = await _store.employeeMovements(_tenantId,
             employeeId: draft.employeeId);
+
+        // 0010:280 — one salaries row per employee-month; a second pay for the
+        // same month is rejected server-side, so reject it before queueing.
+        if (salaries.any((s) => s.month == monthKey)) {
+          throw ValidationException('تم صرف راتب هذا الشهر مسبقاً');
+        }
 
         var arrears = 0;
         var entitlements = 0;
@@ -756,6 +788,21 @@ class OfflineWriteCoordinator {
         final netDue = employee.baseSalary + arrears + entitlements -
             deductions;
 
+        // 0010:312-318 — required chart codes. Pre-validated here so the user
+        // gets the Arabic message; `DoubleEntryEngine._getAccount` would throw
+        // `StateError` in English otherwise.
+        for (final code in [
+          '2030',
+          '5030',
+          draft.method == 'cash' ? '1010' : '1015',
+        ]) {
+          if (!chart.containsKey(code)) {
+            throw ValidationException(
+              'الحساب غير موجود في دليل الحسابات: $code',
+            );
+          }
+        }
+
         final requestId = _uuid.v4();
         final date = draft.date ?? DateTime.now();
         final result = DoubleEntryEngine.paySalary(
@@ -772,28 +819,39 @@ class OfflineWriteCoordinator {
         );
 
         final salaryId = _uuid.v4();
-        await _store.upsertSalary(
-          LocalSalaryRow(
-            id: salaryId,
-            tenantId: _tenantId,
-            employeeId: draft.employeeId,
-            month: _monthKey(targetMonth),
-            paid: draft.paid,
-            netDue: netDue,
-            requestId: requestId,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
 
-        await _mirrorJournal(result.journalEntry, requestId: requestId);
-        await _enqueueRpc(
-          rpc: 'pay_salary',
-          params: draft.toJson(requestId: requestId),
-          requestId: requestId,
-          entity: 'salaries',
-          localId: salaryId,
-        );
+        // The salary names the employee row it was built from; a pending
+        // `table_crud` leg for that employee is a server-side prerequisite.
+        // Resolved BEFORE the transaction (a read).
+        final deps = await _pendingLegIdsFor([employee.id]);
+
+        await _store.transaction((tx) async {
+          await tx.upsertSalary(
+            LocalSalaryRow(
+              id: salaryId,
+              tenantId: _tenantId,
+              employeeId: draft.employeeId,
+              month: monthKey,
+              paid: draft.paid,
+              netDue: netDue,
+              requestId: requestId,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+
+          await _mirrorJournal(result.journalEntry,
+              requestId: requestId, store: tx);
+          await _enqueueRpc(
+            rpc: 'pay_salary',
+            params: draft.toJson(requestId: requestId),
+            requestId: requestId,
+            entity: 'salaries',
+            localId: salaryId,
+            dependsOn: deps,
+            store: tx,
+          );
+        });
 
         return SalaryResult(
           salaryId: salaryId,
