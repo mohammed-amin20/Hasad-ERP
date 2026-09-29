@@ -171,6 +171,17 @@ class DelegatingLocalStore implements LocalStore {
   }) => inner.queueLegsFor(tenantId, entity: entity);
 
   @override
+  Future<Set<String>> pendingDeleteIds(String tenantId, String entity) =>
+      inner.pendingDeleteIds(tenantId, entity);
+
+  @override
+  Future<void> removeMirrorRows(
+    String tenantId,
+    String entity,
+    List<String> ids,
+  ) => inner.removeMirrorRows(tenantId, entity, ids);
+
+  @override
   Future<T> transaction<T>(Future<T> Function(LocalStore store) action) =>
       // `this`, not `inner`: a subclass override (e.g. a poisoned `enqueue`)
       // must stay enlisted in the caller's transaction.

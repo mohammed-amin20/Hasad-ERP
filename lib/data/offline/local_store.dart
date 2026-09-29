@@ -120,6 +120,28 @@ abstract class LocalStore {
   Future<List<SyncQueueRow>> pendingSync(String tenantId);
   Future<int> pendingCount(String tenantId);
 
+  /// Ids of the master rows for [entity] whose delete has been written locally
+  /// but has not reached the server yet: the ids of `table_crud` legs that are
+  /// still `'pending'` and carry a delete-shape `params` (`{'id': …}` with no
+  /// `row`).
+  ///
+  /// A repository must hide these rows from reads so a deleted record cannot
+  /// keep showing (or be resurrected by a background refresh that predates the
+  /// delete) before the flusher drains it. When the delete eventually parks
+  /// `failed`, the id drops out of this set and the row becomes visible again —
+  /// “still available locally” while the delete is retryable.
+  Future<Set<String>> pendingDeleteIds(String tenantId, String entity);
+
+  /// Physically removes the mirrored master rows [ids] of [entity] for
+  /// [tenantId]. Called by the flusher once a `table_crud` delete leg has been
+  /// acknowledged server-side, so the local mirror stops showing a record the
+  /// server no longer has. Unknown ids / entities are no-ops.
+  Future<void> removeMirrorRows(
+    String tenantId,
+    String entity,
+    List<String> ids,
+  );
+
   /// Status of every queued leg for [tenantId], keyed by leg id — including
   /// `failed` legs, which [pendingSync] omits. Used by the flusher to resolve
   /// `dependsOn` prerequisites without re-querying per leg.
@@ -379,6 +401,17 @@ class NullLocalStore implements LocalStore {
     String tenantId, {
     String? entity,
   }) async => const [];
+
+  @override
+  Future<Set<String>> pendingDeleteIds(String tenantId, String entity) async =>
+      const {};
+
+  @override
+  Future<void> removeMirrorRows(
+    String tenantId,
+    String entity,
+    List<String> ids,
+  ) async {}
 
   @override
   Future<T> transaction<T>(Future<T> Function(LocalStore store) action) =>
@@ -836,6 +869,58 @@ class DriftLocalStore implements LocalStore {
       )
       ..orderBy([(r) => OrderingTerm.asc(r.createdAt)]);
     return query.get();
+  }
+
+  @override
+  Future<Set<String>> pendingDeleteIds(String tenantId, String entity) async {
+    final legs = await queueLegsFor(tenantId, entity: entity);
+    final hidden = <String>{};
+    for (final leg in legs) {
+      if (leg.op != 'table_crud' || leg.status != 'pending') continue;
+      final localId = leg.localId;
+      if (localId == null) continue;
+      final params =
+          leg.params == '' ? <String, dynamic>{} : jsonDecode(leg.params) as Map<String, dynamic>;
+      // Delete-shape legs hold a bare `{'id': …}` (no `row`); an upsert-leg
+      // row must keep showing until the flusher re-marks it synced.
+      if (params.containsKey('id') && !params.containsKey('row')) {
+        hidden.add(localId);
+      }
+    }
+    return hidden;
+  }
+
+  @override
+  Future<void> removeMirrorRows(
+    String tenantId,
+    String entity,
+    List<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    switch (entity) {
+      case 'customers':
+        await (_db.delete(_db.localCustomers)
+              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
+            .go();
+        break;
+      case 'suppliers':
+        await (_db.delete(_db.localSuppliers)
+              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
+            .go();
+        break;
+      case 'products':
+        await (_db.delete(_db.localProducts)
+              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
+            .go();
+        break;
+      case 'employees':
+        await (_db.delete(_db.localEmployees)
+              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
+            .go();
+        break;
+      default:
+        break;
+    }
   }
 
   @override

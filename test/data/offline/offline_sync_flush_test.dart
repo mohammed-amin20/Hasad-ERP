@@ -5,8 +5,12 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
+import 'package:hasad_erp/data/offline/offline_customer_repository.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
+import 'package:hasad_erp/domain/customers/customer.dart';
+import 'package:hasad_erp/domain/customers/customer_draft.dart';
+import 'package:hasad_erp/domain/customers/customer_repository.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
@@ -1109,6 +1113,252 @@ void main() {
       expect(resolveServerId('invoices', <String, dynamic>{}), isNull);
     });
   });
+
+  group('customers table_crud lifecycle', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+      await _seedMasterData(store, tenantId);
+    });
+
+    tearDown(() => db.close());
+
+    test('a customer create replays before the sale that references it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      final sale = await writer.writeSale(SaleInvoiceDraft(
+        customerId: customer.id,
+        lines: [SaleLineDraft(productId: 'p1', qty: 2, price: 10000)],
+        date: DateTime.utc(2026, 9, 9),
+        paid: 20000,
+        paymentMethod: 'cash',
+      ));
+      expect(sale.pending, isTrue);
+      expect(await store.pendingCount(tenantId), 2);
+
+      final customerLeg =
+          (await store.queueLegsFor(tenantId, entity: 'customers')).single;
+      expect(customerLeg.localId, customer.id);
+      final saleLegs = await store.queueLegsFor(tenantId, entity: 'invoices');
+      expect(jsonDecode(saleLegs.single.dependsOn!), [customerLeg.id],
+          reason: 'the sale must depend on the customer leg, not its id');
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+
+      final customerAt =
+          target.calls.indexOf('tableUpsert:customers:${customer.id}');
+      expect(customerAt, isNot(-1));
+      final saleAt = target.calls.indexOf('rpc:create_sale_invoice');
+      expect(saleAt, greaterThan(customerAt),
+          reason: 'the sale must replay only after its customer leg drained');
+    });
+
+    test('a create-update-delete series drains in order and deletes the mirror',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      await writer.updateCustomer(customer.id, const CustomerDraft(name: 'محدث'));
+      await writer.deleteCustomer(customer.id);
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+
+      // The server lost the row: the flush drops the mirror, clears the
+      // pending-delete filter, and local reads no longer see the customer.
+      expect(
+        target.calls,
+        contains('tableDelete:customers:${customer.id}'),
+      );
+      final remaining = await store.customers(tenantId);
+      expect(remaining.map((r) => r.id), ['c1'],
+          reason: 'only the seeded c1 survives after the replayed delete');
+      expect(await store.pendingDeleteIds(tenantId, 'customers'), isEmpty);
+    });
+
+    test('a failed delete keeps the row locally and un-suppresses it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      await writer.deleteCustomer(customer.id);
+      expect(await store.pendingDeleteIds(tenantId, 'customers'), {customer.id});
+
+      // Park the delete on its next failure so a single flush both replays the
+      // create and parks the delete as failed. kSyncMaxAttempts is 5, so a leg
+      // at attempts 4 that fails once crosses the budget and is parked.
+      final delLeg = (await store.pendingSync(tenantId)).last;
+      await store.requeueRetry(delLeg.id, 'x', 4);
+
+      final summary =
+          await SyncFlusher(store, tenantId, _ThrowingDeleteSyncTarget()).flush();
+      expect(summary.failed, 1);
+
+      // The delete is FAILED, not pending: the mirror keeps the row and reads
+      // show the customer again (requirement #9).
+      expect(await store.pendingDeleteIds(tenantId, 'customers'), isEmpty,
+          reason: 'a FAILED delete must not suppress the row');
+      expect(
+        (await store.customers(tenantId)).map((r) => r.id),
+        containsAll(['c1', customer.id]),
+        reason: 'the mirror keeps the row after a failed delete',
+      );
+
+      final repo = OfflineCustomerRepository(
+        _NoCustomersRepository(),
+        store: store,
+        tenantId: tenantId,
+      );
+      final visible = await repo.listAll();
+      expect(visible.map((c) => c.id), containsAll(['c1', customer.id]),
+          reason: 'the customer is locally visible again');
+    });
+
+    test('a refresh never resurrects a row whose delete is still pending',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      await writer.deleteCustomer(customer.id);
+
+      // A refresh delivers the same customer (the server still has it): it
+      // must not undo the pending delete.
+      await store.mirrorCustomers(tenantId, [
+        LocalCustomerRow(
+          id: customer.id,
+          tenantId: tenantId,
+          name: 'عميل',
+          phone: '0599111222',
+          notes: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      expect(await store.pendingDeleteIds(tenantId, 'customers'), {customer.id},
+          reason: 'the delete leg survives the refresh');
+      final rows = await store.customers(tenantId);
+      expect(rows.map((r) => r.id), containsAll(['c1', customer.id]),
+          reason: 'the refresh must not undo the pending delete');
+    });
+
+    test('a refresh does not revert a pending edit', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      await writer.updateCustomer(customer.id, const CustomerDraft(name: 'محدث'));
+
+      await store.mirrorCustomers(tenantId, [
+        LocalCustomerRow(
+          id: customer.id,
+          tenantId: tenantId,
+          name: 'الاسم القديم من الخادم',
+          phone: '0599111222',
+          notes: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      final rows = await store.customers(tenantId);
+      final mine = rows.singleWhere((r) => r.id == customer.id);
+      expect(mine.name, 'محدث',
+          reason: 'a stale server copy must not revert the pending edit');
+    });
+
+    test('replayed table_crud legs are idempotent on the mirror', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      final target = _RecordingSyncTarget();
+      final flusher = SyncFlusher(store, tenantId, target);
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.customers(tenantId)).where((r) => r.id == customer.id),
+        hasLength(1),
+        reason: 'the create leg keeps exactly one mirror row',
+      );
+
+      // A retried push (e.g. a lost response) upserts the same row again: no
+      // second mirror row, no duplicate mapping.
+      await store.enqueue(SyncQueueRow(
+        id: 'again',
+        tenantId: tenantId,
+        rpc: 'table:customers',
+        op: 'table_crud',
+        params: jsonEncode({'name': customer.name, 'phone': customer.phone}),
+        requestId: 'req-again',
+        entity: 'customers',
+        localId: customer.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 2),
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.customers(tenantId)).where((r) => r.id == customer.id),
+        hasLength(1),
+        reason: 'a replayed upsert must not duplicate the mirror row',
+      );
+
+      // Same for the delete: replaying it twice is a harmless no-op — the
+      // first replay removed the mirror, the second removes nothing.
+      await writer.deleteCustomer(customer.id);
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.customers(tenantId)).where((r) => r.id == customer.id),
+        isEmpty,
+        reason: 'the replayed delete removes the mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'del-again',
+        tenantId: tenantId,
+        rpc: 'table:customers',
+        op: 'table_crud',
+        params: jsonEncode({'id': customer.id}),
+        requestId: 'req-del-again',
+        entity: 'customers',
+        localId: customer.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 3),
+        updatedAt: DateTime.utc(2026, 1, 3),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.customers(tenantId)).where((r) => r.id == customer.id),
+        isEmpty,
+        reason: 'a replayed delete is still a no-op on the mirror',
+      );
+    });
+  });
 }
 
 Future<void> _seedMasterData(DriftLocalStore store, String tenantId) async {
@@ -1472,4 +1722,41 @@ Future<bool> _syncedFlag(
     default:
       fail('unhandled entity $entity');
   }
+}
+
+/// Rejects every table delete, so a customer delete leg parks `failed` and the
+/// mirror row must survive (requirement #9: a failed sync keeps local data).
+class _ThrowingDeleteSyncTarget extends _RecordingSyncTarget {
+  @override
+  Future<void> tableDelete(String entity, String id) async {
+    calls.add('tableDelete:$entity:$id');
+    throw StateError('server refused the delete');
+  }
+}
+
+/// An online repository that serves nothing: used as the background-refresh
+/// source for a mirror read that must resolve purely from the local store.
+class _NoCustomersRepository implements CustomerRepository {
+  @override
+  Future<List<Customer>> listAll({String? search}) async => const [];
+
+  @override
+  Future<Customer?> getById(String id) async => null;
+
+  @override
+  Future<Customer> create(CustomerDraft draft) async => Customer(
+        id: 'unused',
+        name: draft.name,
+        phone: draft.phone,
+        notes: draft.notes,
+      );
+
+  @override
+  Future<void> update({
+    required String id,
+    required CustomerDraft draft,
+  }) async {}
+
+  @override
+  Future<void> delete(String id) async {}
 }

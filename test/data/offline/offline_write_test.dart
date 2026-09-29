@@ -8,6 +8,7 @@ import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
 import 'package:hasad_erp/domain/accounts/account.dart' as ch;
+import 'package:hasad_erp/domain/customers/customer_draft.dart';
 import 'package:hasad_erp/domain/employees/employee_draft.dart';
 import 'package:hasad_erp/domain/invoices/invoice.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
@@ -1622,6 +1623,168 @@ void main() {
       // Exactly the two real rows: the baseline was not injected.
       expect(accounts, hasLength(2));
       expect(accounts.map((a) => a.id), everyElement(startsWith('server-')));
+    });
+  });
+
+  group('customers master writes (table_crud)', () {
+    test('writeCustomer mirrors synced:false and enqueues one table_crud leg',
+        () async {
+      final customer = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل جديد', phone: '0599000111'),
+      );
+
+      final rows = await store.customers(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, customer.id);
+      expect(rows.single.synced, isFalse);
+      expect(rows.single.name, 'عميل جديد');
+      expect(rows.single.phone, '0599000111');
+      expect(rows.single.createdAt, isNotNull);
+      expect(customer.name, 'عميل جديد');
+      expect(customer.createdAt, isNotNull);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(1));
+      final leg = legs.single;
+      expect(leg.op, 'table_crud');
+      expect(leg.rpc, 'table:customers');
+      expect(leg.entity, 'customers');
+      expect(leg.localId, customer.id);
+      expect(leg.dependsOn, isNull);
+      final params = jsonDecode(leg.params) as Map<String, dynamic>;
+      expect(params, containsPair('name', 'عميل جديد'));
+      expect(params, containsPair('phone', '0599000111'));
+    });
+
+    test('updateCustomer preserves createdAt and enqueues an update leg',
+        () async {
+      final created = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      final createdAt = (await store.customers(tenant)).single.createdAt;
+
+      await writer.updateCustomer(
+        created.id,
+        const CustomerDraft(name: 'عميل محدث', notes: 'ملاحظة'),
+      );
+
+      final rows = await store.customers(tenant);
+      expect(rows, hasLength(1));
+      final row = rows.single;
+      expect(row.name, 'عميل محدث');
+      expect(row.notes, 'ملاحظة');
+      expect(row.phone, isNull, reason: 'the update replaces the whole shape');
+      expect(row.createdAt, createdAt,
+          reason: 'an update must never re-stamp createdAt');
+      expect(row.synced, isFalse);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final update = legs.last;
+      final params = jsonDecode(update.params) as Map<String, dynamic>;
+      expect(params, containsPair('id', created.id));
+      expect(params['row'], containsPair('name', 'عميل محدث'));
+      expect(params['row'], containsPair('notes', 'ملاحظة'));
+    });
+
+    test('deleteCustomer hides the mirror and enqueues a delete leg', () async {
+      final created = await writer.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+
+      await writer.deleteCustomer(created.id);
+
+      // The mirror row survives (flipped unsynced) so a refresh can never
+      // resurrect a server row the delete has not drained yet...
+      final rows = await store.customers(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.synced, isFalse);
+      // ...but pendingDeleteIds hides it from local reads meanwhile.
+      expect(await store.pendingDeleteIds(tenant, 'customers'), {created.id});
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final del = legs.last;
+      expect(del.op, 'table_crud');
+      expect(del.rpc, 'table:customers');
+      expect(del.localId, created.id);
+      expect(jsonDecode(del.params), containsPair('id', created.id));
+      // The delete replays only after the pending create on the same customer.
+      expect(jsonDecode(del.dependsOn!), [legs.first.id]);
+    });
+
+    test('deleteCustomer rejects an unknown local customer', () async {
+      await expectLater(
+        writer.deleteCustomer('ghost'),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+
+    test('writeCustomer rolls back the mirror when the enqueue throws',
+        () async {
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.writeCustomer(const CustomerDraft(name: 'عميل')),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.customers(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('deleteCustomer rolls back the mirror flip when the enqueue throws',
+        () async {
+      await writer.writeCustomer(const CustomerDraft(name: 'عميل'));
+      final before = (await store.customers(tenant)).single.synced;
+
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.deleteCustomer((await store.customers(tenant)).single.id),
+        throwsA(isA<ValidationException>()),
+      );
+      // Neither a delete leg nor a synced flip survives the failed tx.
+      expect((await store.customers(tenant)).single.synced, before);
+      expect(await store.pendingSync(tenant), hasLength(1),
+          reason: 'only the original create leg remains');
+    });
+
+    test('an offline customer create survives a restart (file-backed)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('customer_offline');
+      final file = File('${dir.path}/test.db');
+
+      final db1 = AppDatabase(NativeDatabase(file));
+      final s1 = DriftLocalStore(db1);
+      final c1 = OfflineWriteCoordinator(s1, tenant);
+
+      final created = await c1.writeCustomer(
+        const CustomerDraft(name: 'عميل', phone: '0599111222'),
+      );
+      await c1.updateCustomer(
+        created.id,
+        const CustomerDraft(name: 'عميل محدث'),
+      );
+      await c1.deleteCustomer(created.id);
+      await db1.close();
+
+      final db2 = AppDatabase(NativeDatabase(file));
+      final s2 = DriftLocalStore(db2);
+      try {
+        final rows = await s2.customers(tenant);
+        expect(rows, hasLength(1));
+        expect(rows.single.id, created.id);
+        expect(rows.single.name, 'عميل محدث');
+        expect(rows.single.synced, isFalse);
+        expect(await s2.pendingDeleteIds(tenant, 'customers'), {created.id});
+        expect(await s2.pendingSync(tenant), hasLength(3));
+      } finally {
+        await db2.close();
+      }
     });
   });
 }

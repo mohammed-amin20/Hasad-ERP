@@ -5,17 +5,35 @@ import '../../domain/customers/customer_repository.dart';
 import 'local_database.dart';
 import 'local_store.dart';
 import 'offline_reads.dart';
+import 'offline_write.dart';
 
 /// [CustomerRepository] that serves the live Supabase repository while online
 /// (mirroring every read into the local store) and reads the mirror offline.
 ///
-/// Writes always go to Supabase; offline-driven writes are Slice C.
+/// Writes route through [coordinator] when one is wired (local-first:
+/// mirror + queue, so every write is pending until the flusher drains it) and
+/// fall back to the inner repository otherwise.
 class OfflineCustomerRepository implements CustomerRepository {
-  OfflineCustomerRepository(this._inner, {required this.store, required this.tenantId});
+  OfflineCustomerRepository(
+    this._inner, {
+    required this.store,
+    required this.tenantId,
+    this.coordinator,
+  });
 
   final CustomerRepository _inner;
   final LocalStore? store;
   final String? tenantId;
+
+  /// When present, create/update/delete are local-first ([OfflineWriteCoordinator]);
+  /// when null they go to Supabase.
+  final OfflineWriteCoordinator? coordinator;
+
+  /// True when writes are local-first: a coordinator is wired, so every write
+  /// is mirrored + queued — and therefore pending until [SyncFlusher] drains
+  /// it. The UI reads this to show offline pending messages instead of online
+  /// confirmations.
+  bool get writesAreLocalFirst => coordinator != null;
 
   @override
   Future<List<Customer>> listAll({String? search}) async {
@@ -56,17 +74,26 @@ class OfflineCustomerRepository implements CustomerRepository {
 
   @override
   Future<Customer> create(CustomerDraft draft) async {
+    final c = coordinator;
+    if (c != null) return c.writeCustomer(draft);
     final customer = await _inner.create(draft);
     await _upsertLocal(customer);
     return customer;
   }
 
   @override
-  Future<void> update({required String id, required CustomerDraft draft}) =>
-      _inner.update(id: id, draft: draft);
+  Future<void> update({required String id, required CustomerDraft draft}) async {
+    final c = coordinator;
+    if (c != null) return c.updateCustomer(id, draft);
+    return _inner.update(id: id, draft: draft);
+  }
 
   @override
-  Future<void> delete(String id) => _inner.delete(id);
+  Future<void> delete(String id) async {
+    final c = coordinator;
+    if (c != null) return c.deleteCustomer(id);
+    return _inner.delete(id);
+  }
 
   Future<void> _mirrorList(List<Customer> customers) async {
     final s = store;
@@ -79,7 +106,14 @@ class OfflineCustomerRepository implements CustomerRepository {
     final s = store;
     final t = tenantId;
     if (s == null || t == null) throw const NetworkException();
-    return [for (final r in await s.customers(t)) _fromRow(r)];
+    // Pending deletes are hidden from reads: the delete is queued but not on
+    // the server yet. When the delete parks `failed` the id drops out and the
+    // record becomes visible again.
+    final hidden = await s.pendingDeleteIds(t, 'customers');
+    return [
+      for (final r in await s.customers(t))
+        if (!hidden.contains(r.id)) _fromRow(r),
+    ];
   }
 
   Future<void> _upsertLocal(Customer customer) async {

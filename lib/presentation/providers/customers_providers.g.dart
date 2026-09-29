@@ -9,13 +9,17 @@ part of 'customers_providers.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 /// Concrete customer repository — offline-first (mirrors while online,
-/// serves the local mirror when offline).
+/// serves the local mirror when offline). Writes route through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else fall back to Supabase.
 
 @ProviderFor(customerRepository)
 final customerRepositoryProvider = CustomerRepositoryProvider._();
 
 /// Concrete customer repository — offline-first (mirrors while online,
-/// serves the local mirror when offline).
+/// serves the local mirror when offline). Writes route through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else fall back to Supabase.
 
 final class CustomerRepositoryProvider
     extends
@@ -26,7 +30,9 @@ final class CustomerRepositoryProvider
         >
     with $Provider<CustomerRepository> {
   /// Concrete customer repository — offline-first (mirrors while online,
-  /// serves the local mirror when offline).
+  /// serves the local mirror when offline). Writes route through an
+  /// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+  /// queued for replay), else fall back to Supabase.
   CustomerRepositoryProvider._()
     : super(
         from: null,
@@ -62,7 +68,60 @@ final class CustomerRepositoryProvider
 }
 
 String _$customerRepositoryHash() =>
-    r'76a8463aad8543e64c2729447ec780e5f50a4eb1';
+    r'f2a20cc0f9e47bdc5e7fb2f50facd4a72ba84d01';
+
+/// True when customer writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+@ProviderFor(customerWritesLocalFirst)
+final customerWritesLocalFirstProvider = CustomerWritesLocalFirstProvider._();
+
+/// True when customer writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+final class CustomerWritesLocalFirstProvider
+    extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// True when customer writes are local-first (a local store + tenant exist, so
+  /// create/update/delete are mirrored and queued). The UI reads this to show
+  /// offline pending messages instead of online confirmations.
+  CustomerWritesLocalFirstProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'customerWritesLocalFirstProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$customerWritesLocalFirstHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return customerWritesLocalFirst(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$customerWritesLocalFirstHash() =>
+    r'ca7cff6dd2b466761bbe728289f65790d35da91a';
 
 /// Current search term for the customer list (reactive).
 

@@ -198,10 +198,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               await notifier.updateCustomer(id: customer.id, draft: draft);
             }
             if (context.mounted) Navigator.of(context).pop();
+            final offline = ref.read(customerWritesLocalFirstProvider);
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  customer == null ? 'تمت إضافة العميل' : 'تم تعديل العميل',
+                  offline
+                      ? (customer == null
+                          ? 'تم حفظ العميل محليًا وستتم مزامنته عند عودة الاتصال'
+                          : 'تم حفظ تعديلات العميل محليًا وستتم مزامنتها عند عودة الاتصال')
+                      : (customer == null
+                          ? 'تمت إضافة العميل'
+                          : 'تم تعديل العميل'),
                 ),
               ),
             );
@@ -376,8 +383,15 @@ void _confirmDelete(BuildContext context, Customer customer) {
               await container
                   .read(customersListProvider.notifier)
                   .delete(customer.id);
+              final offline = container.read(customerWritesLocalFirstProvider);
               messenger.showSnackBar(
-                const SnackBar(content: Text('تم حذف العميل')),
+                SnackBar(
+                  content: Text(
+                    offline
+                        ? 'تم حذف العميل محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'
+                        : 'تم حذف العميل',
+                  ),
+                ),
               );
             } on Object catch (error) {
               messenger.showSnackBar(

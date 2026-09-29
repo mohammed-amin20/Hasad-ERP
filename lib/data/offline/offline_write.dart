@@ -960,7 +960,9 @@ class OfflineWriteCoordinator {
   // -------------------------------------------------------------------------
 
   /// Mirrors a customer create locally (synced:false) and enqueues a
-  /// `table_crud` upsert for replay. Returns the customer directly.
+  /// `table_crud` upsert for replay — ATOMICALLY with the mirror row, so a
+  /// crash can never leave an orphan row the queue cannot reach. Returns the
+  /// customer directly.
   Future<Customer> writeCustomer(CustomerDraft draft) => _guard(() async {
         final requestId = _uuid.v4();
         final customer = Customer(
@@ -970,67 +972,101 @@ class OfflineWriteCoordinator {
           notes: draft.notes,
           createdAt: DateTime.now(),
         );
-        await _store.upsertCustomer(
-          LocalCustomerRow(
-            id: customer.id,
-            tenantId: _tenantId,
-            name: customer.name,
-            phone: customer.phone,
-            notes: customer.notes,
-            synced: false,
-            createdAt: customer.createdAt!,
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:customers',
-          params: customer.toJson(),
-          requestId: requestId,
-          entity: 'customers',
-          localId: requestId,
-          op: 'table_crud',
-        );
+        await _store.transaction((tx) async {
+          await tx.upsertCustomer(
+            LocalCustomerRow(
+              id: customer.id,
+              tenantId: _tenantId,
+              name: customer.name,
+              phone: customer.phone,
+              notes: customer.notes,
+              synced: false,
+              createdAt: customer.createdAt!,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:customers',
+            params: customer.toJson(),
+            requestId: requestId,
+            entity: 'customers',
+            localId: requestId,
+            op: 'table_crud',
+            store: tx,
+          );
+        });
         return customer;
       });
 
-  /// Rewires customer update through the coordinator: mirrors the updated row
-  /// (synced:false) and enqueues a `table_crud` update for replay.
+  /// Rewires customer update through the coordinator: reuses the existing
+  /// mirror row's `createdAt` (an update must never stamp a new creation date)
+  /// and enqueues a `table_crud` update for replay — atomically with the
+  /// updated mirror row.
   Future<void> updateCustomer(
     String id,
     CustomerDraft draft,
   ) =>
       _guard(() async {
-        await _store.upsertCustomer(
-          LocalCustomerRow(
-            id: id,
-            tenantId: _tenantId,
-            name: draft.name,
-            phone: draft.phone,
-            notes: draft.notes,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:customers',
-          params: {'id': id, 'row': draft.toJson()},
-          requestId: _uuid.v4(),
-          entity: 'customers',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _customerRow(id);
+        await _store.transaction((tx) async {
+          await tx.upsertCustomer(
+            LocalCustomerRow(
+              id: id,
+              tenantId: _tenantId,
+              name: draft.name,
+              phone: draft.phone,
+              notes: draft.notes,
+              synced: false,
+              createdAt: existing?.createdAt ?? DateTime.now(),
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:customers',
+            params: {'id': id, 'row': draft.toJson()},
+            requestId: _uuid.v4(),
+            entity: 'customers',
+            localId: id,
+            op: 'table_crud',
+            store: tx,
+          );
+        });
       });
 
-  /// Rewires customer delete through the coordinator: mirrors removal and
-  /// enqueues a `table_crud` delete for replay.
+  /// Rewires customer delete through the coordinator: keeps the mirror row
+  /// (flipped `synced:false` so a background refresh can never resurrect a
+  /// server row the delete has not drained yet), hides it from local reads via
+  /// the queue-leg-derived [LocalStore.pendingDeleteIds], and enqueues a
+  /// `table_crud` delete that replays only after any pending create/update on
+  /// the same customer. The row is physically removed once the delete is
+  /// acknowledged (flusher → [LocalStore.removeMirrorRows]).
   Future<void> deleteCustomer(String id) => _guard(() async {
-        await _enqueueWrite(
-          rpc: 'table:customers',
-          params: {'id': id},
-          requestId: _uuid.v4(),
-          entity: 'customers',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _customerRow(id);
+        if (existing == null) {
+          throw ValidationException('العميل غير موجود محلياً');
+        }
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertCustomer(
+            LocalCustomerRow(
+              id: id,
+              tenantId: _tenantId,
+              name: existing.name,
+              phone: existing.phone,
+              notes: existing.notes,
+              synced: false,
+              createdAt: existing.createdAt,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:customers',
+            params: {'id': id},
+            requestId: _uuid.v4(),
+            entity: 'customers',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
   /// Mirrors a supplier create locally (synced:false) and enqueues a
@@ -1327,6 +1363,7 @@ class OfflineWriteCoordinator {
     String? entity,
     String? localId,
     required String op,
+    List<String>? dependsOn,
     LocalStore? store,
   }) async {
     await (store ?? _store).enqueue(
@@ -1344,6 +1381,9 @@ class OfflineWriteCoordinator {
         lastError: null,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        dependsOn: dependsOn == null || dependsOn.isEmpty
+            ? null
+            : jsonEncode(dependsOn),
       ),
     );
   }
@@ -1547,6 +1587,13 @@ class OfflineWriteCoordinator {
       throw ValidationException('المنتج غير موجود محلياً');
     }
     return _productFromRow(row);
+  }
+
+  Future<LocalCustomerRow?> _customerRow(String id) async {
+    for (final r in await _store.customers(_tenantId)) {
+      if (r.id == id) return r;
+    }
+    return null;
   }
 
   Future<Customer> _customer(String id) async {

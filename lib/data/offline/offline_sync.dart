@@ -257,7 +257,13 @@ class SyncFlusher {
         case 'table_crud':
           final entity = row.rpc.replaceFirst('table:', '');
           if (params.containsKey('id') && !params.containsKey('row')) {
-            await target.tableDelete(entity, params['id'] as String);
+            final id = params['id'] as String;
+            await target.tableDelete(entity, id);
+            // The server no longer has the row (or never will — deletes are
+            // idempotent). Drop it from the mirror so local reads stop showing
+            // a record the server already dropped. The delete leg itself is
+            // marked synced by the caller's markSynced.
+            await store.removeMirrorRows(row.tenantId, entity, [id]);
           } else {
             final rowParams = params['row'] as Map<String, dynamic>? ?? params;
             final saved = await target.tableUpsert(entity, row.localId!, rowParams);

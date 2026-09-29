@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal + salaries slices done**; customers/suppliers/employees offline CRUD remain |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal + salaries + customers slices done**; suppliers/employees master CRUD remain |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -458,6 +458,63 @@ app-wide.
 
 ---
 
+## ⏳ M13 Phase 1B — customers master CRUD write path (offline)
+
+**Delivered as the fifth slice of Phase 1B.** Customer create/update/delete are
+now local-first, copying the purchases/salaries transaction pattern.
+
+- **`OfflineWriteCoordinator.writeCustomer/updateCustomer/deleteCustomer`** are
+  each one `_store.transaction(...)`: the mirror upsert + a `table_crud` leg
+  (`_enqueueWrite` already gained `dependsOn:`/`store:` in earlier slices) commit
+  or roll back together. `updateCustomer` preserves `createdAt`; `deleteCustomer`
+  validates the row exists (`ValidationException` otherwise), **keeps the mirror
+  row** with `synced: false`, and enqueues a **delete-shape** leg
+  (`params: {'id': id}` — no `row`) whose `dependsOn` references every *pending*
+  same-id leg, so the delete never sorts before its own create/update.
+- **Delete = server hard-delete, surfaced offline via two new `LocalStore`
+  methods:**
+  - `pendingDeleteIds(tenantId, entity)` — the set of local ids with a
+    **`status == 'pending'` delete-shape leg** (`op == 'table_crud'`,
+    `params` has `id` and **no** `row`). Reads hide exactly these rows.
+  - `removeMirrorRows(tenantId, entity, ids)` — deletes the mirror rows after the
+    flusher's `tableDelete` succeeds (customers/suppliers/products/employees;
+    `NullLocalStore` is a no-op). `markReplaySynced` must NOT be reached for a
+    delete — the flusher's delete branch returns before it, so the mirror row
+    stays until the server confirms, and is then removed by `removeMirrorRows`.
+  - **A FAILED delete relaxes the filter (requirement #9):** only *pending*
+    deletes suppress. Once the leg is parked `failed` the mirror row reads again
+    locally (`leg.attempts >= kSyncMaxAttempts = 5` parks it), and the reconnect
+    flush retries it.
+- **Fresh-vs-replay mapping for the delete leg is the `{'id': id}` shape, and
+  the flusher recognizes it by `containsKey('id') && !containsKey('row')`.**
+  An upsert leg's `row` key is what keeps the row showing until the flusher
+  re-marks it synced.
+- **`OfflineCustomerRepository`** (`lib/data/offline/offline_customer_repository.dart`)
+  took an optional `coordinator:` + `writesAreLocalFirst` getter; `create`/
+  `update`/`delete` route to the coordinator when present, else to the inner
+  repo. Reads hide pending-delete ids in `_readAll`/getById. `customersRepository`
+  (`customers_providers.dart`) builds it with a coordinator when store + tenant
+  are present, else falls back to the Supabase repo.
+- **The SnackBars branch on a new boolean `customerWritesLocalFirstProvider`**
+  (codegen'd, overridable with `overrideWithValue(bool)`): create → `'تم حفظ
+  العميل محليًا وستتم مزامنته عند عودة الاتصال'`, update → `'تم حفظ تعديلات
+  العميل محليًا وستتم مزامنتها عند عودة الاتصال'`, delete → `'تم حذف العميل
+  محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'`. The FAB tooltip
+  `'إضافة عميل'` triggers the same sheet as before.
+- **No new migration:** master `table_crud` legs replay against
+  `.from('customers')` directly (the `0017` trigger stamps `tenant_id`); there is
+  no customer write RPC to make idempotent.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub`
+  **634/634** (611 + 7 master-writes + 6 repository + 6 flush + 4 widget);
+  `flutter build web --dart-define=use_arabic=true` green;
+  `flutter build apk --debug` green.
+- **Follow-up (later Phase 1B slices):** suppliers + employees master CRUD are
+  the same lighter-weight pattern (their `table_crud` legs already exist) — the
+  customers slice is the template. Customer sync badge still deferred (same
+  `queueLegsFor(entity: 'customers')` approach as invoices).
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -475,11 +532,14 @@ app-wide.
 
 **Must be built fresh**
 
-- Per-domain write wiring *not yet done*: customers, suppliers, employees
-  (master CRUD — the coordinator owns their table_crud legs already, so these
-  are lighter than the RPC slices). (The **payments, purchases, journal and
-  salaries slices of Phase 1B are already delivered** — their exact transaction
-  + dependency pattern is the template to copy.)
+- Per-domain write wiring *not yet done*: **suppliers, employees** (master
+  CRUD — the coordinator owns their table_crud legs already, so these are
+  lighter than the RPC slices). (The **payments, purchases, journal, salaries
+  and customers slices of Phase 1B are already delivered** — their exact
+  transaction + dependency pattern is the template to copy; the customers slice
+  also ships the hard-delete surface: `pendingDeleteIds` suppresses reads,
+  `removeMirrorRows` clears the mirror only after a confirmed `tableDelete`, and
+  a FAILED delete relaxes the filter.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
   own sync indicator if the badge is wanted app-wide.
@@ -514,3 +574,4 @@ app-wide.
 | Phase 1B — purchases write path | *(this checkpoint 5/5)* | none | 555 → 567 | Inline new products use `product_id` (client uuid), never `new_product`; `_enqueueWrite` gained `String? id` (fixes a phantom-`depends_on`); purchase sync badge out of scope; no new migration — `0008`/`0017`/`0018` already cover it |
 | Phase 1B — journal write path | *(this checkpoint 6/6)* | none | 567 → 585 | `createJournal` was dead code — rewired to validate against the local chart (missing account → Arabic `ValidationException`), one transaction with `dependsOn` on the account legs; journal list merges **manual-only** unsynced drafts |
 | Phase 1B — salaries write path | *(this checkpoint 7/7)* | none | 585 → 611 | `paySalary`/`addMovement` rewritten local-first (Arabic account + missing-employee rejects, local dup-month guard, one transaction, `dependsOn` on pending employee/product legs, rollback-proven); salary sync badge out of scope; no new migration — `0010` salary RPCs already idempotent; server salary rows deliberately NOT mirrored, so the dup-month guard only knows this device's own rows |
+| Phase 1B — customers master CRUD | *(this checkpoint 8/8)* | drift: none (schema unchanged) | 611 → 634 | First **hard-delete** offline domain: `pendingDeleteIds` (+`removeMirrorRows`) on `LocalStore`, delete-shape table_crud leg `{'id': id}`, FAILED delete relaxes the read filter; `OfflineCustomerRepository` gained an optional `coordinator:`; SnackBars branch on `customerWritesLocalFirstProvider`; no new migration — `0017` already stamps the customers mirror insert |
