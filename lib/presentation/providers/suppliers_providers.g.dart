@@ -59,7 +59,60 @@ final class SupplierRepositoryProvider
 }
 
 String _$supplierRepositoryHash() =>
-    r'613519713afdf2c4f35e222ded0b8476595e806c';
+    r'f41e269962eb443188e0b514365a59b1409a7baf';
+
+/// True when supplier writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+@ProviderFor(supplierWritesLocalFirst)
+final supplierWritesLocalFirstProvider = SupplierWritesLocalFirstProvider._();
+
+/// True when supplier writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+final class SupplierWritesLocalFirstProvider
+    extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// True when supplier writes are local-first (a local store + tenant exist, so
+  /// create/update/delete are mirrored and queued). The UI reads this to show
+  /// offline pending messages instead of online confirmations.
+  SupplierWritesLocalFirstProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'supplierWritesLocalFirstProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$supplierWritesLocalFirstHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return supplierWritesLocalFirst(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$supplierWritesLocalFirstHash() =>
+    r'2e64cfc1834fc75dba24e1dcd997f8367f8eb81c';
 
 /// Current search term for the supplier list (reactive).
 

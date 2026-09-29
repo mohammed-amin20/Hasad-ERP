@@ -6,15 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_customer_repository.dart';
+import 'package:hasad_erp/data/offline/offline_supplier_repository.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
 import 'package:hasad_erp/domain/customers/customer.dart';
 import 'package:hasad_erp/domain/customers/customer_draft.dart';
 import 'package:hasad_erp/domain/customers/customer_repository.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
+import 'package:hasad_erp/domain/payments/payment_repository.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
+import 'package:hasad_erp/domain/suppliers/supplier.dart';
+import 'package:hasad_erp/domain/suppliers/supplier_draft.dart';
+import 'package:hasad_erp/domain/suppliers/supplier_repository.dart';
 
 /// Records every replay leg the flusher sends, so a test can assert the queue
 /// is drained exactly once (replay-safe by construction).
@@ -1359,6 +1364,289 @@ void main() {
       );
     });
   });
+
+  group('suppliers table_crud lifecycle', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+      await _seedMasterData(store, tenantId);
+      // The settlement path pays a purchase through 2010 (AP) — the shared
+      // seed only covers cash/full-pay sales and purchases.
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a5',
+        tenantId: tenantId,
+        code: '2010',
+        name: 'ذمم دائنة',
+        type: 'liability',
+        parentCode: null,
+      ));
+    });
+
+    tearDown(() => db.close());
+
+    test('a supplier create replays before the purchase that references it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      final purchase = await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: supplier.id,
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 2, price: 6000)],
+        date: DateTime.utc(2026, 9, 9),
+        paid: 12000,
+        paymentMethod: 'cash',
+      ));
+      expect(purchase.pending, isTrue);
+      expect(await store.pendingCount(tenantId), 2);
+
+      final supplierLeg =
+          (await store.queueLegsFor(tenantId, entity: 'suppliers')).single;
+      expect(supplierLeg.localId, supplier.id);
+      final purchaseLegs =
+          await store.queueLegsFor(tenantId, entity: 'invoices');
+      expect(jsonDecode(purchaseLegs.single.dependsOn!), [supplierLeg.id],
+          reason: 'the purchase must depend on the supplier leg, not its id');
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(target.calls, contains('tableUpsert:suppliers:${supplier.id}'));
+      expect(target.calls, contains('rpc:create_purchase_invoice'));
+      expect(
+        target.calls.indexOf('rpc:create_purchase_invoice'),
+        greaterThan(target.calls.indexOf('tableUpsert:suppliers:${supplier.id}')),
+        reason: 'the purchase must replay only after its supplier leg drained',
+      );
+    });
+
+    test('a supplier create replays before the settlement paying its invoices',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      await writer.writePurchase(PurchaseInvoiceDraft(
+        supplierId: supplier.id,
+        lines: [PurchaseLineDraft(productId: 'p1', qty: 2, price: 6000)],
+        date: DateTime.utc(2026, 9, 9),
+        paid: 0,
+      ));
+      await writer.settleSupplier(SettlementDraft(
+        supplierId: supplier.id,
+        amount: 12000,
+        method: 'cash',
+        date: DateTime.utc(2026, 9, 10),
+      ));
+      expect(await store.pendingCount(tenantId), 3,
+          reason: 'supplier + purchase + settlement legs');
+
+      final summary = await SyncFlusher(store, tenantId, _RecordingSyncTarget())
+          .flush();
+
+      expect(summary.synced, 3);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+    });
+
+    test('a create-update-delete series drains in order and deletes the mirror',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      await writer.updateSupplier(
+        supplier.id,
+        const SupplierDraft(name: 'محدث', dealType: SupplierDealType.direct),
+      );
+      await writer.deleteSupplier(supplier.id);
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(target.calls, contains('tableDelete:suppliers:${supplier.id}'));
+
+      final remaining = await store.suppliers(tenantId);
+      expect(remaining.map((r) => r.id), ['s1'],
+          reason: 'only the seeded s1 survives after the replayed delete');
+      expect(await store.pendingDeleteIds(tenantId, 'suppliers'), isEmpty);
+    });
+
+    test('a failed delete keeps the row locally and un-suppresses it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      await writer.deleteSupplier(supplier.id);
+      expect(
+        await store.pendingDeleteIds(tenantId, 'suppliers'),
+        {supplier.id},
+      );
+
+      final delLeg = (await store.pendingSync(tenantId)).last;
+      await store.requeueRetry(delLeg.id, 'server refused the delete', 4);
+
+      final summary =
+          await SyncFlusher(store, tenantId, _ThrowingDeleteSyncTarget()).flush();
+      expect(summary.failed, 1);
+
+      expect(await store.pendingDeleteIds(tenantId, 'suppliers'), isEmpty,
+          reason: 'a FAILED delete must not suppress the row');
+      expect(
+        (await store.suppliers(tenantId)).map((r) => r.id),
+        containsAll(['s1', supplier.id]),
+        reason: 'the mirror keeps the row after a failed delete',
+      );
+
+      final repo = OfflineSupplierRepository(
+        _NoSuppliersRepository(),
+        store: store,
+        tenantId: tenantId,
+      );
+      final visible = await repo.listAll();
+      expect(visible.map((s) => s.id), containsAll(['s1', supplier.id]),
+          reason: 'the supplier is locally visible again');
+    });
+
+    test('a refresh never resurrects a row whose delete is still pending',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      await writer.deleteSupplier(supplier.id);
+
+      await store.mirrorSuppliers(tenantId, [
+        LocalSupplierRow(
+          id: supplier.id,
+          tenantId: tenantId,
+          name: 'مورد',
+          phone: '0599111222',
+          notes: null,
+          dealType: 'direct',
+          commissionRate: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      expect(await store.pendingDeleteIds(tenantId, 'suppliers'), {supplier.id},
+          reason: 'the delete leg survives the refresh');
+      final rows = await store.suppliers(tenantId);
+      expect(rows.map((r) => r.id), containsAll(['s1', supplier.id]),
+          reason: 'the refresh must not undo the pending delete');
+    });
+
+    test('a refresh does not revert a pending edit', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      await writer.updateSupplier(
+        supplier.id,
+        const SupplierDraft(name: 'محدث', dealType: SupplierDealType.direct),
+      );
+
+      await store.mirrorSuppliers(tenantId, [
+        LocalSupplierRow(
+          id: supplier.id,
+          tenantId: tenantId,
+          name: 'الاسم القديم من الخادم',
+          phone: '0599111222',
+          notes: null,
+          dealType: 'direct',
+          commissionRate: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      final rows = await store.suppliers(tenantId);
+      final mine = rows.singleWhere((r) => r.id == supplier.id);
+      expect(mine.name, 'محدث',
+          reason: 'a stale server copy must not revert the pending edit');
+    });
+
+    test('replayed table_crud legs are idempotent on the mirror', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final supplier = await writer.writeSupplier(
+        const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct),
+      );
+      final flusher = SyncFlusher(store, tenantId, _RecordingSyncTarget());
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.suppliers(tenantId)).where((r) => r.id == supplier.id),
+        hasLength(1),
+        reason: 'the create leg keeps exactly one mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'again',
+        tenantId: tenantId,
+        rpc: 'table:suppliers',
+        op: 'table_crud',
+        params: jsonEncode({'name': supplier.name, 'phone': supplier.phone}),
+        requestId: 'req-again',
+        entity: 'suppliers',
+        localId: supplier.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 2),
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.suppliers(tenantId)).where((r) => r.id == supplier.id),
+        hasLength(1),
+        reason: 'a replayed upsert must not duplicate the mirror row',
+      );
+
+      await writer.deleteSupplier(supplier.id);
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.suppliers(tenantId)).where((r) => r.id == supplier.id),
+        isEmpty,
+        reason: 'the replayed delete removes the mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'del-again',
+        tenantId: tenantId,
+        rpc: 'table:suppliers',
+        op: 'table_crud',
+        params: jsonEncode({'id': supplier.id}),
+        requestId: 'req-del-again',
+        entity: 'suppliers',
+        localId: supplier.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 3),
+        updatedAt: DateTime.utc(2026, 1, 3),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.suppliers(tenantId)).where((r) => r.id == supplier.id),
+        isEmpty,
+        reason: 'a replayed delete is still a no-op on the mirror',
+      );
+    });
+  });
 }
 
 Future<void> _seedMasterData(DriftLocalStore store, String tenantId) async {
@@ -1755,6 +2043,37 @@ class _NoCustomersRepository implements CustomerRepository {
   Future<void> update({
     required String id,
     required CustomerDraft draft,
+  }) async {}
+
+  @override
+  Future<void> delete(String id) async {}
+}
+
+/// An online repository that serves nothing: used as the background-refresh
+/// source for a supplier mirror read that must resolve purely from the local
+/// store (a failed-delete supplier read after the flush).
+class _NoSuppliersRepository implements SupplierRepository {
+  @override
+  Future<List<Supplier>> listAll({String? search}) async => const [];
+
+  @override
+  Future<Supplier?> getById(String id) async => null;
+
+  @override
+  Future<Supplier> create(SupplierDraft draft) async => Supplier(
+        id: 'unused',
+        name: draft.name,
+        phone: draft.phone,
+        notes: draft.notes,
+        dealType: draft.dealType,
+        commissionRate: draft.commissionRate,
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+
+  @override
+  Future<void> update({
+    required String id,
+    required SupplierDraft draft,
   }) async {}
 
   @override

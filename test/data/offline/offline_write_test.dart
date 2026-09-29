@@ -18,6 +18,8 @@ import 'package:hasad_erp/domain/products/product_draft.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
+import 'package:hasad_erp/domain/suppliers/supplier.dart';
+import 'package:hasad_erp/domain/suppliers/supplier_draft.dart';
 
 import 'delegating_local_store.dart';
 
@@ -1781,6 +1783,227 @@ void main() {
         expect(rows.single.name, 'عميل محدث');
         expect(rows.single.synced, isFalse);
         expect(await s2.pendingDeleteIds(tenant, 'customers'), {created.id});
+        expect(await s2.pendingSync(tenant), hasLength(3));
+      } finally {
+        await db2.close();
+      }
+    });
+  });
+
+  group('suppliers master writes (table_crud)', () {
+    test('writeSupplier mirrors synced:false and enqueues one table_crud leg',
+        () async {
+      final supplier = await writer.writeSupplier(const SupplierDraft(
+        name: 'مورد جديد',
+        phone: '0599000111',
+        dealType: SupplierDealType.commission,
+        commissionRate: 20,
+      ));
+
+      final rows = await store.suppliers(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, supplier.id);
+      expect(rows.single.synced, isFalse);
+      expect(rows.single.name, 'مورد جديد');
+      expect(rows.single.phone, '0599000111');
+      expect(rows.single.commissionRate, 20,
+          reason: 'the mirror must keep the commission rate');
+      expect(rows.single.createdAt, isNotNull);
+      expect(supplier.name, 'مورد جديد');
+      expect(supplier.commissionRate, 20,
+          reason: 'the returned supplier must keep the commission rate');
+      expect(supplier.createdAt, isNotNull);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(1));
+      final leg = legs.single;
+      expect(leg.op, 'table_crud');
+      expect(leg.rpc, 'table:suppliers');
+      expect(leg.entity, 'suppliers');
+      expect(leg.localId, supplier.id);
+      expect(leg.dependsOn, isNull);
+      final params = jsonDecode(leg.params) as Map<String, dynamic>;
+      expect(params, containsPair('name', 'مورد جديد'));
+      expect(params, containsPair('phone', '0599000111'));
+      expect(params, containsPair('commission_rate', 20));
+    });
+
+    test('updateSupplier preserves createdAt and enqueues an update leg',
+        () async {
+      final created = await writer
+          .writeSupplier(const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct));
+      final createdAt = (await store.suppliers(tenant)).single.createdAt;
+
+      await writer.updateSupplier(
+        created.id,
+        const SupplierDraft(name: 'مورد محدث', notes: 'ملاحظة', dealType: SupplierDealType.direct),
+      );
+
+      final rows = await store.suppliers(tenant);
+      expect(rows, hasLength(1));
+      final row = rows.single;
+      expect(row.name, 'مورد محدث');
+      expect(row.notes, 'ملاحظة');
+      expect(row.phone, isNull, reason: 'the update replaces the whole shape');
+      expect(row.createdAt, createdAt,
+          reason: 'an update must never re-stamp createdAt');
+      expect(row.synced, isFalse);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final update = legs.last;
+      final params = jsonDecode(update.params) as Map<String, dynamic>;
+      expect(params, containsPair('id', created.id));
+      expect(params['row'], containsPair('name', 'مورد محدث'));
+      expect(params['row'], containsPair('notes', 'ملاحظة'));
+      expect(jsonDecode(update.dependsOn!), [legs.first.id],
+          reason: 'the update must wait for the pending create leg');
+    });
+
+    test('deleteSupplier hides the mirror and enqueues a delete leg', () async {
+      final created = await writer
+          .writeSupplier(const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct));
+
+      await writer.deleteSupplier(created.id);
+
+      // The mirror row survives (flipped unsynced) so a refresh can never
+      // resurrect a server row the delete has not drained yet...
+      final rows = await store.suppliers(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.synced, isFalse);
+      // ...but pendingDeleteIds hides it from local reads meanwhile.
+      expect(await store.pendingDeleteIds(tenant, 'suppliers'), {created.id});
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final del = legs.last;
+      expect(del.op, 'table_crud');
+      expect(del.rpc, 'table:suppliers');
+      expect(del.localId, created.id);
+      expect(jsonDecode(del.params), containsPair('id', created.id));
+      // The delete replays only after the pending create on the same supplier.
+      expect(jsonDecode(del.dependsOn!), [legs.first.id]);
+    });
+
+    test('deleteSupplier rejects an unknown local supplier', () async {
+      await expectLater(
+        writer.deleteSupplier('ghost'),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+
+    test('deleteSupplier rejects a supplier referenced by a local product',
+        () async {
+      final created = await writer
+          .writeSupplier(const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct));
+      await store.upsertProduct(LocalProductRow(
+        id: 'p-x',
+        tenantId: tenant,
+        name: 'منتج',
+        barcode: null,
+        unit: 'قطعة',
+        unitType: 'count',
+        salePrice: 10000,
+        purchasePrice: 6000,
+        qty: 1,
+        reorderLevel: 0,
+        supplierId: created.id,
+        commissionRate: null,
+        createdAt: DateTime(2026, 1, 1),
+        synced: false,
+      ));
+
+      await expectLater(
+        writer.deleteSupplier(created.id),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.pendingDeleteIds(tenant, 'suppliers'), isEmpty,
+          reason: 'no delete leg is queued for a referenced supplier');
+    });
+
+    test('deleteSupplier rejects a supplier referenced by a local commission due',
+        () async {
+      final created = await writer
+          .writeSupplier(const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct));
+      await store.upsertCommissionDue(LocalCommissionDueRow(
+        id: 'due-1',
+        tenantId: tenant,
+        invoiceId: 'pi-1',
+        productId: 'p1',
+        supplierId: created.id,
+        dueAmount: 15000,
+        status: 'pending',
+        createdAt: DateTime(2026, 8, 10),
+      ));
+
+      await expectLater(
+        writer.deleteSupplier(created.id),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.pendingDeleteIds(tenant, 'suppliers'), isEmpty,
+          reason: 'no delete leg is queued for a referenced supplier');
+    });
+
+    test('writeSupplier rolls back the mirror when the enqueue throws',
+        () async {
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.writeSupplier(const SupplierDraft(name: 'مورد', dealType: SupplierDealType.direct)),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.suppliers(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('deleteSupplier rolls back the mirror flip when the enqueue throws',
+        () async {
+      await writer.writeSupplier(const SupplierDraft(name: 'مورد', dealType: SupplierDealType.direct));
+      final before = (await store.suppliers(tenant)).single.synced;
+
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.deleteSupplier((await store.suppliers(tenant)).single.id),
+        throwsA(isA<ValidationException>()),
+      );
+      // Neither a delete leg nor a synced flip survives the failed tx.
+      expect((await store.suppliers(tenant)).single.synced, before);
+      expect(await store.pendingSync(tenant), hasLength(1),
+          reason: 'only the original create leg remains');
+    });
+
+    test('an offline supplier create survives a restart (file-backed)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('supplier_offline');
+      final file = File('${dir.path}/test.db');
+
+      final db1 = AppDatabase(NativeDatabase(file));
+      final s1 = DriftLocalStore(db1);
+      final c1 = OfflineWriteCoordinator(s1, tenant);
+
+      final created = await c1
+          .writeSupplier(const SupplierDraft(name: 'مورد', phone: '0599111222', dealType: SupplierDealType.direct));
+      await c1.updateSupplier(
+        created.id,
+        const SupplierDraft(name: 'مورد محدث', dealType: SupplierDealType.direct),
+      );
+      await c1.deleteSupplier(created.id);
+      await db1.close();
+
+      final db2 = AppDatabase(NativeDatabase(file));
+      final s2 = DriftLocalStore(db2);
+      try {
+        final rows = await s2.suppliers(tenant);
+        expect(rows, hasLength(1));
+        expect(rows.single.id, created.id);
+        expect(rows.single.name, 'مورد محدث');
+        expect(rows.single.synced, isFalse);
+        expect(await s2.pendingDeleteIds(tenant, 'suppliers'), {created.id});
         expect(await s2.pendingSync(tenant), hasLength(3));
       } finally {
         await db2.close();

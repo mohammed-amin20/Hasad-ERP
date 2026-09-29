@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/offline/local_store.dart';
 import '../../data/offline/offline_supplier_repository.dart';
+import '../../data/offline/offline_write.dart';
 import '../../data/supabase_client.dart';
 import '../../data/suppliers/supabase_supplier_repository.dart';
 import '../../domain/suppliers/supplier.dart';
@@ -13,11 +14,28 @@ part 'suppliers_providers.g.dart';
 
 /// Concrete supplier repository — offline-first.
 @riverpod
-SupplierRepository supplierRepository(Ref ref) => OfflineSupplierRepository(
-      SupabaseSupplierRepository(ref.watch(supabaseClientProvider)),
-      store: ref.watch(localStoreProvider).value,
-      tenantId: ref.watch(authStateProvider).value?.tenantId,
-    );
+SupplierRepository supplierRepository(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return OfflineSupplierRepository(
+    SupabaseSupplierRepository(ref.watch(supabaseClientProvider)),
+    store: store,
+    tenantId: tenantId,
+    coordinator: (store == null || tenantId == null)
+        ? null
+        : OfflineWriteCoordinator(store, tenantId),
+  );
+}
+
+/// True when supplier writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+@riverpod
+bool supplierWritesLocalFirst(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return store != null && tenantId != null;
+}
 
 /// Current search term for the supplier list (reactive).
 @riverpod

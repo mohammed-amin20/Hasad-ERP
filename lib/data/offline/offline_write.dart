@@ -1070,7 +1070,9 @@ class OfflineWriteCoordinator {
       });
 
   /// Mirrors a supplier create locally (synced:false) and enqueues a
-  /// `table_crud` upsert for replay. Returns the supplier directly.
+  /// `table_crud` upsert for replay — ATOMICALLY with the mirror row, so a
+  /// crash can never leave an orphan row the queue cannot reach. Returns the
+  /// supplier directly.
   Future<Supplier> writeSupplier(SupplierDraft draft) => _guard(() async {
         final requestId = _uuid.v4();
         final supplier = Supplier(
@@ -1079,66 +1081,127 @@ class OfflineWriteCoordinator {
           dealType: draft.dealType,
           phone: draft.phone,
           notes: draft.notes,
+          commissionRate: draft.commissionRate,
           createdAt: DateTime.now(),
         );
-        await _store.upsertSupplier(
-          LocalSupplierRow(
-            id: supplier.id,
-            tenantId: _tenantId,
-            name: supplier.name,
-            dealType: supplier.dealType.dbValue,
-            phone: supplier.phone,
-            notes: supplier.notes,
-            synced: false,
-            createdAt: supplier.createdAt!,
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:suppliers',
-          params: draft.toJson(),
-          requestId: requestId,
-          entity: 'suppliers',
-          localId: requestId,
-          op: 'table_crud',
-        );
+        await _store.transaction((tx) async {
+          await tx.upsertSupplier(
+            LocalSupplierRow(
+              id: supplier.id,
+              tenantId: _tenantId,
+              name: supplier.name,
+              dealType: supplier.dealType.dbValue,
+              phone: supplier.phone,
+              notes: supplier.notes,
+              commissionRate: supplier.commissionRate,
+              synced: false,
+              createdAt: supplier.createdAt!,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:suppliers',
+            params: draft.toJson(),
+            requestId: requestId,
+            entity: 'suppliers',
+            localId: requestId,
+            op: 'table_crud',
+            store: tx,
+          );
+        });
         return supplier;
       });
 
-  /// Rewires supplier update through the coordinator.
+  /// Rewires supplier update through the coordinator: reuses the existing
+  /// mirror row's `createdAt` (an update must never stamp a new creation date),
+  /// and enqueues a `table_crud` update that replays only after any pending
+  /// create/update on the same supplier — atomically with the updated mirror
+  /// row.
   Future<void> updateSupplier(String id, SupplierDraft draft) =>
       _guard(() async {
-        await _store.upsertSupplier(
-          LocalSupplierRow(
-            id: id,
-            tenantId: _tenantId,
-            name: draft.name,
-            dealType: draft.dealType.dbValue,
-            phone: draft.phone,
-            notes: draft.notes,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:suppliers',
-          params: {'id': id, 'row': draft.toJson()},
-          requestId: _uuid.v4(),
-          entity: 'suppliers',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _supplierRow(id);
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertSupplier(
+            LocalSupplierRow(
+              id: id,
+              tenantId: _tenantId,
+              name: draft.name,
+              dealType: draft.dealType.dbValue,
+              phone: draft.phone,
+              notes: draft.notes,
+              commissionRate: draft.commissionRate,
+              synced: false,
+              createdAt: existing?.createdAt ?? DateTime.now(),
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:suppliers',
+            params: {'id': id, 'row': draft.toJson()},
+            requestId: _uuid.v4(),
+            entity: 'suppliers',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
-  /// Rewires supplier delete through the coordinator.
+  /// Rewires supplier delete through the coordinator: keeps the mirror row
+  /// (flipped `synced:false` so a background refresh can never resurrect a
+  /// server row the delete has not drained yet), hides it from local reads via
+  /// the queue-leg-derived [LocalStore.pendingDeleteIds], and enqueues a
+  /// `table_crud` delete that replays only after any pending create/update on
+  /// the same supplier.
+  ///
+  /// The delete mirrors the server's FK rule: the server will reject the row
+  /// while `products.supplier_id` or `commission_dues.supplier_id` reference
+  /// it (FK NO ACTION), so the same check runs against the LOCAL mirrors before
+  /// anything is enqueued. Validation is only as complete as the mirrored
+  /// data — a reference that was never mirrored is not visible here, and if the
+  /// server rejects it anyway the existing failed-delete path makes the
+  /// supplier locally visible again rather than silently losing the operation.
   Future<void> deleteSupplier(String id) => _guard(() async {
-        await _enqueueWrite(
-          rpc: 'table:suppliers',
-          params: {'id': id},
-          requestId: _uuid.v4(),
-          entity: 'suppliers',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _supplierRow(id);
+        if (existing == null) {
+          throw ValidationException('المورد غير موجود محلياً');
+        }
+        final referencedByProducts =
+            (await _store.products(_tenantId)).any((p) => p.supplierId == id);
+        final referencedByDues = (await _store
+                .commissionDues(_tenantId))
+            .any((d) => d.supplierId == id);
+        if (referencedByProducts || referencedByDues) {
+          throw ValidationException(
+            'لا يمكن حذف المورد لأنه مرتبط بمنتجات أو عمولات موجودة',
+          );
+        }
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertSupplier(
+            LocalSupplierRow(
+              id: id,
+              tenantId: _tenantId,
+              name: existing.name,
+              dealType: existing.dealType,
+              phone: existing.phone,
+              notes: existing.notes,
+              commissionRate: existing.commissionRate,
+              synced: false,
+              createdAt: existing.createdAt,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:suppliers',
+            params: {'id': id},
+            requestId: _uuid.v4(),
+            entity: 'suppliers',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
   /// Mirrors a product create locally (synced:false) and enqueues a
@@ -1626,6 +1689,13 @@ class OfflineWriteCoordinator {
       }
     }
     throw ValidationException('المورد غير موجود محلياً');
+  }
+
+  Future<LocalSupplierRow?> _supplierRow(String id) async {
+    for (final r in await _store.suppliers(_tenantId)) {
+      if (r.id == id) return r;
+    }
+    return null;
   }
 
   Future<Employee> _employee(String id) async {

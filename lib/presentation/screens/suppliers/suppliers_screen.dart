@@ -171,10 +171,17 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
               await notifier.updateSupplier(id: supplier.id, draft: draft);
             }
             if (context.mounted) Navigator.of(context).pop();
+            final writesLocal = ref.read(supplierWritesLocalFirstProvider);
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  supplier == null ? 'تمت إضافة المورد' : 'تم تعديل المورد',
+                  supplier == null
+                      ? writesLocal
+                          ? 'تم حفظ المورد محليًا وستتم مزامنته عند عودة الاتصال'
+                          : 'تمت إضافة المورد'
+                      : writesLocal
+                          ? 'تم حفظ تعديلات المورد محليًا وستتم مزامنتها عند عودة الاتصال'
+                          : 'تم تعديل المورد',
                 ),
               ),
             );
@@ -203,7 +210,15 @@ class _SuppliersScreenState extends ConsumerState<SuppliersScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(suppliersListProvider.notifier).delete(supplier.id);
-      messenger.showSnackBar(const SnackBar(content: Text('تم حذف المورد')));
+      if (ref.read(supplierWritesLocalFirstProvider)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف المورد محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(const SnackBar(content: Text('تم حذف المورد')));
+      }
     } on Object catch (error) {
       messenger.showSnackBar(
         SnackBar(

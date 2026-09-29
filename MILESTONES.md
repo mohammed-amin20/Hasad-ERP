@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal + salaries + customers slices done**; suppliers/employees master CRUD remain |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal, salaries + customers + suppliers slices done**; employees master CRUD remains |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -458,7 +458,7 @@ app-wide.
 
 ---
 
-## ⏳ M13 Phase 1B — customers master CRUD write path (offline)
+## ✅ M13 Phase 1B — customers master CRUD write path (offline)
 
 **Delivered as the fifth slice of Phase 1B.** Customer create/update/delete are
 now local-first, copying the purchases/salaries transaction pattern.
@@ -515,6 +515,68 @@ now local-first, copying the purchases/salaries transaction pattern.
 
 ---
 
+## ✅ M13 Phase 1B — suppliers master CRUD write path (offline)
+
+**Delivered as the sixth slice of Phase 1B.** Supplier create/update/delete are
+now local-first, copying the customers slice (the transaction pattern + the
+hard-delete surface) with two added readiness fixes and a **local FK rule** the
+customers slice did not need.
+
+- **`OfflineWriteCoordinator.writeSupplier/updateSupplier/deleteSupplier`** are
+  each one `_store.transaction(...)`: the mirror upsert + a `table_crud` leg
+  commit or roll back together. `updateSupplier` preserves the existing
+  `createdAt` (read-then-upsert inside the tx) and adds a `dependsOn` on any
+  pending same-id legs; `deleteSupplier` validates the row exists
+  (`'المورد غير موجود محلياً'` otherwise), flips the kept row `synced: false`,
+  and enqueues the delete-shape `{'id': id}` leg with `dependsOn` = pending
+  same-id legs.
+- **Two data bugs fixed while wiring the mirror (do not re-introduce):**
+  `writeSupplier` dropped `commissionRate` — it is now mirrored AND returned on
+  the `Supplier` the coordinator hands back; `updateSupplier` stamped a fresh
+  `createdAt` — it now preserves the existing row's.
+- **Delete = local FK rule (user-confirmed option 1 — "Reject if local refs
+  exist").** The server has a hard FK (`products.supplier_id` NO ACTION +
+  `commission_dues.supplier_id` NO ACTION), so a delete would fail server-side
+  on any referenced supplier. Before queueing, `deleteSupplier` mirrors that
+  FK using the local mirrors: if any `local_products.supplierId` OR any
+  `local_commission_dues.supplierId` equals the id it throws
+  `ValidationException('لا يمكن حذف المورد لأنه مرتبط بمنتجات أو عمولات موجودة')`
+  and enqueues nothing. When no local reference exists the delete queues; if the
+  **server** later rejects on a reference the local mirrors never saw (mirror is
+  only as complete as the data synced to this device), the existing FAILED-delete
+  behavior keeps the supplier visible locally and the next flush retries. That
+  limitation is documented on `deleteSupplier` itself.
+- **`OfflineSupplierRepository`** took an optional `coordinator:` +
+  `writesAreLocalFirst` getter; `create`/`update`/`delete` route to the
+  coordinator when present, else to the inner Supabase repo. Reads hide
+  `pendingDeleteIds(t, 'suppliers')` in `_readAll`, so a pending delete
+  disappears from the list and a FAILED delete brings the row back
+  (requirement #9).
+- **Provider wiring:** `supplierRepositoryProvider` builds the offline repo with
+  a coordinator when store + tenant are present (else the Supabase repo), and a
+  codegen'd boolean `supplierWritesLocalFirstProvider` drives the SnackBars:
+  create → `'تم حفظ المورد محليًا وستتم مزامنته عند عودة الاتصال'`, update →
+  `'تم حفظ تعديلات المورد محليًا وستتم مزامنتها عند عودة الاتصال'`, delete →
+  `'تم حذف المورد محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'`.
+- **Ordering verified end to end:** a `writePurchase` referencing a created
+  supplier depends on the supplier *leg*, and the flush replays the supplier
+  before the purchase; the same holds for the `settle_supplier` leg (which added
+  the `2010` account to the shared spike seed). Replayed supplier legs are
+  idempotent on the mirror (upsert never duplicates, delete is a no-op when the
+  row is gone).
+- **No new migration:** master `table_crud` legs replay against
+  `.from('suppliers')` directly (the `0017` trigger stamps `tenant_id`); `0025`
+  is untouched.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub`
+  **660/660** (634 + 9 master-writes + 6 repository + 7 flush + 4 widget);
+  `flutter build web --dart-define=use_arabic=true` green;
+  `flutter build apk --debug` green.
+- **Follow-up:** only **employees** master CRUD remains for Phase 1B — the
+  suppliers slice is the template. Supplier sync badge still deferred (same
+  `queueLegsFor(entity: 'suppliers')` approach as invoices).
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -532,14 +594,15 @@ now local-first, copying the purchases/salaries transaction pattern.
 
 **Must be built fresh**
 
-- Per-domain write wiring *not yet done*: **suppliers, employees** (master
-  CRUD — the coordinator owns their table_crud legs already, so these are
-  lighter than the RPC slices). (The **payments, purchases, journal, salaries
-  and customers slices of Phase 1B are already delivered** — their exact
-  transaction + dependency pattern is the template to copy; the customers slice
-  also ships the hard-delete surface: `pendingDeleteIds` suppresses reads,
+- Per-domain write wiring *not yet done*: **employees** (master CRUD — the
+  coordinator owns its table_crud legs already, so this is lighter than the RPC
+  slices). (The **payments, purchases, journal, salaries, customers and
+  suppliers slices of Phase 1B are already delivered** — their exact transaction
+  + dependency pattern is the template to copy; the customers slice also ships
+  the hard-delete surface: `pendingDeleteIds` suppresses reads,
   `removeMirrorRows` clears the mirror only after a confirmed `tableDelete`, and
-  a FAILED delete relaxes the filter.)
+  a FAILED delete relaxes the filter. The suppliers slice adds the local-FK
+  delete rule and the `commissionRate`/`createdAt` mirror fixes.)
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
   own sync indicator if the badge is wanted app-wide.
@@ -575,3 +638,4 @@ now local-first, copying the purchases/salaries transaction pattern.
 | Phase 1B — journal write path | *(this checkpoint 6/6)* | none | 567 → 585 | `createJournal` was dead code — rewired to validate against the local chart (missing account → Arabic `ValidationException`), one transaction with `dependsOn` on the account legs; journal list merges **manual-only** unsynced drafts |
 | Phase 1B — salaries write path | *(this checkpoint 7/7)* | none | 585 → 611 | `paySalary`/`addMovement` rewritten local-first (Arabic account + missing-employee rejects, local dup-month guard, one transaction, `dependsOn` on pending employee/product legs, rollback-proven); salary sync badge out of scope; no new migration — `0010` salary RPCs already idempotent; server salary rows deliberately NOT mirrored, so the dup-month guard only knows this device's own rows |
 | Phase 1B — customers master CRUD | *(this checkpoint 8/8)* | drift: none (schema unchanged) | 611 → 634 | First **hard-delete** offline domain: `pendingDeleteIds` (+`removeMirrorRows`) on `LocalStore`, delete-shape table_crud leg `{'id': id}`, FAILED delete relaxes the read filter; `OfflineCustomerRepository` gained an optional `coordinator:`; SnackBars branch on `customerWritesLocalFirstProvider`; no new migration — `0017` already stamps the customers mirror insert |
+| Phase 1B — suppliers master CRUD | *(this checkpoint 9/9)* | drift: none (schema unchanged) | 634 → 660 | Local-FK delete rule (reject when local products/commission_dues reference the supplier, Arabic `ValidationException`, limitation documented); fixes: `writeSupplier` now mirrors+returns `commissionRate`, `updateSupplier` preserves `createdAt`; coordinator wiring copied from customers; `supplierWritesLocalFirstProvider` drives SnackBars; flush ordering proven for supplier→purchase→settle legs; no new migration; supplier sync badge out of scope |

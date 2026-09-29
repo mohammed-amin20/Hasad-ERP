@@ -5,15 +5,35 @@ import '../../domain/suppliers/supplier_repository.dart';
 import 'local_database.dart';
 import 'local_store.dart';
 import 'offline_reads.dart';
+import 'offline_write.dart';
 
 /// [SupplierRepository] that serves the live Supabase repository while online
 /// (mirroring every read into the local store) and reads the mirror offline.
+///
+/// Writes route through [coordinator] when one is wired (local-first: mirror +
+/// queued `table_crud` leg, so every write is pending until the flusher drains
+/// it) and fall back to the inner repository otherwise.
 class OfflineSupplierRepository implements SupplierRepository {
-  OfflineSupplierRepository(this._inner, {required this.store, required this.tenantId});
+  OfflineSupplierRepository(
+    this._inner, {
+    required this.store,
+    required this.tenantId,
+    this.coordinator,
+  });
 
   final SupplierRepository _inner;
   final LocalStore? store;
   final String? tenantId;
+
+  /// When present, create/update/delete are local-first ([OfflineWriteCoordinator]);
+  /// when null they go to Supabase.
+  final OfflineWriteCoordinator? coordinator;
+
+  /// True when writes are local-first: a coordinator is wired, so every write
+  /// is mirrored + queued — and therefore pending until [SyncFlusher] drains
+  /// it. The UI reads this to show offline pending messages instead of online
+  /// confirmations.
+  bool get writesAreLocalFirst => coordinator != null;
 
   @override
   Future<List<Supplier>> listAll({String? search}) async {
@@ -54,17 +74,26 @@ class OfflineSupplierRepository implements SupplierRepository {
 
   @override
   Future<Supplier> create(SupplierDraft draft) async {
+    final c = coordinator;
+    if (c != null) return c.writeSupplier(draft);
     final supplier = await _inner.create(draft);
     await _upsertLocal(supplier);
     return supplier;
   }
 
   @override
-  Future<void> update({required String id, required SupplierDraft draft}) =>
-      _inner.update(id: id, draft: draft);
+  Future<void> update({required String id, required SupplierDraft draft}) async {
+    final c = coordinator;
+    if (c != null) return c.updateSupplier(id, draft);
+    return _inner.update(id: id, draft: draft);
+  }
 
   @override
-  Future<void> delete(String id) => _inner.delete(id);
+  Future<void> delete(String id) async {
+    final c = coordinator;
+    if (c != null) return c.deleteSupplier(id);
+    return _inner.delete(id);
+  }
 
   Future<void> _mirrorList(List<Supplier> suppliers) async {
     final s = store;
@@ -77,7 +106,14 @@ class OfflineSupplierRepository implements SupplierRepository {
     final s = store;
     final t = tenantId;
     if (s == null || t == null) throw const NetworkException();
-    return [for (final r in await s.suppliers(t)) _fromRow(r)];
+    // Pending deletes are hidden from reads: the delete is queued but not on
+    // the server yet. When the delete parks `failed` the id drops out and the
+    // record becomes visible again.
+    final hidden = await s.pendingDeleteIds(t, 'suppliers');
+    return [
+      for (final r in await s.suppliers(t))
+        if (!hidden.contains(r.id)) _fromRow(r),
+    ];
   }
 
   Future<void> _upsertLocal(Supplier supplier) async {
