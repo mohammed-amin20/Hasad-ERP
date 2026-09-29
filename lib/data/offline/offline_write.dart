@@ -1295,6 +1295,12 @@ class OfflineWriteCoordinator {
 
   /// Mirrors an employee create locally (synced:false) and enqueues a
   /// `table_crud` upsert for replay. Returns the employee directly.
+  ///
+  /// Atomic like [writeSupplier]: the mirror row and the queue leg commit in
+  /// ONE [LocalStore.transaction]. The leg carries `localId = employee.id`, so
+  /// a later `addMovement`/`paySalary` on the same employee resolves it as a
+  /// server-side prerequisite via `_pendingLegIdsFor` — the movement and salary
+  /// legs replay only after the employee row exists on the server.
   Future<Employee> writeEmployee(EmployeeDraft draft) => _guard(() async {
         final requestId = _uuid.v4();
         final employee = Employee(
@@ -1305,64 +1311,122 @@ class OfflineWriteCoordinator {
           baseSalary: draft.baseSalary,
           createdAt: DateTime.now(),
         );
-        await _store.upsertEmployee(
-          LocalEmployeeRow(
-            id: employee.id,
-            tenantId: _tenantId,
-            name: employee.name,
-            jobTitle: employee.jobTitle,
-            phone: employee.phone,
-            baseSalary: employee.baseSalary,
-            synced: false,
-            createdAt: employee.createdAt,
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:employees',
-          params: draft.toJson(),
-          requestId: requestId,
-          entity: 'employees',
-          localId: requestId,
-          op: 'table_crud',
-        );
+        await _store.transaction((tx) async {
+          await tx.upsertEmployee(
+            LocalEmployeeRow(
+              id: employee.id,
+              tenantId: _tenantId,
+              name: employee.name,
+              jobTitle: employee.jobTitle,
+              phone: employee.phone,
+              baseSalary: employee.baseSalary,
+              synced: false,
+              createdAt: employee.createdAt,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:employees',
+            params: draft.toJson(),
+            requestId: requestId,
+            entity: 'employees',
+            localId: requestId,
+            op: 'table_crud',
+            store: tx,
+          );
+        });
         return employee;
       });
 
-  /// Rewires employee update through the coordinator.
+  /// Rewires employee update through the coordinator: reuses the existing
+  /// mirror row's `createdAt` (an update must never stamp a new creation date),
+  /// and enqueues a `table_crud` update that replays only after any pending
+  /// create/update on the same employee — atomically with the updated mirror
+  /// row.
   Future<void> updateEmployee(String id, EmployeeDraft draft) =>
       _guard(() async {
-        await _store.upsertEmployee(
-          LocalEmployeeRow(
-            id: id,
-            tenantId: _tenantId,
-            name: draft.name,
-            jobTitle: draft.jobTitle,
-            phone: draft.phone,
-            baseSalary: draft.baseSalary,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:employees',
-          params: {'id': id, 'row': draft.toJson()},
-          requestId: _uuid.v4(),
-          entity: 'employees',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _employeeRow(id);
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertEmployee(
+            LocalEmployeeRow(
+              id: id,
+              tenantId: _tenantId,
+              name: draft.name,
+              jobTitle: draft.jobTitle,
+              phone: draft.phone,
+              baseSalary: draft.baseSalary,
+              synced: false,
+              createdAt: existing?.createdAt ?? DateTime.now(),
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:employees',
+            params: {'id': id, 'row': draft.toJson()},
+            requestId: _uuid.v4(),
+            entity: 'employees',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
-  /// Rewires employee delete through the coordinator.
+  /// Rewires employee delete through the coordinator: keeps the mirror row
+  /// (flipped `synced:false` so a background refresh can never resurrect a
+  /// server row the delete has not drained yet), hides it from local reads via
+  /// the queue-leg-derived [LocalStore.pendingDeleteIds], and enqueues a
+  /// `table_crud` delete that replays only after any pending create/update on
+  /// the same employee.
+  ///
+  /// The delete mirrors the server's FK rule: the server will reject the row
+  /// while `salaries.employee_id` or `employee_movements.employee_id` reference
+  /// it (FK NO ACTION), so the same check runs against the LOCAL mirrors before
+  /// anything is enqueued. `stock_moves.employee_id` is a server-side reference
+  /// that is never mirrored, so validation is only as complete as the mirrored
+  /// data — if the server rejects it anyway the existing failed-delete path
+  /// makes the employee locally visible again rather than silently losing the
+  /// operation.
   Future<void> deleteEmployee(String id) => _guard(() async {
-        await _enqueueWrite(
-          rpc: 'table:employees',
-          params: {'id': id},
-          requestId: _uuid.v4(),
-          entity: 'employees',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _employeeRow(id);
+        if (existing == null) {
+          throw ValidationException('الموظف غير موجود محلياً');
+        }
+        final referencedBySalaries =
+            (await _store.salaries(_tenantId, employeeId: id)).isNotEmpty;
+        final referencedByMovements =
+            (await _store.employeeMovements(_tenantId, employeeId: id))
+                .isNotEmpty;
+        if (referencedBySalaries || referencedByMovements) {
+          throw ValidationException(
+            'لا يمكن حذف الموظف لأنه مرتبط برواتب أو حركات موجودة',
+          );
+        }
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertEmployee(
+            LocalEmployeeRow(
+              id: id,
+              tenantId: _tenantId,
+              name: existing.name,
+              jobTitle: existing.jobTitle,
+              phone: existing.phone,
+              baseSalary: existing.baseSalary,
+              synced: false,
+              createdAt: existing.createdAt,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:employees',
+            params: {'id': id},
+            requestId: _uuid.v4(),
+            entity: 'employees',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
   // -------------------------------------------------------------------------
@@ -1693,6 +1757,13 @@ class OfflineWriteCoordinator {
 
   Future<LocalSupplierRow?> _supplierRow(String id) async {
     for (final r in await _store.suppliers(_tenantId)) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  Future<LocalEmployeeRow?> _employeeRow(String id) async {
+    for (final r in await _store.employees(_tenantId)) {
       if (r.id == id) return r;
     }
     return null;

@@ -6,12 +6,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_customer_repository.dart';
+import 'package:hasad_erp/data/offline/offline_employee_repository.dart';
 import 'package:hasad_erp/data/offline/offline_supplier_repository.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
 import 'package:hasad_erp/domain/customers/customer.dart';
 import 'package:hasad_erp/domain/customers/customer_draft.dart';
 import 'package:hasad_erp/domain/customers/customer_repository.dart';
+import 'package:hasad_erp/domain/employees/employee.dart';
+import 'package:hasad_erp/domain/employees/employee_draft.dart';
+import 'package:hasad_erp/domain/employees/employee_repository.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/payments/payment_repository.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
@@ -1647,6 +1651,280 @@ void main() {
       );
     });
   });
+
+  group('employees table_crud lifecycle', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+      await _seedMasterData(store, tenantId);
+      // paySalary needs 2030 (السلف والمستحقات) + 5030 (الأجور); the shared
+      // seed already ships 1010 (نقدية) for the cash method.
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a6', tenantId: tenantId, code: '2030', name: 'مستحقات موظفين',
+        type: 'liability', parentCode: null,
+      ));
+      await store.upsertAccount(LocalAccountRow(
+        id: 'a8', tenantId: tenantId, code: '5030', name: 'أجور',
+        type: 'expense', parentCode: null,
+      ));
+    });
+
+    tearDown(() => db.close());
+
+    test('an employee create replays before the movement that references it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.addMovement(MovementDraft(
+        employeeId: employee.id,
+        month: DateTime(2026, 9, 1),
+        direction: 'out',
+        category: 'advance',
+        amount: 100000,
+      ));
+      expect(await store.pendingCount(tenantId), 2);
+      expect(
+        await store.queueLegsFor(tenantId, entity: 'employees'),
+        hasLength(1),
+        reason: 'the employee create leg is queued for replay',
+      );
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(target.calls, contains('tableUpsert:employees:${employee.id}'));
+      expect(
+        target.calls.indexOf('rpc:add_employee_movement'),
+        greaterThan(target.calls.indexOf('tableUpsert:employees:${employee.id}')),
+        reason: 'the movement must replay only after its employee leg drained',
+      );
+    });
+
+    test('an employee create replays before the salary paying it', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.paySalary(SalaryDraft(
+        employeeId: employee.id,
+        month: DateTime(2026, 9, 1),
+        paid: 400000,
+        method: 'cash',
+      ));
+      expect(await store.pendingCount(tenantId), 2);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(
+        target.calls.indexOf('rpc:pay_salary'),
+        greaterThan(target.calls.indexOf('tableUpsert:employees:${employee.id}')),
+        reason: 'the salary must replay only after its employee leg drained',
+      );
+      expect(await store.salaries(tenantId), hasLength(1));
+    });
+
+    test('a create-update-delete series drains in order and deletes the mirror',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.updateEmployee(
+        employee.id,
+        const EmployeeDraft(name: 'محدث', baseSalary: 600000),
+      );
+      await writer.deleteEmployee(employee.id);
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(target.calls, contains('tableDelete:employees:${employee.id}'));
+
+      final remaining = await store.employees(tenantId);
+      expect(remaining, isEmpty,
+          reason: 'no seeded employee survives: the replayed delete removed it');
+      expect(await store.pendingDeleteIds(tenantId, 'employees'), isEmpty);
+    });
+
+    test('a failed delete keeps the row locally and un-suppresses it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.deleteEmployee(employee.id);
+      expect(
+        await store.pendingDeleteIds(tenantId, 'employees'),
+        {employee.id},
+      );
+
+      final delLeg = (await store.pendingSync(tenantId)).last;
+      await store.requeueRetry(delLeg.id, 'server refused the delete', 4);
+
+      final summary =
+          await SyncFlusher(store, tenantId, _ThrowingDeleteSyncTarget()).flush();
+      expect(summary.failed, 1);
+
+      expect(await store.pendingDeleteIds(tenantId, 'employees'), isEmpty,
+          reason: 'a FAILED delete must not suppress the row');
+      expect(
+        (await store.employees(tenantId)).map((r) => r.id),
+        contains(employee.id),
+        reason: 'the mirror keeps the row after a failed delete',
+      );
+
+      final repo = OfflineEmployeeRepository(
+        _NoEmployeesRepository(),
+        store: store,
+        tenantId: tenantId,
+      );
+      final visible = await repo.listAll();
+      expect(visible.map((e) => e.id), contains(employee.id),
+          reason: 'the employee is locally visible again');
+    });
+
+    test('a refresh never resurrects a row whose delete is still pending',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.deleteEmployee(employee.id);
+
+      await store.mirrorEmployees(tenantId, [
+        LocalEmployeeRow(
+          id: employee.id,
+          tenantId: tenantId,
+          name: 'موظف',
+          jobTitle: null,
+          phone: null,
+          baseSalary: 500000,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      expect(await store.pendingDeleteIds(tenantId, 'employees'), {employee.id},
+          reason: 'the delete leg survives the refresh');
+      final rows = await store.employees(tenantId);
+      expect(rows.map((r) => r.id), contains(employee.id),
+          reason: 'the refresh must not undo the pending delete');
+    });
+
+    test('a refresh does not revert a pending edit', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      await writer.updateEmployee(
+        employee.id,
+        const EmployeeDraft(name: 'محدث', baseSalary: 600000),
+      );
+
+      await store.mirrorEmployees(tenantId, [
+        LocalEmployeeRow(
+          id: employee.id,
+          tenantId: tenantId,
+          name: 'الاسم القديم من الخادم',
+          jobTitle: null,
+          phone: null,
+          baseSalary: 500000,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      final rows = await store.employees(tenantId);
+      final mine = rows.singleWhere((r) => r.id == employee.id);
+      expect(mine.name, 'محدث',
+          reason: 'a stale server copy must not revert the pending edit');
+    });
+
+    test('replayed table_crud legs are idempotent on the mirror', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final employee = await writer.writeEmployee(
+        const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+      );
+      final flusher = SyncFlusher(store, tenantId, _RecordingSyncTarget());
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.employees(tenantId)).where((r) => r.id == employee.id),
+        hasLength(1),
+        reason: 'the create leg keeps exactly one mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'again',
+        tenantId: tenantId,
+        rpc: 'table:employees',
+        op: 'table_crud',
+        params: jsonEncode({'name': employee.name}),
+        requestId: 'req-again',
+        entity: 'employees',
+        localId: employee.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 2),
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.employees(tenantId)).where((r) => r.id == employee.id),
+        hasLength(1),
+        reason: 'a replayed upsert must not duplicate the mirror row',
+      );
+
+      await writer.deleteEmployee(employee.id);
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.employees(tenantId)).where((r) => r.id == employee.id),
+        isEmpty,
+        reason: 'the replayed delete removes the mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'del-again',
+        tenantId: tenantId,
+        rpc: 'table:employees',
+        op: 'table_crud',
+        params: jsonEncode({'id': employee.id}),
+        requestId: 'req-del-again',
+        entity: 'employees',
+        localId: employee.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 3),
+        updatedAt: DateTime.utc(2026, 1, 3),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.employees(tenantId)).where((r) => r.id == employee.id),
+        isEmpty,
+        reason: 'a replayed delete is still a no-op on the mirror',
+      );
+    });
+  });
 }
 
 Future<void> _seedMasterData(DriftLocalStore store, String tenantId) async {
@@ -2043,6 +2321,36 @@ class _NoCustomersRepository implements CustomerRepository {
   Future<void> update({
     required String id,
     required CustomerDraft draft,
+  }) async {}
+
+  @override
+  Future<void> delete(String id) async {}
+}
+
+/// An online repository that serves nothing: used as the background-refresh
+/// source for an employee mirror read that must resolve purely from the local
+/// store (a failed-delete employee read after the flush).
+class _NoEmployeesRepository implements EmployeeRepository {
+  @override
+  Future<List<Employee>> listAll({String? search}) async => const [];
+
+  @override
+  Future<Employee?> getById(String id) async => null;
+
+  @override
+  Future<Employee> create(EmployeeDraft draft) async => Employee(
+        id: 'unused',
+        name: draft.name,
+        jobTitle: draft.jobTitle,
+        phone: draft.phone,
+        baseSalary: draft.baseSalary,
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+
+  @override
+  Future<void> update({
+    required String id,
+    required EmployeeDraft draft,
   }) async {}
 
   @override

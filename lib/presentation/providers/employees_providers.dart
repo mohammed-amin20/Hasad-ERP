@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../data/employees/supabase_employee_repository.dart';
 import '../../data/offline/local_store.dart';
 import '../../data/offline/offline_employee_repository.dart';
+import '../../data/offline/offline_write.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/employees/employee.dart';
 import '../../domain/employees/employee_draft.dart';
@@ -13,11 +14,28 @@ part 'employees_providers.g.dart';
 
 /// Concrete employee repository — offline-first.
 @riverpod
-EmployeeRepository employeeRepository(Ref ref) => OfflineEmployeeRepository(
-      SupabaseEmployeeRepository(ref.watch(supabaseClientProvider)),
-      store: ref.watch(localStoreProvider).value,
-      tenantId: ref.watch(authStateProvider).value?.tenantId,
-    );
+EmployeeRepository employeeRepository(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return OfflineEmployeeRepository(
+    SupabaseEmployeeRepository(ref.watch(supabaseClientProvider)),
+    store: store,
+    tenantId: tenantId,
+    coordinator: (store == null || tenantId == null)
+        ? null
+        : OfflineWriteCoordinator(store, tenantId),
+  );
+}
+
+/// True when employee writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+@riverpod
+bool employeeWritesLocalFirst(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return store != null && tenantId != null;
+}
 
 /// Current search term for the employee list (reactive).
 @riverpod

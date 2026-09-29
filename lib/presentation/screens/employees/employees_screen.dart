@@ -209,10 +209,17 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
               await notifier.updateEmployee(id: employee.id, draft: draft);
             }
             if (context.mounted) Navigator.of(context).pop();
+            final writesLocal = ref.read(employeeWritesLocalFirstProvider);
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  employee == null ? 'تمت إضافة الموظف' : 'تم تعديل الموظف',
+                  employee == null
+                      ? writesLocal
+                          ? 'تم حفظ الموظف محليًا وستتم مزامنته عند عودة الاتصال'
+                          : 'تمت إضافة الموظف'
+                      : writesLocal
+                          ? 'تم حفظ تعديلات الموظف محليًا وستتم مزامنتها عند عودة الاتصال'
+                          : 'تم تعديل الموظف',
                 ),
               ),
             );
@@ -241,7 +248,15 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(employeesListProvider.notifier).delete(employee.id);
-      messenger.showSnackBar(const SnackBar(content: Text('تم حذف الموظف')));
+      if (ref.read(employeeWritesLocalFirstProvider)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف الموظف محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(const SnackBar(content: Text('تم حذف الموظف')));
+      }
     } on Object catch (error) {
       messenger.showSnackBar(
         SnackBar(

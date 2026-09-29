@@ -2010,6 +2010,225 @@ void main() {
       }
     });
   });
+
+  group('employees master writes (table_crud)', () {
+    test('writeEmployee mirrors synced:false and enqueues one table_crud leg',
+        () async {
+      final employee = await writer.writeEmployee(const EmployeeDraft(
+        name: 'موظف جديد',
+        phone: '0599000111',
+        baseSalary: 500000,
+      ));
+
+      final rows = await store.employees(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, employee.id);
+      expect(rows.single.synced, isFalse);
+      expect(rows.single.name, 'موظف جديد');
+      expect(rows.single.phone, '0599000111');
+      expect(rows.single.baseSalary, 500000);
+      expect(rows.single.createdAt, isNotNull);
+      expect(employee.name, 'موظف جديد');
+      expect(employee.createdAt, isNotNull);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(1));
+      final leg = legs.single;
+      expect(leg.op, 'table_crud');
+      expect(leg.rpc, 'table:employees');
+      expect(leg.entity, 'employees');
+      expect(leg.localId, employee.id);
+      expect(leg.dependsOn, isNull);
+      final params = jsonDecode(leg.params) as Map<String, dynamic>;
+      expect(params, containsPair('name', 'موظف جديد'));
+      expect(params, containsPair('phone', '0599000111'));
+      expect(params, containsPair('base_salary', 500000));
+    });
+
+    test('updateEmployee preserves createdAt and enqueues an update leg',
+        () async {
+      final created = await writer
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+      final createdAt = (await store.employees(tenant)).single.createdAt;
+
+      await writer.updateEmployee(
+        created.id,
+        const EmployeeDraft(
+          name: 'موظف محدث',
+          jobTitle: 'مدير',
+          baseSalary: 600000,
+        ),
+      );
+
+      final rows = await store.employees(tenant);
+      expect(rows, hasLength(1));
+      final row = rows.single;
+      expect(row.name, 'موظف محدث');
+      expect(row.jobTitle, 'مدير');
+      expect(row.phone, isNull, reason: 'the update replaces the whole shape');
+      expect(row.baseSalary, 600000);
+      expect(row.createdAt, createdAt,
+          reason: 'an update must never re-stamp createdAt');
+      expect(row.synced, isFalse);
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final update = legs.last;
+      final params = jsonDecode(update.params) as Map<String, dynamic>;
+      expect(params, containsPair('id', created.id));
+      expect(params['row'], containsPair('name', 'موظف محدث'));
+      expect(params['row'], containsPair('job_title', 'مدير'));
+      expect(jsonDecode(update.dependsOn!), [legs.first.id],
+          reason: 'the update must wait for the pending create leg');
+    });
+
+    test('deleteEmployee hides the mirror and enqueues a delete leg', () async {
+      final created = await writer
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+
+      await writer.deleteEmployee(created.id);
+
+      // The mirror row survives (flipped unsynced) so a refresh can never
+      // resurrect a server row the delete has not drained yet...
+      final rows = await store.employees(tenant);
+      expect(rows, hasLength(1));
+      expect(rows.single.synced, isFalse);
+      // ...but pendingDeleteIds hides it from local reads meanwhile.
+      expect(await store.pendingDeleteIds(tenant, 'employees'), {created.id});
+
+      final legs = await store.pendingSync(tenant);
+      expect(legs, hasLength(2));
+      final del = legs.last;
+      expect(del.op, 'table_crud');
+      expect(del.rpc, 'table:employees');
+      expect(del.localId, created.id);
+      expect(jsonDecode(del.params), containsPair('id', created.id));
+      // The delete replays only after the pending create on the same employee.
+      expect(jsonDecode(del.dependsOn!), [legs.first.id]);
+    });
+
+    test('deleteEmployee rejects an unknown local employee', () async {
+      await expectLater(
+        writer.deleteEmployee('ghost'),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+
+    test('deleteEmployee rejects an employee referenced by a local salary',
+        () async {
+      final created = await writer
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+      await store.upsertSalary(LocalSalaryRow(
+        id: 'sal-1',
+        tenantId: tenant,
+        employeeId: created.id,
+        month: '2026-08',
+        paid: 500000,
+        netDue: 500000,
+        synced: false,
+      ));
+
+      await expectLater(
+        writer.deleteEmployee(created.id),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.pendingDeleteIds(tenant, 'employees'), isEmpty,
+          reason: 'no delete leg is queued for a referenced employee');
+    });
+
+    test('deleteEmployee rejects an employee referenced by a local movement',
+        () async {
+      final created = await writer
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+      await store.upsertEmployeeMovement(LocalEmployeeMovementRow(
+        id: 'mv-1',
+        tenantId: tenant,
+        employeeId: created.id,
+        month: '2026-08',
+        direction: 'in',
+        category: 'allowance',
+        amount: 10000,
+        date: DateTime(2026, 8, 5),
+        synced: false,
+      ));
+
+      await expectLater(
+        writer.deleteEmployee(created.id),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.pendingDeleteIds(tenant, 'employees'), isEmpty,
+          reason: 'no delete leg is queued for a referenced employee');
+    });
+
+    test('writeEmployee rolls back the mirror when the enqueue throws',
+        () async {
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.writeEmployee(
+          const EmployeeDraft(name: 'موظف', baseSalary: 500000),
+        ),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(await store.employees(tenant), isEmpty);
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test('deleteEmployee rolls back the mirror flip when the enqueue throws',
+        () async {
+      await writer
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+      final before = (await store.employees(tenant)).single.synced;
+
+      final poisoned = OfflineWriteCoordinator(
+        _ThrowOnEnqueueStore(store),
+        tenant,
+      );
+      await expectLater(
+        poisoned.deleteEmployee((await store.employees(tenant)).single.id),
+        throwsA(isA<ValidationException>()),
+      );
+      // Neither a delete leg nor a synced flip survives the failed tx.
+      expect((await store.employees(tenant)).single.synced, before);
+      expect(await store.pendingSync(tenant), hasLength(1),
+          reason: 'only the original create leg remains');
+    });
+
+    test('an offline employee create survives a restart (file-backed)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('employee_offline');
+      final file = File('${dir.path}/test.db');
+
+      final db1 = AppDatabase(NativeDatabase(file));
+      final s1 = DriftLocalStore(db1);
+      final c1 = OfflineWriteCoordinator(s1, tenant);
+
+      final created = await c1
+          .writeEmployee(const EmployeeDraft(name: 'موظف', baseSalary: 500000));
+      await c1.updateEmployee(
+        created.id,
+        const EmployeeDraft(name: 'موظف محدث', baseSalary: 600000),
+      );
+      await c1.deleteEmployee(created.id);
+      await db1.close();
+
+      final db2 = AppDatabase(NativeDatabase(file));
+      final s2 = DriftLocalStore(db2);
+      try {
+        final rows = await s2.employees(tenant);
+        expect(rows, hasLength(1));
+        expect(rows.single.id, created.id);
+        expect(rows.single.name, 'موظف محدث');
+        expect(rows.single.synced, isFalse);
+        expect(await s2.pendingDeleteIds(tenant, 'employees'), {created.id});
+        expect(await s2.pendingSync(tenant), hasLength(3));
+      } finally {
+        await db2.close();
+      }
+    });
+  });
 }
 
 /// Throws on the coordinator's final `enqueue` inside the write, after every

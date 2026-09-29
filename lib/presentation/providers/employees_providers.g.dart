@@ -59,7 +59,60 @@ final class EmployeeRepositoryProvider
 }
 
 String _$employeeRepositoryHash() =>
-    r'209912dce0a4ebf3101f1366e42f9c467f05daf3';
+    r'ee3628fbc67e4f2d7ca01df3cde8471d29e58205';
+
+/// True when employee writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+@ProviderFor(employeeWritesLocalFirst)
+final employeeWritesLocalFirstProvider = EmployeeWritesLocalFirstProvider._();
+
+/// True when employee writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+final class EmployeeWritesLocalFirstProvider
+    extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// True when employee writes are local-first (a local store + tenant exist, so
+  /// create/update/delete are mirrored and queued). The UI reads this to show
+  /// offline pending messages instead of online confirmations.
+  EmployeeWritesLocalFirstProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'employeeWritesLocalFirstProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$employeeWritesLocalFirstHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return employeeWritesLocalFirst(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$employeeWritesLocalFirstHash() =>
+    r'008c2fa68768d9fa4e1aaacaaa4a5c6a6b31443d';
 
 /// Current search term for the employee list (reactive).
 

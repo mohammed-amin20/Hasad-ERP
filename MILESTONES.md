@@ -21,7 +21,7 @@ logged in Appendix A instead.
 | **M13 Phase 0** | Offline cold start — a signed-in user survives a restart with no network | ✅ Complete |
 | **M13 Phase 1A** | Offline *sales* write path — queue, replay, server idempotency, sign-out wipe | ✅ Complete |
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
-| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ⏳ In progress — **payments, purchases, journal, salaries + customers + suppliers slices done**; employees master CRUD remains |
+| **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ✅ Complete |
 | M13 Phase 2+ | — | ⏳ Not started |
 
 ---
@@ -577,6 +577,75 @@ customers slice did not need.
 
 ---
 
+## ✅ M13 Phase 1B — employees master CRUD write path (offline)
+
+**Delivered as the seventh slice of Phase 1B — the last Phase 1B domain, closing
+the phase.** Employee create/update/delete are now local-first. Before this
+slice, employee writes were *online-only*: `employees_providers.dart` wired
+`OfflineEmployeeRepository` **without a coordinator**, and the coordinator's
+`writeEmployee`/`updateEmployee`/`deleteEmployee` were stale Slice-C versions
+(no transaction, no `dependsOn`, `updateEmployee` stamped a fresh `createdAt`,
+`deleteEmployee` had no existence check / mirror-flip / FK rule).
+
+- **`OfflineWriteCoordinator.writeEmployee/updateEmployee/deleteEmployee`**
+  rewired to the same one-`_store.transaction(...)` pattern as suppliers:
+  mirror upsert + `table_crud` leg commit or roll back together.
+  `updateEmployee` preserves the existing row's `createdAt` (read-then-upsert
+  via the new `_employeeRow(id)` helper next to `_supplierRow`) and adds a
+  `dependsOn` on pending same-id legs. `deleteEmployee` validates the row
+  exists (`'الموظف غير موجود محلياً'` — role-split wording, `'محلياً'` not
+  `'محلّيًا'` for the user-facing screens), flips the kept row `synced: false`,
+  and enqueues the delete-shape `{'id': id}` leg with `dependsOn` = pending
+  same-id legs.
+- **Delete = local FK rule (server-parity, audited rather than assumed).**
+  `employees` is a **hard-delete** table (no soft/archive column in 0002) and
+  every referencing FK is `ON DELETE NO ACTION`, so the server rejects a delete
+  while referenced: `salaries.employee_id` and `employee_movements.employee_id`
+  are NOT NULL; `stock_moves.employee_id` is nullable. `deleteSupplier`-
+  style, `deleteEmployee` rejects before queueing with
+  `ValidationException('لا يمكن حذف الموظف لأنه مرتبط برواتب أو حركات موجودة')`
+  when any `local_salaries.employeeId` OR any `local_employee_movements
+  .employeeId` equals the id, enqueuing nothing. `stock_moves` is **never
+  mirrored** — a stock movement referencing the employee is the documented
+  limitation: the server may still reject, and the existing FAILED-delete
+  behavior keeps the row visible while the next flush retries (never silent
+  data loss). Movement/salary legs were already dependency-ready:
+  `addMovement`/`paySalary` call `_pendingLegIdsFor([employee.id])`, so a
+  create→movement and create→salary series replay in order with zero extra
+  wiring.
+- **`OfflineEmployeeRepository`** gained an optional `coordinator:` +
+  `writesAreLocalFirst` getter; `create`/`update`/`delete` route to the
+  coordinator when present, else to the inner Supabase repo. Reads hide
+  `pendingDeleteIds(t, 'employees')` in `_readAll`/getById-local, so a pending
+  delete disappears from the list and a FAILED delete brings the row back
+  (requirement #9). `getById` of a hidden id falls through `cacheFirst` to the
+  unreachable network and rethrows `NetworkException` — parity with listAll,
+  never a fabricated null.
+- **Provider wiring:** `employeeRepository` (`employees_providers.dart`) builds
+  the offline repo with a coordinator when `localStoreProvider.value` + tenant
+  are present (else `SupabaseEmployeeRepository`), and a codegen'd boolean
+  `employeeWritesLocalFirstProvider` drives the SnackBars (create
+  `'تم حفظ الموظف محليًا وستتم مزامنته عند عودة الاتصال'`, update
+  `'تم حفظ تعديلات الموظف محليًا وستتم مزامنتها عند عودة الاتصال'`, delete
+  `'تم حذف الموظف محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'` — the
+  delete wording is suppliers-style pending, user-confirmed; the online
+  originals `'تمت إضافة الموظف'`/`'تم تعديل الموظف'`/`'تم حذف الموظف'` are
+  unchanged on the online path; the hard-delete confirm dialog `'حذف الموظف'`
+  is untouched). `employees_providers.g.dart` regenerated (only
+  employee-wired file in this slice; the stale
+  `journal/payments/purchases_providers.g.dart` no-ops stay uncommitted).
+- **No new migration:** master `table_crud` legs replay against
+  `.from('employees')` directly (the `0017` trigger stamps `tenant_id`); `0025`
+  untouched — no employee write RPC to make idempotent.
+- **Verification:** `flutter analyze` clean; `flutter test --no-pub` **687/687**
+  (660 + 9 master-writes + 7 repository + 7 flush + 4 widget);
+  `flutter build web --dart-define=use_arabic=true` green;
+  `flutter build apk --debug` green. **Phase 1B is complete.** Employee sync
+  badge still deferred (same `queueLegsFor(entity: 'employees')` approach as
+  invoices).
+
+---
+
 ## Handoff to Phase 1B
 
 **Already exists and is reusable**
@@ -594,15 +663,17 @@ customers slice did not need.
 
 **Must be built fresh**
 
-- Per-domain write wiring *not yet done*: **employees** (master CRUD — the
-  coordinator owns its table_crud legs already, so this is lighter than the RPC
-  slices). (The **payments, purchases, journal, salaries, customers and
-  suppliers slices of Phase 1B are already delivered** — their exact transaction
-  + dependency pattern is the template to copy; the customers slice also ships
-  the hard-delete surface: `pendingDeleteIds` suppresses reads,
-  `removeMirrorRows` clears the mirror only after a confirmed `tableDelete`, and
-  a FAILED delete relaxes the filter. The suppliers slice adds the local-FK
-  delete rule and the `commissionRate`/`createdAt` mirror fixes.)
+- **All Phase 1B domains are delivered** — payments, purchases, journal,
+  salaries + employee movements, customers, suppliers, and employees master
+  CRUD. Their exact transaction + dependency pattern (one `_store.transaction`,
+  `dependsOn` on pending legs, `_enqueueWrite(id:)` for multi-leg writes) is the
+  template for any future offline domain. The customers/suppliers/employees
+  slices also ship the hard-delete surface: `pendingDeleteIds` suppresses
+  reads, `removeMirrorRows` clears the mirror only after a confirmed
+  `tableDelete`, a FAILED delete relaxes the filter, and the suppliers +
+  employees slices add local-FK delete rules (reject while local mirrors
+  reference the row; limitation documented when the server sees an unmirrored
+  reference).
 - The same discard-at-the-boundary gap exists for each of them — the mirror
   merge and `_rowToInvoice`-equivalent drop the `synced` flag, so each needs its
   own sync indicator if the badge is wanted app-wide.
@@ -639,3 +710,4 @@ customers slice did not need.
 | Phase 1B — salaries write path | *(this checkpoint 7/7)* | none | 585 → 611 | `paySalary`/`addMovement` rewritten local-first (Arabic account + missing-employee rejects, local dup-month guard, one transaction, `dependsOn` on pending employee/product legs, rollback-proven); salary sync badge out of scope; no new migration — `0010` salary RPCs already idempotent; server salary rows deliberately NOT mirrored, so the dup-month guard only knows this device's own rows |
 | Phase 1B — customers master CRUD | *(this checkpoint 8/8)* | drift: none (schema unchanged) | 611 → 634 | First **hard-delete** offline domain: `pendingDeleteIds` (+`removeMirrorRows`) on `LocalStore`, delete-shape table_crud leg `{'id': id}`, FAILED delete relaxes the read filter; `OfflineCustomerRepository` gained an optional `coordinator:`; SnackBars branch on `customerWritesLocalFirstProvider`; no new migration — `0017` already stamps the customers mirror insert |
 | Phase 1B — suppliers master CRUD | *(this checkpoint 9/9)* | drift: none (schema unchanged) | 634 → 660 | Local-FK delete rule (reject when local products/commission_dues reference the supplier, Arabic `ValidationException`, limitation documented); fixes: `writeSupplier` now mirrors+returns `commissionRate`, `updateSupplier` preserves `createdAt`; coordinator wiring copied from customers; `supplierWritesLocalFirstProvider` drives SnackBars; flush ordering proven for supplier→purchase→settle legs; no new migration; supplier sync badge out of scope |
+| Phase 1B — employees master CRUD | *(this checkpoint 10/10)* | drift: none (schema unchanged) | 660 → 687 | Last Phase 1B domain (**phase complete**). Root cause of online-only writes: `employees_providers.dart` wired `OfflineEmployeeRepository` WITHOUT a coordinator + stale Slice-C coordinator methods (no tx, no `dependsOn`, update stomped `createdAt`, delete unguarded). Rewired all three (tx + `dependsOn` + `_employeeRow` createdAt-preserve); delete = local-FK rule on local salaries/employee_movements (not `stock_moves` — never mirrored, documented limitation); create→movement/create→salary ordering reused existing `_pendingLegIdsFor` (zero wiring); `employeeWritesLocalFirstProvider` drives SnackBars; employees read filter subtracts pending deletes; no new migration; employee sync badge out of scope |
