@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
+import 'package:drift/drift.dart' show Value;
+
 import '../../core/error/app_exception.dart';
 import '../../domain/accounts/account.dart' as ch;
 import '../../domain/accounting/account.dart' as acc;
@@ -22,6 +24,7 @@ import '../../domain/products/product.dart';
 import '../../domain/products/product_draft.dart';
 import '../../domain/purchases/purchase_invoice_draft.dart';
 import '../../domain/purchases/purchase_repository.dart';
+import '../../domain/salaries/salary_computation.dart';
 import '../../domain/salaries/salary_repository.dart';
 import '../../domain/sales/sale_invoice_draft.dart';
 import '../../domain/sales/sale_repository.dart';
@@ -61,6 +64,30 @@ class OfflineWriteCoordinator {
         final chart = await _chart();
         final suppliers = await _suppliersMap();
 
+        // Existence FIRST, on the DRAFT's product ids. `products[id]!` below is only
+        // reached for an id this loop has already confirmed, so an unknown
+        // product produces the controlled Arabic `ValidationException` instead
+        // of a raw `_TypeError` from the `!` on a missing map key.
+        //
+        // The order is the whole fix, not a style choice: the check used to sit
+        // AFTER the `engineLines` comprehension, and building that list is what
+        // dereferenced `products[l.productId]!` to read the default price. The
+        // `!` threw first, so the Arabic message below was UNREACHABLE for
+        // exactly the case it was written for. Validating `draft.lines` directly
+        // (not `engineLines`) also keeps the check in the input domain — there is
+        // no reason to build priced lines in order to learn a product is absent.
+        //
+        // Deliberately narrow: this is a pre-flight validation, NOT a broadened
+        // `TypeError` catch. A `TypeError` from anywhere else in the write path
+        // is a real bug and must keep surfacing as one.
+        for (final l in draft.lines) {
+          if (!products.containsKey(l.productId)) {
+            throw ValidationException(
+              'المنتج غير موجود محلياً: ${l.productId}',
+            );
+          }
+        }
+
         final engineLines = <SaleInvoiceLine>[
           for (final l in draft.lines)
             SaleInvoiceLine(
@@ -69,13 +96,6 @@ class OfflineWriteCoordinator {
               price: l.price ?? products[l.productId]!.salePrice,
             ),
         ];
-        for (final l in engineLines) {
-          if (!products.containsKey(l.productId)) {
-            throw ValidationException(
-              'المنتج غير موجود محلياً: ${l.productId}',
-            );
-          }
-        }
 
         final requestId = _uuid.v4();
         final result = DoubleEntryEngine.createSaleInvoice(
@@ -134,10 +154,14 @@ class OfflineWriteCoordinator {
               createdAt: DateTime.now(),
             ),
           );
+          // Positional line ids, via the SAME helper the detail mirror uses
+          // (`LocalStore.invoiceLineId`). A random uuid here would be returned
+          // in arbitrary order by the detail sheet forever, because the sheet
+          // paints the list as given and the local read orders by `id`.
           await tx.upsertInvoiceItems([
-            for (final l in engineLines)
+            for (final (i, l) in engineLines.indexed)
               LocalInvoiceItemRow(
-                id: _uuid.v4(),
+                id: LocalStore.invoiceLineId(invoiceId, i),
                 tenantId: _tenantId,
                 invoiceId: invoiceId,
                 productId: l.productId,
@@ -260,6 +284,10 @@ class OfflineWriteCoordinator {
               ),
             );
           } else {
+            // Already the safe shape: a nullable lookup, then the check, and
+            // only then the dereference below. This is what `writeSale` was
+            // reordered to match — the purchase path needed no fix because it
+            // never dereferenced a missing key while building its lines.
             final existing = products[line.productId];
             if (existing == null) {
               throw ValidationException(
@@ -333,10 +361,14 @@ class OfflineWriteCoordinator {
               createdAt: DateTime.now(),
             ),
           );
+          // Positional line ids, via the SAME helper the detail mirror uses
+          // (`LocalStore.invoiceLineId`). A random uuid here would be returned
+          // in arbitrary order by the detail sheet forever, because the sheet
+          // paints the list as given and the local read orders by `id`.
           await tx.upsertInvoiceItems([
-            for (final l in engineLines)
+            for (final (i, l) in engineLines.indexed)
               LocalInvoiceItemRow(
-                id: _uuid.v4(),
+                id: LocalStore.invoiceLineId(invoiceId, i),
                 tenantId: _tenantId,
                 invoiceId: invoiceId,
                 productId: l.productId,
@@ -460,12 +492,22 @@ class OfflineWriteCoordinator {
         // leg is the prerequisite.
         final invoiceLegs = await _pendingLegIdsFor([row.id]);
 
+        // The leg id is minted here, not inside `_enqueueRpc`, because the
+        // invoice row it changes is stamped with it (see `pending_money_leg`):
+        // the read path needs to know a local money mutation is outstanding,
+        // and the flusher clears the marker by matching this exact id when the
+        // leg replays. One id, used for both — see `_enqueueWrite`'s `id`.
+        final legId = _uuid.v4();
+
         await _store.transaction((tx) async {
           await tx.upsertInvoice(
             row.copyWith(
               paid: newPaid,
               remaining: newRemaining,
               status: status,
+              // drift's generated `copyWith` takes the nullable marker as a
+              // `Value` (absent = keep, null = clear), not a bare String.
+              pendingMoneyLeg: Value(legId),
             ),
           );
           await tx.upsertPayment(
@@ -486,12 +528,16 @@ class OfflineWriteCoordinator {
           );
           await _mirrorJournal(result.journalEntry,
               requestId: requestId, store: tx);
-          await _enqueueRpc(
+          await _enqueueWrite(
             rpc: 'record_payment',
             params: draft.toJson(requestId: requestId),
+            id: legId,
             requestId: requestId,
             entity: 'payments',
             localId: paymentId,
+            op: 'rpc',
+            // The payment restates exactly this one invoice.
+            affectsInvoiceIds: [row.id],
             dependsOn: invoiceLegs,
             store: tx,
           );
@@ -589,6 +635,31 @@ class OfflineWriteCoordinator {
         };
         final parentLegs = await _pendingLegIdsFor(parentIds.toList());
 
+        // The EXACT invoice set this leg restates, persisted with the leg so a
+        // later money leg draining first cannot retire the marker it still owns
+        // (see `LocalStore.resolveInvoiceMoneyMarker`). Its params cannot supply
+        // this: `settle_supplier` names only a supplier, because the server
+        // picks the allocation.
+        //
+        // Derived from the same `allocations` list the stamping loop below walks,
+        // and deliberately EXCLUDES the due allocations: those flip a
+        // `local_commission_dues` row and never touch their invoice's money
+        // figures, so crediting the invoice here would claim ownership of a row
+        // this leg did not restate. `a.invoiceId` is non-nullable on both
+        // allocation shapes, so both contribute a usable id — but only the
+        // non-due ones belong to the affected set.
+        final affectedInvoiceIds = <String>{
+          for (final a in allocations)
+            if (a.dueId == null) a.invoiceId,
+        };
+
+        // Minted here so the allocated invoice rows can be stamped with it
+        // inside the same transaction (see `recordPayment`). Only the invoices
+        // this settlement actually allocated get marked — a supplier's other
+        // open invoices keep whatever authority the server/cache gave them, so
+        // a pending settlement can never quietly restate rows it did not touch.
+        final legId = _uuid.v4();
+
         await _store.transaction((tx) async {
           // Apply invoice allocations (reduce remaining / paid on each row).
           for (final a in allocations) {
@@ -602,6 +673,7 @@ class OfflineWriteCoordinator {
                     paid: newPaid,
                     remaining: newRemaining,
                     status: _statusFor(r.total, newPaid),
+                    pendingMoneyLeg: Value(legId),
                   ),
                 );
                 break;
@@ -638,13 +710,16 @@ class OfflineWriteCoordinator {
 
           await _mirrorJournal(result.journalEntry,
               requestId: requestId, store: tx);
-          await _enqueueRpc(
+          await _enqueueWrite(
             rpc: 'settle_supplier',
             params: draft.toJson(requestId: requestId),
+            id: legId,
             requestId: requestId,
             entity: 'payments',
             localId: null,
+            op: 'rpc',
             dependsOn: parentLegs,
+            affectsInvoiceIds: affectedInvoiceIds.toList(),
             store: tx,
           );
         });
@@ -764,29 +839,41 @@ class OfflineWriteCoordinator {
           throw ValidationException('تم صرف راتب هذا الشهر مسبقاً');
         }
 
-        var arrears = 0;
-        var entitlements = 0;
-        var deductions = 0;
-        for (final s in salaries) {
-          final m = _parseMonth(s.month);
-          final diff = employee.baseSalary - s.paid;
-          if (m.isBefore(targetMonth) && diff > 0) {
-            arrears += diff;
-          }
+        // The entitlement math is NOT re-implemented here: `paySalary` (what
+        // gets queued) and `entitlement` (what the sheet previews) must agree,
+        // so both go through the one pure implementation.
+        final computation = computeSalaryComputation(
+          month: targetMonth,
+          baseSalary: employee.baseSalary,
+          salaryRows: [
+            for (final s in salaries)
+              SalaryPeriodRow(month: _parseMonth(s.month), paid: s.paid),
+          ],
+          movements: [
+            for (final mv in movements)
+              if (mv.month != null)
+                SalaryMovementInput(
+                  month: _parseMonth(mv.month!),
+                  direction: mv.direction,
+                  amount: mv.amount,
+                ),
+          ],
+        );
+        final arrears = computation.arrears;
+        final netDue = computation.netDue;
+
+        // A zero base is a *configuration* problem, not an entitlement of zero:
+        // it is only rejected when nothing else is payable for the month. An
+        // employee with no base but a real bonus is owed that bonus, and
+        // blocking it would refuse a correct payroll.
+        if (employee.baseSalary <= 0 &&
+            computation.entitlements <= 0 &&
+            netDue <= 0) {
+          throw const ValidationException('الراتب الأساسي غير محدد للموظف');
         }
-        for (final mv in movements) {
-          if (mv.month == null) continue;
-          final m = _parseMonth(mv.month!);
-          if (m != targetMonth) continue;
-          final isIn = mv.direction == 'in' || mv.direction == 'entitle';
-          if (isIn) {
-            entitlements += mv.amount;
-          } else {
-            deductions += mv.amount;
-          }
+        if (netDue <= 0) {
+          throw const ValidationException('لا توجد مستحقات للصرف لهذا الشهر');
         }
-        final netDue = employee.baseSalary + arrears + entitlements -
-            deductions;
 
         // 0010:312-318 — required chart codes. Pre-validated here so the user
         // gets the Arabic message; `DoubleEntryEngine._getAccount` would throw
@@ -858,8 +945,8 @@ class OfflineWriteCoordinator {
           month: targetMonth,
           baseSalary: employee.baseSalary,
           arrears: arrears,
-          entitlements: entitlements,
-          deductions: deductions,
+          entitlements: computation.entitlements,
+          deductions: computation.deductions,
           netDue: netDue,
           paid: draft.paid,
           arrearsCarried: netDue - draft.paid,
@@ -1454,6 +1541,7 @@ class OfflineWriteCoordinator {
     String? entity,
     String? localId,
     List<String>? dependsOn,
+    List<String>? affectsInvoiceIds,
     LocalStore? store,
   }) async {
     await (store ?? _store).enqueue(
@@ -1474,6 +1562,10 @@ class OfflineWriteCoordinator {
         dependsOn: dependsOn == null || dependsOn.isEmpty
             ? null
             : jsonEncode(dependsOn),
+        affectsInvoiceIds: affectsInvoiceIds == null ||
+                affectsInvoiceIds.isEmpty
+            ? null
+            : jsonEncode(affectsInvoiceIds),
       ),
     );
   }
@@ -1482,6 +1574,20 @@ class OfflineWriteCoordinator {
   /// `op: 'table_crud'` (mirrors `_enqueueRpc` but tags the row as table_crud
   /// so the flush service replays it as a direct table upsert). [store] is the
   /// transaction-bound store when enqueued inside an atomic write.
+  ///
+  /// [id] must be passed whenever the caller also needs to *name* the leg — a
+  /// money write stamps the leg id on the invoice rows it changed, so the two
+  /// must be the same id or the marker can never be cleared again. Passing the
+  /// id in is what makes that relationship possible; a self-minted id here
+  /// would silently desync the two.
+  ///
+  /// [affectsInvoiceIds] is required for any leg that restates invoice money,
+  /// and must list **exactly** the invoices whose `paid` / `remaining` /
+  /// `status` this leg changes locally. `LocalStore.resolveInvoiceMoneyMarker`
+  /// reads it to decide whether another money leg still owns an invoice, and it
+  /// is the ONLY record of that set for a `settle_supplier` leg (its params
+  /// name a supplier, not invoices). It is local queue metadata: stored on the
+  /// row, never merged into the RPC body.
   Future<void> _enqueueWrite({
     required String rpc,
     required Map<String, dynamic> params,
@@ -1491,6 +1597,7 @@ class OfflineWriteCoordinator {
     String? localId,
     required String op,
     List<String>? dependsOn,
+    List<String>? affectsInvoiceIds,
     LocalStore? store,
   }) async {
     await (store ?? _store).enqueue(
@@ -1511,6 +1618,10 @@ class OfflineWriteCoordinator {
         dependsOn: dependsOn == null || dependsOn.isEmpty
             ? null
             : jsonEncode(dependsOn),
+        affectsInvoiceIds: affectsInvoiceIds == null ||
+                affectsInvoiceIds.isEmpty
+            ? null
+            : jsonEncode(affectsInvoiceIds),
       ),
     );
   }
@@ -1786,8 +1897,31 @@ class OfflineWriteCoordinator {
   }
 
   Future<LocalInvoiceRow> _invoice(String id) async {
-    for (final r in await _store.invoices(_tenantId)) {
+    final rows = await _store.invoices(_tenantId);
+    for (final r in rows) {
       if (r.id == id) return r;
+    }
+    // A replayed invoice is stored under its LOCAL uuid: `markReplaySynced`
+    // keeps the local id on purpose, so the sync badge's join on the leg's
+    // `localId` keeps matching. The list — server or report cache — presents the
+    // SERVER id, so the identity the UI was handed is not the identity the
+    // mirror is keyed by, and the exact match above misses a row that is
+    // sitting right there. Paying that invoice failed with 'الفاتورة غير موجودة
+    // محلياً' for a row that plainly exists.
+    //
+    // `id_map` is the only link between the two, and it is tenant- AND
+    // entity-scoped by construction, so a mapping from another workspace or
+    // another entity type cannot resolve anything here — no extra filter is
+    // needed, and none is added.
+    //
+    // The row is NOT re-keyed to the server id: that is precisely what would
+    // break the badge join, which is why `mirrorInvoices` refreshes a mapped row
+    // in place instead. Resolution is for the write path only.
+    final localId = await _store.localIdFor(_tenantId, 'invoices', id);
+    if (localId != null) {
+      for (final r in rows) {
+        if (r.id == localId) return r;
+      }
     }
     throw ValidationException('الفاتورة غير موجودة محلياً');
   }
@@ -1861,8 +1995,11 @@ class OfflineWriteCoordinator {
     return 'unpaid';
   }
 
-  static String _monthKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  /// Delegates to [salaryMonthKey] rather than formatting `yyyy-MM` itself:
+  /// the read path's paid-state check calls that same function, and the
+  /// duplicate guard and the "is this month already paid" question must answer
+  /// with the identical string or the screen and the write disagree.
+  static String _monthKey(DateTime d) => salaryMonthKey(d);
 
   static DateTime _parseMonth(String yyyyMm) {
     final parts = yyyyMm.split('-');

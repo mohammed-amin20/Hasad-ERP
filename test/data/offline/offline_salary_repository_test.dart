@@ -52,6 +52,7 @@ class _FakeSalaryRepository implements SalaryRepository {
           entitlements: 0,
           deductions: 0,
           netDue: 0,
+          isPaidForMonth: false,
         );
   }
 
@@ -245,6 +246,7 @@ void main() {
           entitlements: 0,
           deductions: 0,
           netDue: 500000,
+          isPaidForMonth: false,
         ),
       );
       final served = await repo(inner: live).entitlement(

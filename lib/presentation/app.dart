@@ -9,6 +9,7 @@ import 'providers/auth_providers.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/splash_screen.dart';
 import 'shell/app_shell.dart';
+import 'widgets/local_data_repair_screen.dart';
 import 'widgets/no_workspace_view.dart';
 
 /// Root widget: chooses Splash / Login / Shell from the auth stream.
@@ -54,14 +55,20 @@ class HasadApp extends ConsumerWidget {
   /// while the data sat in SQLite. Gating once here means every wrapper sees a
   /// real store, instead of threading `.future` through eleven providers.
   ///
-  /// Note `authStateProvider` already awaits the store transitively (it
-  /// resolves `authRepositoryProvider`, which opens it), so this gate is
-  /// currently redundant with the `auth.when(loading:)` branch below. It is
-  /// kept explicit on purpose: the shell is the thing that must never be built
-  /// without a store, and a future refactor of `authStateProvider` should not
-  /// be able to silently reintroduce the bug.
+  /// A store *error* is not the login screen: `openLocalStore` fails loudly
+  /// (`LocalStoreOpenException`) when the database cannot open or migrate, and
+  /// that renders the Arabic repair state — Retry, plus an explicit destructive
+  /// "Reset local data" the user must confirm. Signing out is never reached
+  /// from here, and neither is a silent empty shell.
   Widget _home(AsyncValue<AppUser?> auth, AsyncValue<LocalStore> store) {
-    if (store.isLoading) return const SplashScreen();
+    // A failed FutureProvider surfaces as AsyncLoading-with-error in this
+    // Riverpod (3.4.3): `when(error:)` is never called for it, so the gate
+    // must branch on `hasError` explicitly or the failure would render as an
+    // endless splash.
+    if (store.hasError) {
+      return LocalDataRepairScreen(error: store.error!);
+    }
+    if (!store.hasValue) return const SplashScreen();
     return auth.when(
       loading: () => const SplashScreen(),
       // Reached only for a genuine auth failure (revoked/expired session) or

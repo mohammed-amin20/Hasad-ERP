@@ -12,6 +12,7 @@ import '../../../core/widgets/route_header.dart';
 import '../../../data/offline/report_keys.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/sales/sale_invoice_draft.dart';
+import '../../providers/offline_sync_providers.dart';
 import '../../providers/sales_providers.dart';
 import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
@@ -100,18 +101,22 @@ class _SaleInvoicesScreenState extends ConsumerState<SaleInvoicesScreen> {
   }
 
   Future<void> _newInvoice() async {
-    final no = await Navigator.of(context).push<String>(
+    final result = await Navigator.of(context).push<({String no, bool pending})>(
       MaterialPageRoute(
         builder: (_) => const _NewSaleInvoicePage(),
         fullscreenDialog: true,
       ),
     );
-    if (!mounted || no == null) return;
+    if (!mounted || result == null) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    ref.read(saleInvoicesListProvider.notifier).refresh();
+    refreshAfterLocalInvoiceWrite(ref);
     messenger.showSnackBar(
-      SnackBar(content: Text('تم إنشاء فاتورة البيع رقم $no')),
+      SnackBar(
+        content: Text(result.pending
+            ? 'تم حفظ فاتورة البيع محليًا وستتم مزامنتها عند عودة الاتصال'
+            : 'تم إنشاء فاتورة البيع رقم ${result.no}'),
+      ),
     );
   }
 
@@ -358,7 +363,7 @@ class _NewSaleInvoicePageState extends ConsumerState<_NewSaleInvoicePage> {
                   : _memoCtrl.text.trim(),
             ),
           );
-      if (mounted) Navigator.of(context).pop(result.no);
+      if (mounted) Navigator.of(context).pop((no: result.no, pending: result.pending));
     } on Object catch (error) {
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);

@@ -12,6 +12,7 @@ import '../providers/payments_providers.dart';
 import 'field_icon.dart';
 import 'invoice_input_fields.dart';
 import 'invoice_list.dart';
+import 'sheet_error_banner.dart';
 
 /// Bottom sheet to pay down one invoice via `record_payment`.
 void showRecordPaymentSheet(BuildContext context, {required Invoice invoice}) {
@@ -57,6 +58,8 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
   DateTime _date = DateTime.now();
   final _noteCtrl = TextEditingController();
   bool _submitting = false;
+  /// Inline failure reason; the sheet stays open until the payment succeeds.
+  String? _error;
 
   Invoice get invoice => widget.invoice;
 
@@ -84,14 +87,23 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
   }
 
   Future<void> _submit() async {
+    // Imperative re-entrancy guard — see the note on `_PaySalarySheetState`.
+    if (_submitting) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
     if (!_formKey.currentState!.validate()) return;
-    final amount = priceToAgorot(_amountCtrl.text.trim())!;
 
-    setState(() => _submitting = true);
+    // Parse inside the try (the movement/pay sheets do the same): a malformed
+    // amount must be reported in the sheet, not escape as a raw
+    // `FormatException` that closes nothing and explains nothing.
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
+      final amount = priceToAgorot(_amountCtrl.text.trim())!;
       final result = await ref
           .read(paymentActionsProvider.notifier)
           .record(
@@ -116,12 +128,10 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
         ),
       );
     } on Object catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text(mapErrorToAppException(error).message),
-        ),
-      );
+      // `mounted` because an offline write can resolve after the sheet is gone,
+      // and a `setState` on a disposed State replaces the real reason with a
+      // framework error. The `finally` below already had this guard.
+      if (mounted) setState(() => _error = mapErrorToAppException(error).message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -146,14 +156,18 @@ class _RecordPaymentSheetState extends ConsumerState<_RecordPaymentSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('تسجيل دفعة', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(
-              'فاتورة ${invoice.no} · المتبقي ${Money.format(invoice.remaining)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+              const SizedBox(height: 4),
+              Text(
+                'فاتورة ${invoice.no} · المتبقي ${Money.format(invoice.remaining)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                SheetErrorBanner(_error!),
+              ],
+              const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -259,6 +273,8 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
   DateTime _date = DateTime.now();
   final _noteCtrl = TextEditingController();
   bool _submitting = false;
+  /// Inline failure reason; the sheet stays open until the settlement succeeds.
+  String? _error;
 
   String get supplierId => widget.supplierId;
   String get supplierName => widget.supplierName;
@@ -281,14 +297,20 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
   }
 
   Future<void> _submit() async {
+    // Imperative re-entrancy guard — see the note on `_PaySalarySheetState`.
+    if (_submitting) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
     if (!_formKey.currentState!.validate()) return;
-    final amount = priceToAgorot(_amountCtrl.text.trim())!;
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
+      final amount = priceToAgorot(_amountCtrl.text.trim())!;
       final result = await ref
           .read(paymentActionsProvider.notifier)
           .settle(
@@ -314,12 +336,10 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
         ),
       );
     } on Object catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text(mapErrorToAppException(error).message),
-        ),
-      );
+      // `mounted` because an offline write can resolve after the sheet is gone,
+      // and a `setState` on a disposed State replaces the real reason with a
+      // framework error. The `finally` below already had this guard.
+      if (mounted) setState(() => _error = mapErrorToAppException(error).message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -344,14 +364,18 @@ class _SettleSupplierSheetState extends ConsumerState<_SettleSupplierSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('تسوية المورد', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(
-              '$supplierName — تُسوى أقدم الفواتير والعمولات أولاً',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+              const SizedBox(height: 4),
+              Text(
+                '$supplierName — تُسوى أقدم الفواتير والعمولات أولاً',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                SheetErrorBanner(_error!),
+              ],
+              const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

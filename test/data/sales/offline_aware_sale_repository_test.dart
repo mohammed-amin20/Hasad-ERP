@@ -114,7 +114,7 @@ void main() {
       // move, and the replay leg. These are separate tables, so a shared
       // transaction is the only thing that makes them all-or-nothing.
       expect(await store.invoices(tenant, type: 'sale'), hasLength(1));
-      expect(await store.invoiceItems(result.invoiceId), hasLength(1));
+      expect(await store.invoiceItems(tenant, result.invoiceId), hasLength(1));
       expect(await store.journalEntries(tenant), hasLength(1));
       expect((await store.products(tenant)).single.qty, 98,
           reason: 'stock moved by the 2 units sold');

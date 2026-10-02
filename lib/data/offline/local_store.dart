@@ -48,6 +48,23 @@ class ClearTenantReport {
   int get atRisk => pendingQueueItems + unsyncedMirrorRows;
 }
 
+/// Thrown when the local database cannot be opened or migrated.
+///
+/// The app gate (`localStoreProvider`) treats this as a fatal-store state and
+/// renders the Arabic repair UI (retry + destructive reset) instead of quietly
+/// degrading to `NullLocalStore` — that silent degradation is the "kill the
+/// app offline, reopen, and every cached screen is empty" cold-start collapse.
+class LocalStoreOpenException implements Exception {
+  const LocalStoreOpenException(this.debugInfo);
+
+  /// Human-readable reason (directory tried, underlying error, stack) shown in
+  /// the repair screen's detail line.
+  final String debugInfo;
+
+  @override
+  String toString() => 'LocalStoreOpenException: $debugInfo';
+}
+
 /// Repository over the offline sqlite store. The UI never touches this
 /// directly - offline-first wrappers in `data/` decide the source.
 abstract class LocalStore {
@@ -86,12 +103,122 @@ abstract class LocalStore {
 
   // ---- financial ----------------------------------------------------
 
+  /// The durable line-item id for one position of one invoice: the invoice id,
+  /// a colon, then a 4-digit zero-padded ordinal.
+  ///
+  /// Shared by [mirrorInvoiceItems] and the offline create paths
+  /// (`writeSale` / `writePurchase`) so the two can never disagree — a mirror
+  /// that re-minted ids differently from the writer would leave the writer's rows
+  /// to be deleted and rewritten on every refresh.
+  ///
+  /// Three properties this shape is chosen for, each one pinned by a test:
+  ///
+  ///  * **Positional, so `ORDER BY id` IS the invoice's order.** The detail
+  ///    sheet iterates the list as given, and the server query has no `ORDER BY`,
+  ///    so the order has to be recorded somewhere. The zero padding is not
+  ///    cosmetic: unpadded, `'x:10' < 'x:2'` lexicographically, and it only
+  ///    becomes visible at 10+ lines.
+  ///  * **Idempotent, so a repeated refresh replaces rather than appends.** The
+  ///    same list always produces the same keys.
+  ///  * **Not product-keyed.** An invoice may legitimately carry the same product
+  ///    twice with a different qty/price, and a product-keyed id would collapse
+  ///    those two lines into one.
+  static String invoiceLineId(String invoiceId, int index) =>
+      '$invoiceId:${index.toString().padLeft(4, '0')}';
+
   Future<List<LocalInvoiceRow>> invoices(String tenantId, {String? type});
   Future<void> upsertInvoice(LocalInvoiceRow row);
-  Future<void> deleteInvoice(String id);
+  Future<void> deleteInvoice(String tenantId, String id);
 
-  Future<List<LocalInvoiceItemRow>> invoiceItems(String invoiceId);
+  /// One invoice header by id, or null when this device holds no such row.
+  ///
+  /// Added for P1.E: the detail read has to know whether an invoice is a local
+  /// draft before it decides which source to trust, and the only alternative was
+  /// pulling the tenant's entire invoice list to find one row. Tenant-scoped, so
+  /// a cross-tenant probe cannot even learn that the id exists.
+  Future<LocalInvoiceRow?> invoice(String tenantId, String id);
+
+  /// Mirrors server-owned invoice headers so the local write path can resolve
+  /// them (issue 3).
+  ///
+  /// Deliberately narrower than the master mirrors, which delete-and-replace
+  /// per tenant: an invoice list read is FILTERED (search / date range), so a
+  /// tenant-wide clear would discard every invoice outside the filter window
+  /// the user happens to be looking at. This one never deletes. An incoming row
+  /// replaces the same-id server-owned row, and a row carrying local work is
+  /// left exactly as it is — see [DriftLocalStore.mirrorInvoices] for which
+  /// rows count as local work and why a stale server copy must not land.
+  Future<void> mirrorInvoices(String tenantId, List<LocalInvoiceRow> rows);
+
+  /// Clears [LocalInvoices.pendingMoneyLeg] on every row still stamped with
+  /// [legId], unconditionally — and only those.
+  ///
+  /// The raw primitive. Prefer [resolveInvoiceMoneyMarker] from the flusher:
+  /// clearing on leg-id equality alone is NOT sufficient, because the marker
+  /// only ever names the newest leg, so an older leg that is still queued would
+  /// be forgotten. Retained for direct-store tests and for any caller that has
+  /// already proven no other money leg is outstanding. Rows with a null marker
+  /// never match.
+  Future<void> clearInvoiceMoneyMarker(String tenantId, String legId);
+
+  /// Retires [legId] as a money marker.
+  ///
+  /// Re-evaluates every invoice the leg restated — the union of the rows it
+  /// currently stamps and the set recorded in
+  /// [SyncQueueItem.affectsInvoiceIds] — and for each one:
+  ///
+  ///  * if another money leg of [tenantId] that affects the invoice has not
+  ///    reached `synced` (still `pending`/retrying, or parked `failed`), the
+  ///    marker is re-stamped to the oldest such leg;
+  ///  * otherwise it is cleared, returning the row to server authority.
+  ///
+  /// Attribution comes from the durable column, with a pre-v7
+  /// `p_invoice_id` params fallback — never from the settlement's allocation,
+  /// which the server decides at replay time. Fully tenant-scoped: an invoice
+  /// and a leg are both matched on `tenant_id` as well as id, so one workspace
+  /// can never decide another's marker.
+  Future<void> resolveInvoiceMoneyMarker(String tenantId, String legId);
+
+  /// Line items of one invoice, in the order the detail sheet must paint them.
+  ///
+  /// Tenant-SCOPED, and the tenant is not optional: P1.E made this table the
+  /// durable copy of a server invoice's lines, and a read keyed on `invoiceId`
+  /// alone returns another workspace's rows for the same invoice id. The
+  /// ordering is `id` ASC, which is why the mirror mints positional ids
+  /// (`<invoiceId>:<0000-padded ordinal>`) — see [mirrorInvoiceItems].
+  Future<List<LocalInvoiceItemRow>> invoiceItems(
+    String tenantId,
+    String invoiceId,
+  );
+
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows);
+
+  /// Replaces one invoice's mirrored line set wholesale (P1.E).
+  ///
+  /// ## Why replace-all and not `upsertInvoiceItems`
+  ///
+  /// Two reasons, both load-bearing:
+  ///
+  ///  * **Stale rows.** The ids are positional, so a refresh to FEWER lines
+  ///    leaves an orphan at every ordinal past the new length. An
+  ///    insert-or-replace cannot express "this invoice now has three lines".
+  ///  * **A refresh may legitimately empty the set.** A server invoice whose
+  ///    last line was deleted reads back as `[]`; treating that as "no change"
+  ///    would leave the deleted line on the device forever.
+  ///
+  /// Both halves run in ONE transaction, and a plain (non-replacing) insert is
+  /// used after the tenant-scoped delete, so a same-id row belonging to another
+  /// workspace can never be touched — the primary key is `{tenantId, id}` since
+  /// schema 8, and the delete is scoped anyway so the two agree.
+  ///
+  /// Rows carrying local work are excluded: an invoice whose header is
+  /// `synced == false` is a local draft the server has never seen, so its lines
+  /// are the only copy that exists. See [DriftLocalStore.mirrorInvoiceItems].
+  Future<void> mirrorInvoiceItems(
+    String tenantId,
+    String invoiceId,
+    List<LocalInvoiceItemRow> rows,
+  );
 
   Future<void> upsertPayment(LocalPaymentRow row);
   Future<List<LocalPaymentRow>> payments(String tenantId);
@@ -142,6 +269,43 @@ abstract class LocalStore {
     List<String> ids,
   );
 
+  /// Which of [invoiceIds] already have at least one durable
+  /// `local_invoice_items` row for [tenantId].
+  ///
+  /// One bulk `GROUP BY` query, never one query per invoice: the list-time
+  /// detail prefetch uses it to ask "which of these do I actually still need
+  /// from the network?", so an offline list refresh of a workspace whose lines
+  /// are already durable issues **zero** detail requests instead of one failing
+  /// batch per refresh.
+  ///
+  /// This is a *durable availability* check, not a completeness check. A
+  /// server invoice that genuinely has zero lines has no line row, so it can
+  /// never appear in the result and will be re-asked for on every list read
+  /// until it does. That is accepted deliberately — see
+  /// `OfflineInvoiceRepository._prefetchDetails`. Do not "fix" it by adding
+  /// completeness metadata, a marker row or a schema migration: an empty answer
+  /// must stay distinguishable from an unknown one.
+  ///
+  /// Tenant-scoped, so a foreign workspace's lines can never mark an id as
+  /// durable. Ids with no rows (and an empty [invoiceIds]) simply do not appear.
+  ///
+  /// ## Ids are accepted in EITHER space, and answered in the caller's
+  ///
+  /// [invoiceIds] may be server ids, local ids, or a mix: a replayed invoice is
+  /// stored under its local uuid and served under the server's, so the list-time
+  /// prefetch passes the server id while the rows it is comparing against are
+  /// keyed by the local one. Comparing those directly never matches, which looks
+  /// identical to "these lines were never fetched" and re-requests them on every
+  /// refresh forever. Implementations MUST therefore resolve the mapping, and
+  /// MUST return only ids that were passed in — in the form they were passed.
+  ///
+  /// Resolving this inside the store rather than at the call site is what keeps
+  /// it one bounded lookup: a per-id `localIdFor` probe would be N extra queries.
+  Future<Set<String>> invoiceIdsWithDurableItems(
+    String tenantId,
+    List<String> invoiceIds,
+  );
+
   /// Status of every queued leg for [tenantId], keyed by leg id — including
   /// `failed` legs, which [pendingSync] omits. Used by the flusher to resolve
   /// `dependsOn` prerequisites without re-querying per leg.
@@ -153,10 +317,7 @@ abstract class LocalStore {
   /// Unlike [pendingSync] this includes `synced` and `failed` legs, which is
   /// what a sync indicator needs: a finished leg is *marked* synced, never
   /// deleted, so the history is still there to read.
-  Future<List<SyncQueueRow>> queueLegsFor(
-    String tenantId, {
-    String? entity,
-  });
+  Future<List<SyncQueueRow>> queueLegsFor(String tenantId, {String? entity});
 
   /// Ids of the legs that [SyncQueueItem.dependsOn] names, parsed from its JSON
   /// array. Returns an empty list for a null/empty/malformed value so a corrupt
@@ -172,6 +333,63 @@ abstract class LocalStore {
       ];
     } on FormatException {
       return const [];
+    }
+  }
+
+  /// Ids of the invoice rows whose money figures [SyncQueueItem.affectsInvoiceIds]
+  /// records this leg as restating, parsed from its JSON array. Returns an empty
+  /// list for a null/empty/malformed value.
+  ///
+  /// Malformed JSON degrades to "no recorded attribution" rather than throwing,
+  /// mirroring [parseDependencies]: a corrupt column must not be able to crash a
+  /// flush. That degradation is deliberately NOT silently treated as "this leg
+  /// affects nothing" by the caller — see [_legInvoiceIds] for why.
+  static List<String> parseInvoiceAttribution(String? json) {
+    if (json == null || json.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! List) return const [];
+      return [
+        for (final v in decoded)
+          if (v is String && v.isNotEmpty) v,
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Every invoice id a money leg restates locally, from its durable attribution
+  /// first and its RPC params only as a legacy fallback.
+  ///
+  /// The fallback exists for pre-v7 legs, whose column is NULL. It is exact for
+  /// `record_payment` (`p_invoice_id` is the RPC's own target argument) and
+  /// empty for `settle_supplier` — and that is the correct, non-invented answer:
+  /// a settlement's invoice set is decided by the SERVER at replay time, so for
+  /// a leg queued before the attribution column existed there is no local
+  /// evidence of what it touched and none is fabricated. The residual is narrow
+  /// and self-healing (it applies only to settlements already queued at upgrade
+  /// time, and disappears once they drain).
+  static Set<String> _legInvoiceIds(SyncQueueRow leg) {
+    final recorded = parseInvoiceAttribution(leg.affectsInvoiceIds);
+    if (recorded.isNotEmpty) return recorded.toSet();
+    return {for (final id in parseLegacyTargetInvoice(leg.params)) id};
+  }
+
+  /// The pre-v7 attribution: the `p_invoice_id` a money leg's params name.
+  ///
+  /// Kept only as a fallback for legs written before `affects_invoice_ids`
+  /// existed. A `settle_supplier` leg names no invoices — the server picks what
+  /// to allocate — so it returns nothing and is correctly attributed to no
+  /// invoice rather than to a guessed one.
+  static Set<String> parseLegacyTargetInvoice(String paramsJson) {
+    if (paramsJson.trim().isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(paramsJson);
+      if (decoded is! Map) return const {};
+      final id = decoded['p_invoice_id'];
+      return id is String && id.isNotEmpty ? {id} : const {};
+    } on FormatException {
+      return const {};
     }
   }
 
@@ -252,8 +470,7 @@ abstract class LocalStore {
   ///
   /// The `local_user_profiles` table is deliberately untouched: it is keyed by
   /// auth uid, not tenant, and is cleared on sign-out instead.
-  Future<ClearTenantReport> clearTenant(String tenantId,
-      {bool force = false});
+  Future<ClearTenantReport> clearTenant(String tenantId, {bool force = false});
 
   Future<void> dispose();
 
@@ -270,6 +487,7 @@ abstract class LocalStore {
   Future<bool> hasUnsyncedSalaries(String tenantId);
   Future<bool> hasUnsyncedAccounts(String tenantId);
 }
+
 /// No-op store returned when the host cannot provide sqlite3 (web dev builds).
 class NullLocalStore implements LocalStore {
   const NullLocalStore();
@@ -284,7 +502,10 @@ class NullLocalStore implements LocalStore {
   Future<List<LocalCustomerRow>> customers(String tenantId) async => const [];
 
   @override
-  Future<void> mirrorCustomers(String tenantId, List<LocalCustomerRow> rows) async {}
+  Future<void> mirrorCustomers(
+    String tenantId,
+    List<LocalCustomerRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertCustomer(LocalCustomerRow row) async {}
@@ -293,7 +514,10 @@ class NullLocalStore implements LocalStore {
   Future<List<LocalSupplierRow>> suppliers(String tenantId) async => const [];
 
   @override
-  Future<void> mirrorSuppliers(String tenantId, List<LocalSupplierRow> rows) async {}
+  Future<void> mirrorSuppliers(
+    String tenantId,
+    List<LocalSupplierRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertSupplier(LocalSupplierRow row) async {}
@@ -302,7 +526,10 @@ class NullLocalStore implements LocalStore {
   Future<List<LocalProductRow>> products(String tenantId) async => const [];
 
   @override
-  Future<void> mirrorProducts(String tenantId, List<LocalProductRow> rows) async {}
+  Future<void> mirrorProducts(
+    String tenantId,
+    List<LocalProductRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertProduct(LocalProductRow row) async {}
@@ -311,7 +538,10 @@ class NullLocalStore implements LocalStore {
   Future<List<LocalEmployeeRow>> employees(String tenantId) async => const [];
 
   @override
-  Future<void> mirrorEmployees(String tenantId, List<LocalEmployeeRow> rows) async {}
+  Future<void> mirrorEmployees(
+    String tenantId,
+    List<LocalEmployeeRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertEmployee(LocalEmployeeRow row) async {}
@@ -320,7 +550,10 @@ class NullLocalStore implements LocalStore {
   Future<List<LocalAccountRow>> accounts(String tenantId) async => const [];
 
   @override
-  Future<void> mirrorAccounts(String tenantId, List<LocalAccountRow> rows) async {}
+  Future<void> mirrorAccounts(
+    String tenantId,
+    List<LocalAccountRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertAccount(LocalAccountRow row) async {}
@@ -330,21 +563,47 @@ class NullLocalStore implements LocalStore {
       const [];
 
   @override
-  Future<List<LocalInvoiceRow>> invoices(String tenantId, {String? type}) async =>
-      const [];
+  Future<List<LocalInvoiceRow>> invoices(
+    String tenantId, {
+    String? type,
+  }) async => const [];
 
   @override
   Future<void> upsertInvoice(LocalInvoiceRow row) async {}
 
   @override
-  Future<void> deleteInvoice(String id) async {}
+  Future<void> deleteInvoice(String tenantId, String id) async {}
 
   @override
-  Future<List<LocalInvoiceItemRow>> invoiceItems(String invoiceId) async =>
-      const [];
+  Future<LocalInvoiceRow?> invoice(String tenantId, String id) async => null;
+
+  @override
+  Future<void> mirrorInvoices(
+    String tenantId,
+    List<LocalInvoiceRow> rows,
+  ) async {}
+
+  @override
+  Future<void> clearInvoiceMoneyMarker(String tenantId, String legId) async {}
+
+  @override
+  Future<void> resolveInvoiceMoneyMarker(String tenantId, String legId) async {}
+
+  @override
+  Future<List<LocalInvoiceItemRow>> invoiceItems(
+    String tenantId,
+    String invoiceId,
+  ) async => const [];
 
   @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) async {}
+
+  @override
+  Future<void> mirrorInvoiceItems(
+    String tenantId,
+    String invoiceId,
+    List<LocalInvoiceItemRow> rows,
+  ) async {}
 
   @override
   Future<void> upsertPayment(LocalPaymentRow row) async {}
@@ -378,8 +637,10 @@ class NullLocalStore implements LocalStore {
   Future<void> upsertEmployeeMovement(LocalEmployeeMovementRow row) async {}
 
   @override
-  Future<List<LocalSalaryRow>> salaries(String tenantId, {String? employeeId}) async =>
-      const [];
+  Future<List<LocalSalaryRow>> salaries(
+    String tenantId, {
+    String? employeeId,
+  }) async => const [];
 
   @override
   Future<void> upsertSalary(LocalSalaryRow row) async {}
@@ -414,6 +675,15 @@ class NullLocalStore implements LocalStore {
   ) async {}
 
   @override
+  Future<Set<String>> invoiceIdsWithDurableItems(
+    String tenantId,
+    List<String> invoiceIds,
+  ) async =>
+      // Nothing is ever durable without a database, so every candidate looks
+      // missing and the caller simply asks the network for all of them.
+      const <String>{};
+
+  @override
   Future<T> transaction<T>(Future<T> Function(LocalStore store) action) =>
       // No database means no rollback, but the write path stays identical so
       // callers never need a Null-vs-real branch.
@@ -439,13 +709,17 @@ class NullLocalStore implements LocalStore {
 
   @override
   Future<String?> serverIdFor(
-          String tenantId, String entity, String localId) async =>
-      localId;
+    String tenantId,
+    String entity,
+    String localId,
+  ) async => localId;
 
   @override
   Future<String?> localIdFor(
-          String tenantId, String entity, String serverId) async =>
-      serverId;
+    String tenantId,
+    String entity,
+    String serverId,
+  ) async => serverId;
 
   @override
   Future<void> putMapping({
@@ -481,10 +755,14 @@ class NullLocalStore implements LocalStore {
   Future<void> deleteUserProfile(String authUid) async {}
 
   @override
-  Future<ClearTenantReport> clearTenant(String tenantId,
-      {bool force = false}) async =>
-      const ClearTenantReport(
-          cleared: true, pendingQueueItems: 0, unsyncedMirrorRows: 0);
+  Future<ClearTenantReport> clearTenant(
+    String tenantId, {
+    bool force = false,
+  }) async => const ClearTenantReport(
+    cleared: true,
+    pendingQueueItems: 0,
+    unsyncedMirrorRows: 0,
+  );
 
   @override
   Future<void> dispose() async {}
@@ -535,10 +813,9 @@ class DriftLocalStore implements LocalStore {
   // ---- master data -------------------------------------------------
 
   @override
-  Future<List<LocalCustomerRow>> customers(String tenantId) =>
-      (_db.select(_db.localCustomers)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalCustomerRow>> customers(String tenantId) => (_db.select(
+    _db.localCustomers,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
   Future<void> mirrorCustomers(String tenantId, List<LocalCustomerRow> rows) =>
@@ -546,16 +823,20 @@ class DriftLocalStore implements LocalStore {
         serverRows: rows,
         idOf: (r) => r.id,
         readPendingIds: () async => {
-              for (final r in await (_db.select(_db.localCustomers)
-                    ..where((r) =>
-                        r.tenantId.equals(tenantId) & r.synced.equals(false)))
+          for (final r
+              in await (_db.select(_db.localCustomers)..where(
+                    (r) => r.tenantId.equals(tenantId) & r.synced.equals(false),
+                  ))
                   .get())
-                r.id
-            },
-        deleteSynced: () => (_db.delete(_db.localCustomers)
-              ..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(true)))
-            .go(),
-        insertAll: (rs) => _db.batch((b) => b.insertAll(_db.localCustomers, rs)),
+            r.id,
+        },
+        deleteSynced: () =>
+            (_db.delete(_db.localCustomers)..where(
+                  (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
+                ))
+                .go(),
+        insertAll: (rs) =>
+            _db.batch((b) => b.insertAll(_db.localCustomers, rs)),
       );
 
   @override
@@ -564,10 +845,9 @@ class DriftLocalStore implements LocalStore {
       .insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalSupplierRow>> suppliers(String tenantId) =>
-      (_db.select(_db.localSuppliers)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalSupplierRow>> suppliers(String tenantId) => (_db.select(
+    _db.localSuppliers,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
   Future<void> mirrorSuppliers(String tenantId, List<LocalSupplierRow> rows) =>
@@ -575,16 +855,20 @@ class DriftLocalStore implements LocalStore {
         serverRows: rows,
         idOf: (r) => r.id,
         readPendingIds: () async => {
-              for (final r in await (_db.select(_db.localSuppliers)
-                    ..where((r) =>
-                        r.tenantId.equals(tenantId) & r.synced.equals(false)))
+          for (final r
+              in await (_db.select(_db.localSuppliers)..where(
+                    (r) => r.tenantId.equals(tenantId) & r.synced.equals(false),
+                  ))
                   .get())
-                r.id
-            },
-        deleteSynced: () => (_db.delete(_db.localSuppliers)
-              ..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(true)))
-            .go(),
-        insertAll: (rs) => _db.batch((b) => b.insertAll(_db.localSuppliers, rs)),
+            r.id,
+        },
+        deleteSynced: () =>
+            (_db.delete(_db.localSuppliers)..where(
+                  (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
+                ))
+                .go(),
+        insertAll: (rs) =>
+            _db.batch((b) => b.insertAll(_db.localSuppliers, rs)),
       );
 
   @override
@@ -593,10 +877,9 @@ class DriftLocalStore implements LocalStore {
       .insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalProductRow>> products(String tenantId) =>
-      (_db.select(_db.localProducts)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalProductRow>> products(String tenantId) => (_db.select(
+    _db.localProducts,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
   Future<void> mirrorProducts(String tenantId, List<LocalProductRow> rows) =>
@@ -604,28 +887,29 @@ class DriftLocalStore implements LocalStore {
         serverRows: rows,
         idOf: (r) => r.id,
         readPendingIds: () async => {
-              for (final r in await (_db.select(_db.localProducts)
-                    ..where((r) =>
-                        r.tenantId.equals(tenantId) & r.synced.equals(false)))
+          for (final r
+              in await (_db.select(_db.localProducts)..where(
+                    (r) => r.tenantId.equals(tenantId) & r.synced.equals(false),
+                  ))
                   .get())
-                r.id
-            },
-        deleteSynced: () => (_db.delete(_db.localProducts)
-              ..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(true)))
-            .go(),
+            r.id,
+        },
+        deleteSynced: () =>
+            (_db.delete(_db.localProducts)..where(
+                  (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
+                ))
+                .go(),
         insertAll: (rs) => _db.batch((b) => b.insertAll(_db.localProducts, rs)),
       );
 
   @override
-  Future<void> upsertProduct(LocalProductRow row) => _db
-      .into(_db.localProducts)
-      .insert(row, mode: InsertMode.insertOrReplace);
+  Future<void> upsertProduct(LocalProductRow row) =>
+      _db.into(_db.localProducts).insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalEmployeeRow>> employees(String tenantId) =>
-      (_db.select(_db.localEmployees)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalEmployeeRow>> employees(String tenantId) => (_db.select(
+    _db.localEmployees,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
   Future<void> mirrorEmployees(String tenantId, List<LocalEmployeeRow> rows) =>
@@ -633,16 +917,20 @@ class DriftLocalStore implements LocalStore {
         serverRows: rows,
         idOf: (r) => r.id,
         readPendingIds: () async => {
-              for (final r in await (_db.select(_db.localEmployees)
-                    ..where((r) =>
-                        r.tenantId.equals(tenantId) & r.synced.equals(false)))
+          for (final r
+              in await (_db.select(_db.localEmployees)..where(
+                    (r) => r.tenantId.equals(tenantId) & r.synced.equals(false),
+                  ))
                   .get())
-                r.id
-            },
-        deleteSynced: () => (_db.delete(_db.localEmployees)
-              ..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(true)))
-            .go(),
-        insertAll: (rs) => _db.batch((b) => b.insertAll(_db.localEmployees, rs)),
+            r.id,
+        },
+        deleteSynced: () =>
+            (_db.delete(_db.localEmployees)..where(
+                  (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
+                ))
+                .go(),
+        insertAll: (rs) =>
+            _db.batch((b) => b.insertAll(_db.localEmployees, rs)),
       );
 
   @override
@@ -651,22 +939,24 @@ class DriftLocalStore implements LocalStore {
       .insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalAccountRow>> accounts(String tenantId) =>
-      (_db.select(_db.localAccounts)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalAccountRow>> accounts(String tenantId) => (_db.select(
+    _db.localAccounts,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
-  Future<void> mirrorAccounts(String tenantId, List<LocalAccountRow> rows) async {
+  Future<void> mirrorAccounts(
+    String tenantId,
+    List<LocalAccountRow> rows,
+  ) async {
     // Never let a background/online refresh destroy locally-modified accounts
     // that the server has not seen yet. If any `synced=false` row exists for
     // this tenant, skip the destructive clear-and-replace entirely.
     final hasUnsynced = await hasUnsyncedAccounts(tenantId);
     if (hasUnsynced) return;
     await _db.transaction(() async {
-      await (_db.delete(_db.localAccounts)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
+      await (_db.delete(
+        _db.localAccounts,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
       if (rows.isNotEmpty) {
         await _db.batch((b) => b.insertAll(_db.localAccounts, rows));
       }
@@ -707,18 +997,18 @@ class DriftLocalStore implements LocalStore {
   }
 
   @override
-  Future<void> upsertAccount(LocalAccountRow row) => _db
-      .into(_db.localAccounts)
-      .insert(row, mode: InsertMode.insertOrReplace);
+  Future<void> upsertAccount(LocalAccountRow row) =>
+      _db.into(_db.localAccounts).insert(row, mode: InsertMode.insertOrReplace);
 
   // ---- financial ----------------------------------------------------
 
   @override
   Future<List<LocalInvoiceRow>> invoices(String tenantId, {String? type}) =>
-      (_db.select(_db.localInvoices)
-            ..where((r) => type == null
+      (_db.select(_db.localInvoices)..where(
+            (r) => type == null
                 ? r.tenantId.equals(tenantId)
-                : r.tenantId.equals(tenantId) & r.type.equals(type)))
+                : r.tenantId.equals(tenantId) & r.type.equals(type),
+          ))
           .get();
 
   @override
@@ -726,25 +1016,384 @@ class DriftLocalStore implements LocalStore {
       _db.into(_db.localInvoices).insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<void> deleteInvoice(String id) async {
-    await (_db.delete(_db.localInvoiceItems)
-          ..where((r) => r.invoiceId.equals(id)))
-        .go();
-    await (_db.delete(_db.localInvoices)
-          ..where((r) => r.id.equals(id)))
-        .go();
+  Future<LocalInvoiceRow?> invoice(String tenantId, String id) =>
+      (_db.select(_db.localInvoices)
+            ..where((r) => r.tenantId.equals(tenantId) & r.id.equals(id)))
+          .getSingleOrNull();
+
+  /// Deletes an invoice and its line items, scoped to the owning workspace.
+  ///
+  /// Tenant scoping on BOTH deletes is a P1.E correction, not a formality: the
+  /// cascade used to match `invoice_id` / `id` alone, so a delete in one
+  /// workspace could remove another workspace's lines for the same invoice id.
+  /// (The header table is still keyed `{id}` alone, so the header delete cannot
+  /// be made collision-proof by filtering — it can only be scoped to the tenant
+  /// that owns it, which is what happens here.)
+  @override
+  Future<void> deleteInvoice(String tenantId, String id) async {
+    await (_db.delete(
+      _db.localInvoiceItems,
+    )..where((r) => r.tenantId.equals(tenantId) & r.invoiceId.equals(id))).go();
+    await (_db.delete(
+      _db.localInvoices,
+    )..where((r) => r.tenantId.equals(tenantId) & r.id.equals(id))).go();
+  }
+
+  /// Server-owned invoice headers land here so `recordPayment` /
+  /// `settleSupplier` can resolve an invoice the device only ever saw over the
+  /// network (issue 3).
+  ///
+  /// ## Why this is not `_mirrorPreservingUnsynced`
+  ///
+  /// Two properties force a bespoke shape:
+  ///
+  /// 1. **It never sweeps the tenant.** An invoice list read is filtered
+  ///    (search / date range), so the master mirrors' tenant-wide
+  ///    delete-and-replace would discard every invoice outside the window the
+  ///    user happens to be looking at. The delete here is scoped to the
+  ///    incoming ids.
+  /// 2. **A same-id row owned by another tenant must fail, not replace.** The
+  ///    primary key is `{id}` alone, so `insertOrReplace` would silently
+  ///    OVERWRITE another workspace's locally-owned row — the exact
+  ///    cross-tenant damage the id-only key is documented to risk. So the
+  ///    replacement is an explicit delete-then-insert: the delete is
+  ///    tenant-scoped, and the insert is a plain insert that raises UNIQUE on a
+  ///    foreign collision. Both halves sit in one transaction, so a collision
+  ///    rolls the whole mirror back and leaves the other tenant's row intact.
+  ///
+  /// Rows carrying local work are excluded from both halves: an unsynced draft
+  /// (`synced == false`) is a local invoice the server has never seen, and a
+  /// synced row still stamped with `pendingMoneyLeg` holds
+  /// `paid`/`remaining`/`status` corrections a queued leg has not yet replayed
+  /// — the server's copy is the one from BEFORE that payment. Re-inserting it
+  /// is how issue 3 recurs through a narrower door.
+  ///
+  /// **That exclusion is evaluated in the LOCAL id space.** A row this device
+  /// minted is stored under its local uuid while the server calls it something
+  /// else, so the incoming server id must be resolved through `id_map` *before*
+  /// it is tested against the protected set. Filtering on the raw server id
+  /// protects nothing for exactly those rows — see the resolution block below.
+  @override
+  Future<void> mirrorInvoices(
+    String tenantId,
+    List<LocalInvoiceRow> rows,
+  ) async {
+    if (rows.isEmpty) return;
+    await _db.transaction(() async {
+      // **Resolve the id space FIRST, then compare.** [protectedIds] is built
+      // from LOCAL rows; [rows] arrive from the SERVER. For a row this device
+      // minted those two ids differ (`id_map` links them), so filtering on the
+      // raw incoming id asks "is this server id in the set of local ids?" —
+      // which is false for exactly the mapped rows that must NOT be touched.
+      // The mapped row then fell through to the update branch below and the
+      // server's pre-payment money was written over the local correction,
+      // clearing `pendingMoneyLeg` in the same statement and letting the next
+      // server read hand the invoice back to a figure the queue had not
+      // reached yet.
+      //
+      // So every incoming id is mapped to its effective LOCAL id up front, and
+      // BOTH the protection filter and the update branch consume that same
+      // value. Comparing like with like is the whole fix.
+      //
+      // This costs exactly what the old code already cost: one indexed
+      // `id_map` read per incoming row (the update branch used to do it too),
+      // just hoisted above the filter instead of below it.
+      final localIdByServerId = <String, String>{
+        for (final row in rows)
+          row.id: await localIdFor(tenantId, 'invoices', row.id) ?? row.id,
+      };
+      final protectedIds = {
+        for (final r
+            in await (_db.select(_db.localInvoices)..where(
+                  (r) =>
+                      r.tenantId.equals(tenantId) &
+                      (r.synced.equals(false) |
+                          r.pendingMoneyLeg.isNull().not()),
+                ))
+                .get())
+          r.id,
+      };
+      // A protected mapped row now drops out of `incoming` entirely, so BOTH
+      // its money columns and its marker survive — protecting only the money
+      // would leave the row looking server-owned while showing local figures.
+      final incoming = <({LocalInvoiceRow row, String localId})>[
+        for (final row in rows)
+          if (!protectedIds.contains(localIdByServerId[row.id]!))
+            (row: row, localId: localIdByServerId[row.id]!),
+      ];
+      if (incoming.isEmpty) return;
+
+      // A row this device minted is still stored under its LOCAL id after a
+      // replay — `markReplaySynced` updates `no`/`synced` in place and records
+      // local→server in `id_map` rather than re-keying the row. So the server's
+      // copy of that same invoice arrives here under a DIFFERENT id, and
+      // inserting it blindly lands a second row beside the local one: the
+      // invoice appears twice, and the sync badge's join (which keys on the
+      // queue leg's `localId`) silently stops matching. `id_map` is the only
+      // link, so it is consulted above and the row is refreshed IN PLACE —
+      // re-keying it to the server id would break that join instead.
+      //
+      // This is the same `id_map` the P2 drain test depends on, and it is why
+      // `markReplaySynced` deliberately keeps the local id.
+      //
+      // An UNPROTECTED mapped row still lands here, which is the point: once the
+      // money leg drains and `resolveInvoiceMoneyMarker` clears the marker, the
+      // server's figures are authoritative again and must be allowed to land.
+      final fresh = <LocalInvoiceRow>[];
+      for (final e in incoming) {
+        if (e.localId == e.row.id) {
+          fresh.add(e.row);
+          continue;
+        }
+        await (_db.update(
+          _db.localInvoices,
+        )..where((r) => r.id.equals(e.localId) & r.tenantId.equals(tenantId)))
+        // `nullToAbsent: false` writes the NULLs through, which is the
+        // contract: a server-owned row carries no requestId, no local
+        // createdAt and no pending money leg.
+        .write(e.row.copyWith(id: e.localId).toCompanion(false));
+      }
+      if (fresh.isEmpty) return;
+
+      // `local_invoices` is keyed `{id}` ALONE, so a same-id row owned by
+      // another tenant is a real primary-key collision. The safe primitive stays
+      // a tenant-scoped delete + a PLAIN insert: `insertOrReplace` matches the
+      // key alone, so it would silently replace the other workspace's invoice
+      // and destroy it on a tenant switch.
+      //
+      // The collision is resolved by SKIPPING the offending id, not by letting
+      // the insert raise. Letting it raise rolls back the whole transaction —
+      // including the delete above — so ONE colliding invoice in a page of
+      // twenty would leave the other nineteen unhydrated: the same "visible but
+      // not locally writable" defect one level down. The colliding ids are
+      // therefore partitioned out first, and their safe siblings are written.
+      //
+      // The skipped invoice is the ONE documented exception to "an invoice
+      // returned to `list()` is locally resolvable": the schema cannot hold both
+      // tenants' rows under one key, and the read cannot invent the other
+      // workspace's row. A payment against it still fails honestly with
+      // 'الفاتورة غير موجودة محلياً'. Tenant isolation is never traded away to
+      // make a page look complete.
+      final foreignIds = {
+        for (final r
+            in await (_db.select(_db.localInvoices)..where(
+                  (r) =>
+                      r.id.isIn([for (final r in fresh) r.id]) &
+                      r.tenantId.equals(tenantId).not(),
+                ))
+                .get())
+          r.id,
+      };
+      final insertable = [
+        for (final r in fresh)
+          if (!foreignIds.contains(r.id)) r,
+      ];
+      if (insertable.isEmpty) return;
+
+      // Replace only THIS tenant's own server-owned copy of those exact ids.
+      await (_db.delete(_db.localInvoices)..where(
+            (r) =>
+                r.tenantId.equals(tenantId) &
+                r.synced.equals(true) &
+                r.pendingMoneyLeg.isNull() &
+                r.id.isIn([for (final r in insertable) r.id]),
+          ))
+          .go();
+
+      await _db.batch((b) => b.insertAll(_db.localInvoices, insertable));
+    });
   }
 
   @override
-  Future<List<LocalInvoiceItemRow>> invoiceItems(String invoiceId) =>
+  Future<void> clearInvoiceMoneyMarker(String tenantId, String legId) async {
+    await (_db.update(_db.localInvoices)..where(
+          (r) => r.tenantId.equals(tenantId) & r.pendingMoneyLeg.equals(legId),
+        ))
+        .write(const LocalInvoicesCompanion(pendingMoneyLeg: Value(null)));
+  }
+
+  @override
+  Future<void> resolveInvoiceMoneyMarker(String tenantId, String legId) async {
+    // Every invoice the completing leg restated, taken as the union of the rows
+    // it currently stamps and the set recorded in its attribution column.
+    //
+    // Attribution is the primary answer: it is the only source that survives the
+    // marker being taken over by a newer leg, which is exactly the case
+    // `settle_supplier` needs (its RPC body names no invoices). The stamped set
+    // is the floor — it guarantees a leg can never silently stop re-deciding
+    // rows it wrote itself if its attribution is missing or unreadable (a
+    // pre-v7 settlement, a corrupt column).
+    //
+    // Honest note on the union's two halves, established by mutation rather
+    // than assumption: under every state reachable through the write path, the
+    // two halves AGREE, because a resolve only ever re-stamps to another
+    // *outstanding* leg or clears, and after any resolve the marker names either
+    // null or an outstanding leg. Dropping the stamped half therefore passes the
+    // whole suite, as does dropping the attribution half except for the
+    // self-healing case pinned by `resolution depends on the queue`. The stamped
+    // half is kept because it is the definition of "the invoices this leg
+    // restated" and it costs one line — not because a current test needs it.
+    final stamped =
+        await (_db.select(_db.localInvoices)..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) & r.pendingMoneyLeg.equals(legId),
+            ))
+            .get();
+    final completed =
+        await (_db.select(_db.syncQueueItems)
+              ..where((r) => r.id.equals(legId) & r.tenantId.equals(tenantId)))
+            .getSingleOrNull();
+
+    final affected = <String>{
+      for (final r in stamped) r.id,
+      if (completed != null) ...LocalStore._legInvoiceIds(completed),
+    };
+    if (affected.isEmpty) return;
+
+    // Money legs that have not reached `synced` yet, excluding the one being
+    // resolved. This includes `pending` (retrying) and `failed` (parked) legs
+    // on purpose: both are local financial mutations the server has not
+    // accepted, so both must keep owning the invoice. The cost is liveness — a
+    // permanently parked leg holds its invoices' local figures indefinitely —
+    // and the trade is deliberate, because the alternative re-exposes figures
+    // that predate the user's own write. Recovery UX is a separate concern.
+    final outstanding = await _pendingMoneyLegsExcluding(tenantId, legId);
+
+    for (final invoiceId in affected) {
+      // The server is authoritative for this invoice only once EVERY local
+      // money mutation on it has replayed. Clearing on *this* leg's success
+      // alone is not enough: the marker only ever names the newest leg, so an
+      // older leg that is still queued would be forgotten and the row would
+      // fall back to a server figure that knows about neither.
+      final stillQueued =
+          outstanding
+              .where((l) => LocalStore._legInvoiceIds(l).contains(invoiceId))
+              .toList()
+            // Deterministic order. `createdAt` alone is NOT a total order: legs
+            // enqueued in the same millisecond share a timestamp, so which one is
+            // "oldest" would otherwise depend on row order. Ids are uuids, so
+            // comparing them is arbitrary but stable.
+            ..sort((a, b) {
+              final byTime = a.createdAt.compareTo(b.createdAt);
+              return byTime != 0 ? byTime : a.id.compareTo(b.id);
+            });
+
+      await (_db.update(
+            _db.localInvoices,
+          )..where((r) => r.id.equals(invoiceId) & r.tenantId.equals(tenantId)))
+          .write(
+            LocalInvoicesCompanion(
+              // Re-stamp to a leg that genuinely has not landed, so the next clear can
+              // still match by equality. Pointing at this already-synced leg would
+              // leave a marker nothing could ever clear.
+              pendingMoneyLeg: Value(
+                stillQueued.isEmpty ? null : stillQueued.first.id,
+              ),
+            ),
+          );
+    }
+  }
+
+  /// Money legs (payments / settlements) that have not reached `synced` yet,
+  /// excluding the one currently being resolved.
+  Future<List<SyncQueueRow>> _pendingMoneyLegsExcluding(
+    String tenantId,
+    String excludedLegId,
+  ) async {
+    final legs =
+        await (_db.select(_db.syncQueueItems)..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) &
+                  r.entity.equals('payments') &
+                  r.status.isNotValue('synced') &
+                  r.id.equals(excludedLegId).not(),
+            ))
+            .get();
+    return legs;
+  }
+
+  /// Tenant-scoped, and ordered by `id` — the detail sheet iterates this list
+  /// in order, and `id` is the mirror's positional `<invoiceId>:<ordinal>` key,
+  /// so the painted order is the server's order.
+  ///
+  /// Rows whose id predates the positional scheme (a bare uuid, written by an
+  /// older build's `writeSale`) have no recoverable original position, so they
+  /// come back ordered by their uuid. That limitation is documented rather than
+  /// hidden: the alternative — inventing a column to store a position that was
+  /// never recorded — is a second source of truth with no evidence behind it.
+  @override
+  Future<List<LocalInvoiceItemRow>> invoiceItems(
+    String tenantId,
+    String invoiceId,
+  ) =>
       (_db.select(_db.localInvoiceItems)
-            ..where((r) => r.invoiceId.equals(invoiceId)))
+            ..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) & r.invoiceId.equals(invoiceId),
+            )
+            ..orderBy([(r) => OrderingTerm.asc(r.id)]))
           .get();
 
   @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) async {
     if (rows.isEmpty) return;
-    await _db.batch((b) => b.insertAll(_db.localInvoiceItems, rows, mode: InsertMode.insertOrReplace));
+    await _db.batch(
+      (b) => b.insertAll(
+        _db.localInvoiceItems,
+        rows,
+        mode: InsertMode.insertOrReplace,
+      ),
+    );
+  }
+
+  /// See [LocalStore.mirrorInvoiceItems] for why this replaces the whole set.
+  ///
+  /// The local-work guard is what keeps a pending draft safe: its lines are the
+  /// only copy on the device (the server has never seen the invoice), so a
+  /// refresh must not sweep them. `pendingMoneyLeg` is deliberately NOT consulted
+  /// here, unlike [mirrorInvoices]: that marker is about money figures on the
+  /// header, and nothing in the app edits an existing invoice's lines, so
+  /// treating it as line authority would invent a rule with no reachable state
+  /// behind it.
+  ///
+  /// Ids are re-minted positionally rather than trusted from the caller, so a
+  /// caller cannot make two lines collide (or make an upsert's `replace` half
+  /// clobber a sibling) by reusing an id. Four-digit zero padding is what makes
+  /// `ORDER BY id` equal the server's order: `'x:10'` sorts before `'x:2'`
+  /// without it, and that only surfaces at 10+ lines.
+  @override
+  Future<void> mirrorInvoiceItems(
+    String tenantId,
+    String invoiceId,
+    List<LocalInvoiceItemRow> rows,
+  ) async {
+    await _db.transaction(() async {
+      final header =
+          await (_db.select(_db.localInvoices)..where(
+                (r) => r.tenantId.equals(tenantId) & r.id.equals(invoiceId),
+              ))
+              .getSingleOrNull();
+      if (header != null && !header.synced) return;
+
+      await (_db.delete(_db.localInvoiceItems)..where(
+            (r) => r.tenantId.equals(tenantId) & r.invoiceId.equals(invoiceId),
+          ))
+          .go();
+
+      final stamped = <LocalInvoiceItemRow>[
+        for (final (i, r) in rows.indexed)
+          r.copyWith(
+            id: LocalStore.invoiceLineId(invoiceId, i),
+            tenantId: tenantId,
+            invoiceId: invoiceId,
+          ),
+      ];
+      if (stamped.isEmpty) return;
+      // A PLAIN insert after a tenant-scoped delete: the key is `{tenantId,id}`
+      // since schema 8, so a foreign row cannot be matched, and the delete
+      // above could not have reached it either.
+      await _db.batch((b) => b.insertAll(_db.localInvoiceItems, stamped));
+    });
   }
 
   @override
@@ -752,20 +1401,20 @@ class DriftLocalStore implements LocalStore {
       _db.into(_db.localPayments).insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalPaymentRow>> payments(String tenantId) =>
-      (_db.select(_db.localPayments)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .get();
+  Future<List<LocalPaymentRow>> payments(String tenantId) => (_db.select(
+    _db.localPayments,
+  )..where((r) => r.tenantId.equals(tenantId))).get();
 
   @override
   Future<List<LocalCommissionDueRow>> commissionDues(
     String tenantId, {
     String? supplierId,
   }) =>
-      (_db.select(_db.localCommissionDues)
-            ..where((r) => supplierId == null
+      (_db.select(_db.localCommissionDues)..where(
+            (r) => supplierId == null
                 ? r.tenantId.equals(tenantId)
-                : r.tenantId.equals(tenantId) & r.supplierId.equals(supplierId)))
+                : r.tenantId.equals(tenantId) & r.supplierId.equals(supplierId),
+          ))
           .get();
 
   @override
@@ -789,10 +1438,11 @@ class DriftLocalStore implements LocalStore {
     String tenantId, {
     String? employeeId,
   }) =>
-      (_db.select(_db.localEmployeeMovements)
-            ..where((r) => employeeId == null
+      (_db.select(_db.localEmployeeMovements)..where(
+            (r) => employeeId == null
                 ? r.tenantId.equals(tenantId)
-                : r.tenantId.equals(tenantId) & r.employeeId.equals(employeeId)))
+                : r.tenantId.equals(tenantId) & r.employeeId.equals(employeeId),
+          ))
           .get();
 
   @override
@@ -801,11 +1451,15 @@ class DriftLocalStore implements LocalStore {
       .insert(row, mode: InsertMode.insertOrReplace);
 
   @override
-  Future<List<LocalSalaryRow>> salaries(String tenantId, {String? employeeId}) =>
-      (_db.select(_db.localSalaries)
-            ..where((r) => employeeId == null
+  Future<List<LocalSalaryRow>> salaries(
+    String tenantId, {
+    String? employeeId,
+  }) =>
+      (_db.select(_db.localSalaries)..where(
+            (r) => employeeId == null
                 ? r.tenantId.equals(tenantId)
-                : r.tenantId.equals(tenantId) & r.employeeId.equals(employeeId)))
+                : r.tenantId.equals(tenantId) & r.employeeId.equals(employeeId),
+          ))
           .get();
 
   @override
@@ -822,45 +1476,43 @@ class DriftLocalStore implements LocalStore {
   @override
   Future<List<SyncQueueRow>> pendingSync(String tenantId) =>
       (_db.select(_db.syncQueueItems)
-            ..where((r) => r.tenantId.equals(tenantId) & r.status.equals('pending'))
+            ..where(
+              (r) => r.tenantId.equals(tenantId) & r.status.equals('pending'),
+            )
             ..orderBy([(r) => OrderingTerm.asc(r.createdAt)]))
           .get();
 
   @override
   Future<int> pendingCount(String tenantId) async {
-    final count = _db
-        .customSelect(
-          'SELECT COUNT(*) AS c FROM sync_queue_items '
-          'WHERE tenant_id = ? AND status = \'pending\'',
-          variables: [Variable.withString(tenantId)],
-        );
+    final count = _db.customSelect(
+      'SELECT COUNT(*) AS c FROM sync_queue_items '
+      'WHERE tenant_id = ? AND status = \'pending\'',
+      variables: [Variable.withString(tenantId)],
+    );
     final row = await count.getSingle();
     return row.read<int>('c');
   }
 
   @override
   Future<void> markSynced(String id) async {
-    await (_db.update(_db.syncQueueItems)
-          ..where((r) => r.id.equals(id)))
-        .write(SyncQueueItemsCompanion(
-          status: const Value('synced'),
-          updatedAt: Value(DateTime.now()),
-        ));
-      }
+    await (_db.update(_db.syncQueueItems)..where((r) => r.id.equals(id))).write(
+      SyncQueueItemsCompanion(
+        status: const Value('synced'),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
   @override
   Future<Map<String, String>> queueStatuses(String tenantId) async {
-    final rows = await (_db.select(_db.syncQueueItems)
-          ..where((r) => r.tenantId.equals(tenantId)))
-        .get();
+    final rows = await (_db.select(
+      _db.syncQueueItems,
+    )..where((r) => r.tenantId.equals(tenantId))).get();
     return {for (final r in rows) r.id: r.status};
   }
 
   @override
-  Future<List<SyncQueueRow>> queueLegsFor(
-    String tenantId, {
-    String? entity,
-  }) {
+  Future<List<SyncQueueRow>> queueLegsFor(String tenantId, {String? entity}) {
     final query = _db.select(_db.syncQueueItems)
       ..where(
         (r) =>
@@ -879,8 +1531,9 @@ class DriftLocalStore implements LocalStore {
       if (leg.op != 'table_crud' || leg.status != 'pending') continue;
       final localId = leg.localId;
       if (localId == null) continue;
-      final params =
-          leg.params == '' ? <String, dynamic>{} : jsonDecode(leg.params) as Map<String, dynamic>;
+      final params = leg.params == ''
+          ? <String, dynamic>{}
+          : jsonDecode(leg.params) as Map<String, dynamic>;
       // Delete-shape legs hold a bare `{'id': …}` (no `row`); an upsert-leg
       // row must keep showing until the flusher re-marks it synced.
       if (params.containsKey('id') && !params.containsKey('row')) {
@@ -888,6 +1541,65 @@ class DriftLocalStore implements LocalStore {
       }
     }
     return hidden;
+  }
+
+  @override
+  Future<Set<String>> invoiceIdsWithDurableItems(
+    String tenantId,
+    List<String> invoiceIds,
+  ) async {
+    if (invoiceIds.isEmpty) return <String>{};
+
+    // Resolve the id space ONCE for the whole set, because the two sides of
+    // this comparison are written in different spaces: a caller holds ids as
+    // the network serves them (a replayed invoice arrives under its SERVER id,
+    // P1.C's `markReplaySynced` keeping the local uuid as the row key), while
+    // `local_invoice_items.invoiceId` is written under the LOCAL id. A raw id
+    // therefore never matches a mapped row, and the invoice looks permanently
+    // "missing" — which reads exactly like "these lines were never fetched" and
+    // re-requests them on every list refresh forever.
+    //
+    // ONE `isIn` read of the whole set here replaces one `localIdFor` probe per
+    // invoice, so this stays two bounded local queries rather than N+1.
+    final mappings =
+        await (_db.select(_db.idMappings)..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) &
+                  r.entity.equals('invoices') &
+                  r.serverId.isIn(invoiceIds),
+            ))
+            .get();
+    final localByServer = <String, String>{
+      for (final m in mappings) m.serverId: m.localId,
+    };
+    // Unsynced drafts have no mapping row at all — their local id IS their
+    // server-shaped id — so `invoiceIds` is unioned in unchanged.
+    final candidates = <String>{...invoiceIds, ...localByServer.values};
+
+    // ONE grouped query for the whole candidate set. `selectOnly` +
+    // `groupBy` asks sqlite for distinct invoice ids, so the cost is one
+    // indexed scan instead of one probe per invoice.
+    final distinct =
+        await (_db.selectOnly(_db.localInvoiceItems)
+              ..addColumns([_db.localInvoiceItems.invoiceId])
+              ..where(
+                _db.localInvoiceItems.tenantId.equals(tenantId) &
+                    _db.localInvoiceItems.invoiceId.isIn(candidates),
+              )
+              ..groupBy([_db.localInvoiceItems.invoiceId]))
+            .get();
+    final stored = distinct
+        .map((r) => r.read(_db.localInvoiceItems.invoiceId))
+        .whereType<String>()
+        .toSet();
+
+    // Answer in the CALLER's id space, so the caller can compare its own ids
+    // against the result without knowing a mapping exists: an input id counts as
+    // durable when its own rows exist OR when the local row it maps to has them.
+    return {
+      for (final id in invoiceIds)
+        if (stored.contains(id) || stored.contains(localByServer[id])) id,
+    };
   }
 
   @override
@@ -899,24 +1611,24 @@ class DriftLocalStore implements LocalStore {
     if (ids.isEmpty) return;
     switch (entity) {
       case 'customers':
-        await (_db.delete(_db.localCustomers)
-              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
-            .go();
+        await (_db.delete(
+          _db.localCustomers,
+        )..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids))).go();
         break;
       case 'suppliers':
-        await (_db.delete(_db.localSuppliers)
-              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
-            .go();
+        await (_db.delete(
+          _db.localSuppliers,
+        )..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids))).go();
         break;
       case 'products':
-        await (_db.delete(_db.localProducts)
-              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
-            .go();
+        await (_db.delete(
+          _db.localProducts,
+        )..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids))).go();
         break;
       case 'employees':
-        await (_db.delete(_db.localEmployees)
-              ..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids)))
-            .go();
+        await (_db.delete(
+          _db.localEmployees,
+        )..where((r) => r.tenantId.equals(tenantId) & r.id.isIn(ids))).go();
         break;
       default:
         break;
@@ -930,28 +1642,27 @@ class DriftLocalStore implements LocalStore {
       // the inner store can be `this` and a throw anywhere rolls back all of it.
       _db.transaction(() => action(this));
 
-
   @override
   Future<void> markFailed(String id, String error) async {
-    await (_db.update(_db.syncQueueItems)
-          ..where((r) => r.id.equals(id)))
-        .write(SyncQueueItemsCompanion(
-          status: const Value('failed'),
-          lastError: Value(error),
-          updatedAt: Value(DateTime.now()),
-        ));
+    await (_db.update(_db.syncQueueItems)..where((r) => r.id.equals(id))).write(
+      SyncQueueItemsCompanion(
+        status: const Value('failed'),
+        lastError: Value(error),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   @override
   Future<void> requeueRetry(String id, String error, int attempts) async {
-    await (_db.update(_db.syncQueueItems)
-          ..where((r) => r.id.equals(id)))
-        .write(SyncQueueItemsCompanion(
-          status: const Value('pending'),
-          attempts: Value(attempts),
-          lastError: Value(error),
-          updatedAt: Value(DateTime.now()),
-        ));
+    await (_db.update(_db.syncQueueItems)..where((r) => r.id.equals(id))).write(
+      SyncQueueItemsCompanion(
+        status: const Value('pending'),
+        attempts: Value(attempts),
+        lastError: Value(error),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   @override
@@ -973,9 +1684,9 @@ class DriftLocalStore implements LocalStore {
     }
     switch (entity) {
       case 'invoices':
-        await (_db.update(_db.localInvoices)
-              ..where((r) => r.id.equals(localId)))
-            .write(
+        await (_db.update(
+          _db.localInvoices,
+        )..where((r) => r.id.equals(localId))).write(
           LocalInvoicesCompanion(
             no: officialNo == null ? const Value.absent() : Value(officialNo),
             synced: const Value(true),
@@ -1028,25 +1739,36 @@ class DriftLocalStore implements LocalStore {
   }
 
   @override
-  Future<String?> serverIdFor(String tenantId, String entity, String localId) async {
-    final row = await (_db.select(_db.idMappings)
-          ..where((r) =>
-              r.tenantId.equals(tenantId) &
-              r.entity.equals(entity) &
-              r.localId.equals(localId)))
-        .getSingleOrNull();
+  Future<String?> serverIdFor(
+    String tenantId,
+    String entity,
+    String localId,
+  ) async {
+    final row =
+        await (_db.select(_db.idMappings)..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) &
+                  r.entity.equals(entity) &
+                  r.localId.equals(localId),
+            ))
+            .getSingleOrNull();
     return row?.serverId;
   }
 
   @override
   Future<String?> localIdFor(
-      String tenantId, String entity, String serverId) async {
-    final row = await (_db.select(_db.idMappings)
-          ..where((r) =>
-              r.tenantId.equals(tenantId) &
-              r.entity.equals(entity) &
-              r.serverId.equals(serverId)))
-        .getSingleOrNull();
+    String tenantId,
+    String entity,
+    String serverId,
+  ) async {
+    final row =
+        await (_db.select(_db.idMappings)..where(
+              (r) =>
+                  r.tenantId.equals(tenantId) &
+                  r.entity.equals(entity) &
+                  r.serverId.equals(serverId),
+            ))
+            .getSingleOrNull();
     return row?.localId;
   }
 
@@ -1056,16 +1778,17 @@ class DriftLocalStore implements LocalStore {
     required String entity,
     required String localId,
     required String serverId,
-  }) =>
-      _db.into(_db.idMappings).insert(
-            IdMappingsCompanion.insert(
-              tenantId: tenantId,
-              entity: entity,
-              localId: localId,
-              serverId: serverId,
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
+  }) => _db
+      .into(_db.idMappings)
+      .insert(
+        IdMappingsCompanion.insert(
+          tenantId: tenantId,
+          entity: entity,
+          localId: localId,
+          serverId: serverId,
+        ),
+        mode: InsertMode.insertOrReplace,
+      );
 
   // ---- cache & settings ------------------------------------------------
 
@@ -1083,43 +1806,49 @@ class DriftLocalStore implements LocalStore {
 
   @override
   Future<String?> report(String tenantId, String key) async {
-    final row = await (_db.select(_db.reportCacheEntries)
-          ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.reportCacheEntries)
+              ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
+            .getSingleOrNull();
     return row?.payload;
   }
 
   @override
   Future<CachedReportData?> cachedReport(String tenantId, String key) async {
-    final row = await (_db.select(_db.reportCacheEntries)
-          ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.reportCacheEntries)
+              ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
+            .getSingleOrNull();
     if (row == null) return null;
     return CachedReportData(payload: row.payload, fetchedAt: row.fetchedAt);
   }
 
   @override
-  Future<void> putSetting(String tenantId, String key, String? value) =>
-      _db.into(_db.localTenantSettings).insert(
-            LocalTenantSettingsCompanion.insert(
-              tenantId: tenantId,
-              key: key,
-              value: Value(value),
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
+  Future<void> putSetting(String tenantId, String key, String? value) => _db
+      .into(_db.localTenantSettings)
+      .insert(
+        LocalTenantSettingsCompanion.insert(
+          tenantId: tenantId,
+          key: key,
+          value: Value(value),
+        ),
+        mode: InsertMode.insertOrReplace,
+      );
 
   @override
   Future<String?> getSetting(String tenantId, String key) async {
-    final row = await (_db.select(_db.localTenantSettings)
-          ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.localTenantSettings)
+              ..where((r) => r.tenantId.equals(tenantId) & r.key.equals(key)))
+            .getSingleOrNull();
     return row?.value;
   }
 
   @override
   Future<void> putUserProfile(String authUid, String payload) async {
-    await _db.into(_db.localUserProfiles).insert(
+    await _db
+        .into(_db.localUserProfiles)
+        .insert(
           LocalUserProfilesCompanion.insert(
             authUid: authUid,
             payload: payload,
@@ -1131,21 +1860,23 @@ class DriftLocalStore implements LocalStore {
 
   @override
   Future<LocalUserProfileRow?> getUserProfile(String authUid) {
-    return (_db.select(_db.localUserProfiles)
-          ..where((r) => r.authUid.equals(authUid)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.localUserProfiles,
+    )..where((r) => r.authUid.equals(authUid))).getSingleOrNull();
   }
 
   @override
   Future<void> deleteUserProfile(String authUid) async {
-    await (_db.delete(_db.localUserProfiles)
-          ..where((r) => r.authUid.equals(authUid)))
-        .go();
+    await (_db.delete(
+      _db.localUserProfiles,
+    )..where((r) => r.authUid.equals(authUid))).go();
   }
 
   @override
-  Future<ClearTenantReport> clearTenant(String tenantId,
-      {bool force = false}) async {
+  Future<ClearTenantReport> clearTenant(
+    String tenantId, {
+    bool force = false,
+  }) async {
     // Count what a wipe would destroy BEFORE deciding, so a refusal can tell
     // the caller exactly how much is at stake.
     final pendingQueueItems = await _countPendingQueue(tenantId);
@@ -1161,54 +1892,54 @@ class DriftLocalStore implements LocalStore {
     }
 
     await _db.transaction(() async {
-      await (_db.delete(_db.localCustomers)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localSuppliers)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localProducts)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localEmployees)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localAccounts)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localInvoices)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localInvoiceItems)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localPayments)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localCommissionDues)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localJournalEntries)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localEmployeeMovements)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.localSalaries)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.syncQueueItems)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
+      await (_db.delete(
+        _db.localCustomers,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localSuppliers,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localProducts,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localEmployees,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localAccounts,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localInvoices,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localInvoiceItems,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localPayments,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localCommissionDues,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localJournalEntries,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localEmployeeMovements,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.localSalaries,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.syncQueueItems,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
       // Schema 5: id_mappings is tenant-scoped, so it is finally clearable.
       // A stale mapping is not harmless -- it resolves a fresh local row to a
       // server row belonging to a session that has ended.
-      await (_db.delete(_db.idMappings)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
-      await (_db.delete(_db.reportCacheEntries)
-            ..where((r) => r.tenantId.equals(tenantId)))
-          .go();
+      await (_db.delete(
+        _db.idMappings,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
+      await (_db.delete(
+        _db.reportCacheEntries,
+      )..where((r) => r.tenantId.equals(tenantId))).go();
     });
 
     return ClearTenantReport(
@@ -1223,8 +1954,10 @@ class DriftLocalStore implements LocalStore {
     final count = _db.syncQueueItems.id.count();
     final query = _db.selectOnly(_db.syncQueueItems)
       ..addColumns([count])
-      ..where(_db.syncQueueItems.tenantId.equals(tenantId) &
-          _db.syncQueueItems.status.isIn(['pending', 'staged']));
+      ..where(
+        _db.syncQueueItems.tenantId.equals(tenantId) &
+            _db.syncQueueItems.status.isIn(['pending', 'staged']),
+      );
     return (await query.getSingle()).read(count) ?? 0;
   }
 
@@ -1237,47 +1970,45 @@ class DriftLocalStore implements LocalStore {
   Future<int> _countUnsyncedMirror(String tenantId) async {
     final c = _db;
     final lists = await Future.wait([
-      (c.select(c.localCustomers)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localCustomers,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localSuppliers)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localSuppliers,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localProducts)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localProducts,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localEmployees)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localEmployees,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localInvoices)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localInvoices,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localPayments)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localPayments,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localJournalEntries)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localJournalEntries,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localEmployeeMovements)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localEmployeeMovements,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
-      (c.select(c.localSalaries)
-            ..where((r) =>
-                r.tenantId.equals(tenantId) & r.synced.equals(false)))
+      (c.select(
+            c.localSalaries,
+          )..where((r) => r.tenantId.equals(tenantId) & r.synced.equals(false)))
           .get(),
     ]);
     return lists.fold<int>(0, (sum, rows) => sum + rows.length);
   }
-
-
 
   @override
   Future<bool> hasUnsyncedCustomers(String tenantId) async {
@@ -1367,13 +2098,16 @@ class DriftLocalStore implements LocalStore {
     // not seen a local account change" signal is the sync queue itself: any
     // pending/staged account leg means a local change is still in flight and a
     // background chart refresh must not clobber it.
-    final rows = await (_db.select(_db.syncQueueItems)
-          ..where((r) =>
-              r.tenantId.equals(tenantId) &
-              r.entity.equals('accounts') &
-              r.status.isIn(['pending', 'staged']))
-          ..limit(1))
-        .get();
+    final rows =
+        await (_db.select(_db.syncQueueItems)
+              ..where(
+                (r) =>
+                    r.tenantId.equals(tenantId) &
+                    r.entity.equals('accounts') &
+                    r.status.isIn(['pending', 'staged']),
+              )
+              ..limit(1))
+            .get();
     return rows.isNotEmpty;
   }
 
@@ -1403,28 +2137,26 @@ class DriftLocalStore implements LocalStore {
     required Future<Set<String>> Function() readPendingIds,
     required Future<void> Function() deleteSynced,
     required Future<void> Function(List<T> rows) insertAll,
-  }) =>
-      _db.transaction(() async {
-        // The pending rows are NOT deleted by `deleteSynced`, so they are still
-        // in the table and must not be inserted again -- only their ids matter,
-        // to decide whether the server's stale copy of the same row may land.
-        final pendingIds = await readPendingIds();
+  }) => _db.transaction(() async {
+    // The pending rows are NOT deleted by `deleteSynced`, so they are still
+    // in the table and must not be inserted again -- only their ids matter,
+    // to decide whether the server's stale copy of the same row may land.
+    final pendingIds = await readPendingIds();
 
-        await deleteSynced();
+    await deleteSynced();
 
-        final incoming = <T>[
-          for (final r in serverRows)
-            if (!pendingIds.contains(idOf(r))) r,
-        ];
-        if (incoming.isNotEmpty) await insertAll(incoming);
-      });
+    final incoming = <T>[
+      for (final r in serverRows)
+        if (!pendingIds.contains(idOf(r))) r,
+    ];
+    if (incoming.isNotEmpty) await insertAll(incoming);
+  });
 }
 
 /// Composition root: opens the store once (native hosts) or a no-op store.
 final localStoreProvider = FutureProvider<LocalStore>((ref) async {
   final stopwatch = Stopwatch()..start();
-  final appDb = await openAppDatabase();
-  final store = appDb != null ? DriftLocalStore(appDb) : const NullLocalStore();
+  final store = await openLocalStore();
   ref.onDispose(() => store.dispose());
   stopwatch.stop();
   // Measured, not assumed: the app gates its first frame on this future, so a
@@ -1435,4 +2167,65 @@ final localStoreProvider = FutureProvider<LocalStore>((ref) async {
     '(available: ${store.isAvailable})',
   );
   return store;
+});
+
+/// Opens the local store and forces the schema to materialize NOW.
+///
+/// ## The loud-failure contract (cold-start data blackout fix)
+///
+/// The open (`openAppDatabase`) is lazy on native — `createInBackground` defers
+/// the actual file open, so a corrupt `hasad_offline.sqlite` or a failing
+/// migration (e.g. the schema 4 → 5 `id_mappings` rebuild) would otherwise
+/// surface mid-read as a generic screen error, and an open that fails at
+/// construction would resolve the gate to `NullLocalStore` — a silent total
+/// data blackout indistinguishable from "the user has no cache". Three rules:
+///
+/// 1. A null open on native is a real failure and is thrown, never a silent
+///    `NullLocalStore` (only the web stub legitimately returns null).
+/// 2. The first drift query (schema `createAll` / `onUpgrade`) runs here, so a
+///    corrupt file or failing migration errors the gate loudly.
+/// 3. The failure is wrapped as [LocalStoreOpenException] with the directory
+///    tried and the original error, which the app gate renders as the Arabic
+///    repair state (retry + explicit destructive reset — never an auto-delete).
+Future<LocalStore> openLocalStore({String? overrideDirectory}) async {
+  final appDb = await openAppDatabase(overrideDirectory: overrideDirectory);
+  if (appDb == null && !kIsWeb) {
+    throw const LocalStoreOpenException(
+      'database open failed (null) — refusing to silently degrade',
+    );
+  }
+  final store = appDb != null ? DriftLocalStore(appDb) : const NullLocalStore();
+  if (appDb != null) {
+    try {
+      // First query materializes createAll / onUpgrade. Return value is
+      // irrelevant (a cache miss for the probe key is the normal case).
+      await store.report('__offline_probe__', '__offline_probe__');
+    } on Object catch (error, stack) {
+      final directory =
+          overrideDirectory ?? '<getApplicationDocumentsDirectory>';
+      debugPrint(
+        '[offline:store] OPEN FAILED — rendering repair state.\n'
+        'directory: $directory\n$error\n$stack',
+      );
+      // Release the half-opened connection before surfacing the error. A
+      // desktop host cannot delete/replace the sqlite file while the probe's
+      // open handle is still live, and the reset action needs to do exactly
+      // that. The failure is reported regardless; a wedged connection is
+      // abandoned and the retry opens a fresh one.
+      try {
+        await store.dispose();
+      } on Object catch (_) {}
+      throw LocalStoreOpenException('directory: $directory\n$error\n$stack');
+    }
+  }
+  return store;
+}
+
+/// Injectable seam for the "Reset local data" action: deletes the on-disc
+/// sqlite file. Overridable in tests. The default calls the native factory.
+/// The caller (repair UI) must dispose the live drift connection before this —
+/// desktop hosts cannot delete an open sqlite file — and must warn the user
+/// that all unsynced local work is destroyed before invoking.
+final resetLocalDatabaseProvider = Provider<Future<void> Function()>((ref) {
+  return resetLocalDatabase;
 });

@@ -167,6 +167,16 @@ class SyncFlusher {
           if (ok) {
             synced += 1;
             await store.markSynced(leg.id);
+            // The money write landed, so the server is now authoritative for
+            // the invoice rows it restated -- but ONLY for those no other
+            // money leg still owns. Attribution comes from the leg's durable
+            // `affects_invoice_ids`, not from its params: a `settle_supplier`
+            // leg names no invoices, so a param-based check would read as "this
+            // leg affects nothing" and let a settlement's marker be retired by a
+            // later payment that drained first. Failure paths deliberately
+            // leave the marker alone: the mutation is still only local, so the
+            // local figures must stay authoritative.
+            await store.resolveInvoiceMoneyMarker(leg.tenantId, leg.id);
             // Marking a prerequisite synced is what unblocks its dependents
             // in the next round.
             statuses[leg.id] = 'synced';

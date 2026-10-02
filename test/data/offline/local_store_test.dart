@@ -277,11 +277,205 @@ void main() {
 
     expect((await store.invoices(tenantA, type: 'sale')).single.no, 'D-0001');
     expect((await store.invoices(tenantA, type: 'purchase')), isEmpty);
-    expect((await store.invoiceItems('i1')).single.qty, 2);
+    expect((await store.invoiceItems(tenantA, 'i1')).single.qty, 2);
 
-    await store.deleteInvoice('i1');
+    await store.deleteInvoice(tenantA, 'i1');
     expect(await store.invoices(tenantA), isEmpty);
-    expect(await store.invoiceItems('i1'), isEmpty);
+    expect(await store.invoiceItems(tenantA, 'i1'), isEmpty);
+  });
+
+  test('invoice line ids collide across tenants only without tenant scoping', () async {
+    // The P1.E reason for the composite key: `id` alone cannot hold the same
+    // ordinal for two workspaces, and `upsertInvoiceItems` is insertOrReplace.
+    for (final t in [tenantA, tenantB]) {
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'shared-invoice', tenantId: t, type: 'sale', no: 'S-1',
+        partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+        subtotal: 100, total: 100, paid: 0, remaining: 100,
+        status: 'unpaid', ownership: 'owned', requestId: null,
+        synced: true, createdAt: null,
+      ));
+    }
+    await store.upsertInvoiceItems([
+      for (final t in [tenantA, tenantB])
+        LocalInvoiceItemRow(
+          id: 'shared-invoice:0000', tenantId: t,
+          invoiceId: 'shared-invoice', productId: 'p-$t',
+          productName: 'سلعة', productUnit: 'قطعة', productUnitType: 'count',
+          qty: 1, price: 100, total: 100,
+        ),
+    ]);
+
+    expect((await store.invoiceItems(tenantA, 'shared-invoice')).single.productId, 'p-$tenantA');
+    expect((await store.invoiceItems(tenantB, 'shared-invoice')).single.productId, 'p-$tenantB');
+  });
+
+  test('mirrorInvoiceItems replaces the whole set and stamps positional ids', () async {
+    await store.upsertInvoice(LocalInvoiceRow(
+      id: 'm1', tenantId: tenantA, type: 'sale', no: 'S-2',
+      partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+      subtotal: 300, total: 300, paid: 0, remaining: 300,
+      status: 'unpaid', ownership: 'owned', requestId: null,
+      synced: true, createdAt: null,
+    ));
+    await store.mirrorInvoiceItems(tenantA, 'm1', [
+      for (final (i, q) in [3, 2, 1].indexed)
+        LocalInvoiceItemRow(
+          id: 'caller-chosen-$i', tenantId: tenantA, invoiceId: 'm1',
+          productId: 'p$i', productName: 'سلعة', productUnit: 'قطعة',
+          productUnitType: 'count', qty: q.toDouble(), price: 100, total: q * 100,
+        ),
+    ]);
+
+    // Ids are the mirror's, not the caller's, and `ORDER BY id` is the passed
+    // order — which is what makes the detail sheet paint the server's order.
+    expect(
+      (await store.invoiceItems(tenantA, 'm1')).map((r) => r.id),
+      ['m1:0000', 'm1:0001', 'm1:0002'],
+    );
+    expect((await store.invoiceItems(tenantA, 'm1')).map((r) => r.qty), [3, 2, 1]);
+
+    // A shorter refresh must DELETE the orphan, not leave it behind.
+    await store.mirrorInvoiceItems(tenantA, 'm1', [
+      LocalInvoiceItemRow(
+        id: '', tenantId: tenantA, invoiceId: 'm1', productId: 'p0',
+        productName: 'سلعة', productUnit: 'قطعة', productUnitType: 'count',
+        qty: 5, price: 100, total: 500,
+      ),
+    ]);
+    expect((await store.invoiceItems(tenantA, 'm1')).single.qty, 5);
+
+    // An empty refresh is a real state, not a no-op.
+    await store.mirrorInvoiceItems(tenantA, 'm1', const []);
+    expect(await store.invoiceItems(tenantA, 'm1'), isEmpty);
+  });
+
+  test('mirrorInvoiceItems never sweeps a pending draft', () async {
+    await store.upsertInvoice(LocalInvoiceRow(
+      id: 'draft1', tenantId: tenantA, type: 'sale', no: 'D-9',
+      partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+      subtotal: 700, total: 700, paid: 0, remaining: 700,
+      status: 'unpaid', ownership: 'owned', requestId: 'req-9',
+      synced: false, createdAt: DateTime(2026, 1, 5),
+    ));
+    await store.upsertInvoiceItems([
+      LocalInvoiceItemRow(
+        id: LocalStore.invoiceLineId('draft1', 0), tenantId: tenantA,
+        invoiceId: 'draft1', productId: 'p1', productName: 'سلعة',
+        productUnit: 'قطعة', productUnitType: 'count',
+        qty: 7, price: 100, total: 700,
+      ),
+    ]);
+
+    // Even a refresh that claims an empty invoice, the exact answer the server
+    // gives for a draft it has never seen.
+    await store.mirrorInvoiceItems(tenantA, 'draft1', const []);
+
+    expect((await store.invoiceItems(tenantA, 'draft1')).single.qty, 7);
+  });
+
+  test('mirrorInvoiceItems does not touch another tenant with the same id', () async {
+    for (final t in [tenantA, tenantB]) {
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'x1', tenantId: t, type: 'sale', no: 'S-3',
+        partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+        subtotal: 100, total: 100, paid: 0, remaining: 100,
+        status: 'unpaid', ownership: 'owned', requestId: null,
+        synced: true, createdAt: null,
+      ));
+    }
+    await store.upsertInvoiceItems([
+      LocalInvoiceItemRow(
+        id: 'x1:0000', tenantId: tenantB, invoiceId: 'x1',
+        productId: 'b-line', productName: 'سلعة', productUnit: 'قطعة',
+        productUnitType: 'count', qty: 9, price: 100, total: 900,
+      ),
+    ]);
+
+    await store.mirrorInvoiceItems(tenantA, 'x1', [
+      LocalInvoiceItemRow(
+        id: '', tenantId: tenantA, invoiceId: 'x1', productId: 'a-line',
+        productName: 'سلعة', productUnit: 'قطعة', productUnitType: 'count',
+        qty: 1, price: 100, total: 100,
+      ),
+    ]);
+
+    // The other workspace's row still exists with its own content.
+    expect((await store.invoiceItems(tenantB, 'x1')).single.productId, 'b-line');
+    expect((await store.invoiceItems(tenantA, 'x1')).single.productId, 'a-line');
+  });
+
+  group('invoiceIdsWithDurableItems answers the prefetch question in one query',
+      () {
+    Future<void> seed(String tenant, String invoiceId, String lineId) async {
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: invoiceId, tenantId: tenant, type: 'sale', no: 'S-$lineId',
+        partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+        subtotal: 100, total: 100, paid: 0, remaining: 100,
+        status: 'unpaid', ownership: 'owned', requestId: null,
+        synced: true, createdAt: null,
+      ));
+      await store.upsertInvoiceItems([
+        LocalInvoiceItemRow(
+          id: lineId, tenantId: tenant, invoiceId: invoiceId,
+          productId: 'p1', productName: 'سلعة', productUnit: 'قطعة',
+          productUnitType: 'count', qty: 1, price: 100, total: 100,
+        ),
+      ]);
+    }
+
+    test('reports only the candidates that actually have line rows', () async {
+      await seed(tenantA, 'has-1', 'has-1:0000');
+      await seed(tenantA, 'has-2', 'has-2:0000');
+
+      expect(
+        await store.invoiceIdsWithDurableItems(
+          tenantA,
+          ['has-1', 'has-2', 'missing-1', 'missing-2'],
+        ),
+        {'has-1', 'has-2'},
+      );
+    });
+
+    test('an invoice with no lines is NOT reported, so it stays re-askable',
+        () async {
+      // The accepted edge case: a genuine zero-line invoice has no row, so it
+      // can never be proven durable by this primitive and will be re-requested
+      // on later list reads. Empty must stay distinguishable from unknown.
+      await store.upsertInvoice(LocalInvoiceRow(
+        id: 'empty-1', tenantId: tenantA, type: 'sale', no: 'S-E1',
+        partyId: 'c1', partyName: 'customer', date: DateTime(2026, 1, 5),
+        subtotal: 0, total: 0, paid: 0, remaining: 0,
+        status: 'paid', ownership: 'owned', requestId: null,
+        synced: true, createdAt: null,
+      ));
+
+      expect(await store.invoiceIdsWithDurableItems(tenantA, ['empty-1']),
+          isEmpty);
+    });
+
+    test('is tenant-scoped: a foreign workspace cannot mark an id durable',
+        () async {
+      await seed(tenantB, 'shared-1', 'shared-1:0000');
+
+      expect(await store.invoiceIdsWithDurableItems(tenantA, ['shared-1']),
+          isEmpty);
+      expect(await store.invoiceIdsWithDurableItems(tenantB, ['shared-1']),
+          {'shared-1'});
+    });
+
+    test('an empty candidate list is a no-op, never a full scan', () async {
+      await seed(tenantA, 'has-1', 'has-1:0000');
+
+      expect(await store.invoiceIdsWithDurableItems(tenantA, []), isEmpty);
+    });
+
+    test('NullLocalStore reports nothing as durable', () async {
+      expect(
+        await NullLocalStore().invoiceIdsWithDurableItems(tenantA, ['x']),
+        isEmpty,
+      );
+    });
   });
 
   test('journal entries, payments, commissions, movements and salaries persist', () async {

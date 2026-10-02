@@ -443,6 +443,18 @@ class _FakeInvoices implements InvoiceRepository {
     if (offline) throw const NetworkException();
     return const [];
   }
+
+  /// Same reachability as the single read, so the wrapper's "degrade to the
+  /// mirror offline" assertion cannot be satisfied by a batch call that
+  /// silently succeeded while the device was down.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async {
+    if (offline) throw const NetworkException();
+    return InvoiceItemsBatch(
+      items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+      failed: const {},
+    );
+  }
 }
 
 class _FakeReports implements ReportRepository {

@@ -7,7 +7,17 @@ String _isoDate(DateTime d) =>
 /// First day of the month, as used by every salary RPC.
 DateTime firstOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
 
-/// Result of `get_employee_entitlement(employee_id, month)`.
+/// The complete salary read model for one employee-month.
+///
+/// [netDue] is the GROSS entitlement — it is what the month is worth, and it
+/// does not change because a payment was recorded. Whether anything is still
+/// PAYABLE is [currentPayable], which is [netDue] until the month is paid.
+///
+/// The two used to be one value, and the UI presented `netDue` as the payable
+/// amount: after paying a month the card still showed the full figure, the pay
+/// button stayed enabled, and the user was invited to pay the same salary twice
+/// (the write-side duplicate guard was the only thing stopping it, and only on
+/// the device that made the payment).
 class EmployeeEntitlement {
   const EmployeeEntitlement({
     required this.employeeId,
@@ -17,6 +27,7 @@ class EmployeeEntitlement {
     required this.entitlements,
     required this.deductions,
     required this.netDue,
+    required this.isPaidForMonth,
   });
 
   final String employeeId;
@@ -25,7 +36,39 @@ class EmployeeEntitlement {
   final int arrears;
   final int entitlements;
   final int deductions;
+
+  /// Gross entitlement for the month, in agorot. Unaffected by [isPaidForMonth].
   final int netDue;
+
+  /// True when this employee+month has been paid.
+  ///
+  /// A fact about the world, not a computed amount: it comes from a salary row
+  /// — the local mirror, the server `salaries` table, or both. It is a required
+  /// constructor argument so every producer states which one it observed; a
+  /// silent `false` default would let a half-wired read path report an unpaid
+  /// month and re-enable a pay button for a salary already paid.
+  final bool isPaidForMonth;
+
+  /// What is still payable this month: zero once [isPaidForMonth], otherwise the
+  /// gross [netDue].
+  ///
+  /// Derived, never stored. A second independently writable amount would be a
+  /// third thing that can disagree with the other two.
+  int get currentPayable => isPaidForMonth ? 0 : netDue;
+
+  /// Narrow immutable reconstruction. [SupabaseSalaryRepository] composes the
+  /// RPC's gross entitlement with the `salaries` table's paid state, so it
+  /// needs to replace the one field without restating the six it did not read.
+  EmployeeEntitlement copyWith({bool? isPaidForMonth}) => EmployeeEntitlement(
+        employeeId: employeeId,
+        month: month,
+        baseSalary: baseSalary,
+        arrears: arrears,
+        entitlements: entitlements,
+        deductions: deductions,
+        netDue: netDue,
+        isPaidForMonth: isPaidForMonth ?? this.isPaidForMonth,
+      );
 
   factory EmployeeEntitlement.fromJson(Map<String, dynamic> json) =>
       EmployeeEntitlement(
@@ -36,6 +79,12 @@ class EmployeeEntitlement {
         entitlements: (json['entitlements'] as num?)?.toInt() ?? 0,
         deductions: (json['deductions'] as num?)?.toInt() ?? 0,
         netDue: (json['net_due'] as num?)?.toInt() ?? 0,
+        // `get_employee_entitlement` returns arithmetic only — the RPC has no
+        // paid-state field and none was added, so the payload on its own does
+        // not establish that the month was paid. Stated explicitly rather than
+        // defaulted so it is read as a decision: the repository that calls this
+        // must go and ask the `salaries` table before it can answer truthfully.
+        isPaidForMonth: false,
       );
 }
 

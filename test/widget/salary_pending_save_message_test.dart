@@ -33,6 +33,7 @@ final _entitlement = EmployeeEntitlement(
   entitlements: 0,
   deductions: 0,
   netDue: 450000,
+  isPaidForMonth: false,
 );
 
 class _Host extends StatelessWidget {

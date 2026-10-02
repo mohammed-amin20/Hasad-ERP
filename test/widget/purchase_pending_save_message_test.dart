@@ -52,6 +52,15 @@ class _FakeInvoiceRepository implements InvoiceRepository {
 
   @override
   Future<List<InvoiceItem>> items(String invoiceId) async => const [];
+
+  /// Prefetch API, stubbed to the same empty answer: the list-time hydration
+  /// must not change what this SnackBar test observes.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async =>
+      InvoiceItemsBatch(
+        items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+        failed: const {},
+      );
 }
 
 class _FakeProductRepository implements ProductRepository {

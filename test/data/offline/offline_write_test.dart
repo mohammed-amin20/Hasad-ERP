@@ -118,9 +118,12 @@ void main() {
       expect(invoiceRows.single.requestId, isNotNull);
       expect(invoiceRows.single.status, 'paid');
 
-      final items = await store.invoiceItems(result.invoiceId);
+      final items = await store.invoiceItems(tenant, result.invoiceId);
       expect(items.single.qty, 2);
       expect(items.single.total, 20000);
+      // Positional id, not a random uuid: the detail read orders by `id`, so an
+      // arbitrary key would make the line order arbitrary forever.
+      expect(items.single.id, LocalStore.invoiceLineId(result.invoiceId, 0));
 
       final qty =
           (await store.products(tenant)).firstWhere((r) => r.id == 'p1');
@@ -253,8 +256,9 @@ void main() {
       expect(product.purchasePrice, 7000);
       expect(product.supplierId, 's1');
 
-      final items = await store.invoiceItems(result.invoiceId);
+      final items = await store.invoiceItems(tenant, result.invoiceId);
       expect(items.single.productId, product.id);
+      expect(items.single.id, LocalStore.invoiceLineId(result.invoiceId, 0));
 
       // TWO legs: the inline product's `table:products` leg and the purchase
       // RPC that names that same product id instead of `new_product`.
@@ -423,8 +427,10 @@ void main() {
       expect(invoices.single.synced, isFalse);
       expect(invoices.single.requestId, isNotNull);
 
-      final items = await s2.invoiceItems(result.invoiceId);
+      final items = await s2.invoiceItems(tenant, result.invoiceId);
       expect(items.single.qty, 10);
+      // Survives the reopen with the positional id, so ordering is stable.
+      expect(items.single.id, LocalStore.invoiceLineId(result.invoiceId, 0));
 
       final qty =
           (await s2.products(tenant)).firstWhere((r) => r.id == 'p1');
@@ -1009,6 +1015,95 @@ void main() {
         )),
       );
       expect(await store2.pendingSync(tenant), isEmpty);
+    });
+
+    test(
+        'paySalary allows a zero base when a real entitlement is payable '
+        '(config gap, not a zero entitlement)', () async {
+      await seed();
+      // Same employee with no base at all.
+      await store.upsertEmployee(LocalEmployeeRow(
+        id: 'e-nobase', tenantId: tenant, name: 'موظف بلا راتب', jobTitle: 'sales',
+        phone: null, baseSalary: 0, createdAt: DateTime(2026, 1, 1),
+        synced: false,
+      ));
+      // A bonus for the target month makes the month payable.
+      await store.upsertEmployeeMovement(LocalEmployeeMovementRow(
+        id: 'mv-1', tenantId: tenant, employeeId: 'e-nobase', month: '2026-09',
+        direction: 'in', amount: 500, category: 'other', date: DateTime(2026, 9, 1),
+        note: 'مكافأة', requestId: null, synced: false,
+        createdAt: DateTime(2026, 9, 1),
+      ));
+
+      final result = await writer.paySalary(SalaryDraft(
+        employeeId: 'e-nobase',
+        month: DateTime(2026, 9, 1),
+        paid: 500,
+        method: 'cash',
+      ));
+
+      expect(result.pending, isTrue);
+      expect(result.netDue, 500);
+      expect(result.entitlements, 500);
+      expect(await store.pendingSync(tenant), hasLength(1));
+    });
+
+    test(
+        'paySalary rejects a zero base with a specific Arabic message when '
+        'nothing is payable', () async {
+      await seed();
+      await store.upsertEmployee(LocalEmployeeRow(
+        id: 'e-nobase', tenantId: tenant, name: 'موظف بلا راتب', jobTitle: 'sales',
+        phone: null, baseSalary: 0, createdAt: DateTime(2026, 1, 1),
+        synced: false,
+      ));
+
+      await expectLater(
+        writer.paySalary(SalaryDraft(
+          employeeId: 'e-nobase',
+          month: DateTime(2026, 9, 1),
+          paid: 100,
+          method: 'cash',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'الراتب الأساسي غير محدد للموظف',
+        )),
+      );
+      // The config error must not enqueue a doomed leg.
+      expect(await store.pendingSync(tenant), isEmpty);
+    });
+
+    test(
+        'paySalary reports a genuine zero-payable month with the '
+        'entitlements message, not the base-salary one', () async {
+      await seed();
+      // A real base, fully cancelled by a deduction. Only the FIRST message is
+      // load-bearing: the entitlements wording is the engine's own
+      // `StateError` (double_entry_engine.dart:641) surfaced through `_guard`,
+      // not a coordinator guard, so this case pins that an Arabic message
+      // reaches the user for a zero month even without one here.
+      await store.upsertEmployeeMovement(LocalEmployeeMovementRow(
+        id: 'mv-1', tenantId: tenant, employeeId: 'e1', month: '2026-09',
+        direction: 'out', amount: 500000, category: 'other',
+        date: DateTime(2026, 9, 1),
+        note: 'خصم', requestId: null, synced: false, createdAt: DateTime(2026, 9, 1),
+      ));
+
+      await expectLater(
+        writer.paySalary(SalaryDraft(
+          employeeId: 'e1',
+          month: DateTime(2026, 9, 1),
+          paid: 0,
+          method: 'cash',
+        )),
+        throwsA(isA<ValidationException>().having(
+          (e) => e.message,
+          'message',
+          'لا توجد مستحقات للصرف لهذا الشهر',
+        )),
+      );
     });
 
     test('addMovement rolls back everything when the enqueue throws',

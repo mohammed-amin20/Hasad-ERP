@@ -14,6 +14,7 @@ import '../../../data/offline/report_keys.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/purchases/purchase_invoice_draft.dart';
 import '../../../domain/suppliers/supplier.dart';
+import '../../providers/offline_sync_providers.dart';
 import '../../providers/purchases_providers.dart';
 import '../../widgets/field_icon.dart';
 import '../../widgets/freshness_chip.dart';
@@ -59,7 +60,7 @@ class _PurchaseInvoicesScreenState
     if (!mounted || result == null) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    ref.read(purchaseInvoicesListProvider.notifier).refresh();
+    refreshAfterLocalInvoiceWrite(ref);
     messenger.showSnackBar(
       SnackBar(
         content: Text(result.pending

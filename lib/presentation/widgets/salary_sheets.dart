@@ -12,6 +12,7 @@ import '../providers/salaries_providers.dart';
 import 'field_icon.dart';
 import 'invoice_input_fields.dart';
 import 'product_picker_sheet.dart';
+import 'sheet_error_banner.dart';
 
 /// Bottom sheet to record one employee movement via `add_employee_movement`.
 void showAddMovementSheet(
@@ -79,6 +80,10 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
   DateTime _date = DateTime.now();
   bool _submitting = false;
 
+  /// Shown inline in the sheet, which stays open until the submit succeeds.
+  /// Not a SnackBar: a rejected movement has to stay editable.
+  String? _error;
+
   String get _employeeId => widget.employeeId;
   DateTime get _month => widget.month;
 
@@ -131,31 +136,38 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
   }
 
   Future<void> _submit() async {
+    // Imperative re-entrancy guard — see the note on `_PaySalarySheetState`.
+    if (_submitting) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
     if (_isProduct && _product == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text('اختر المنتج'),
-        ),
-      );
+      setState(() => _error = 'اختر المنتج');
       return;
     }
     if (!_formKey.currentState!.validate()) return;
 
     int? amount;
     double? qty;
-    if (_isProduct) {
-      qty = double.parse(_qtyCtrl.text.trim());
-      _amountCtrl.clear();
-    } else {
-      amount = priceToAgorot(_amountCtrl.text.trim(), allowZero: false)!;
-    }
 
-    setState(() => _submitting = true);
+    // Parsing belongs INSIDE the try. `double.parse` on a non-numeric quantity
+    // threw a raw `FormatException` before the old `try`, so the sheet gave no
+    // feedback at all and the submit button simply did nothing — the exact
+    // "nothing happens when I record a product deduction" report.
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
+      if (_isProduct) {
+        qty = double.parse(_qtyCtrl.text.trim());
+        _amountCtrl.clear();
+      } else {
+        final parsed = priceToAgorot(_amountCtrl.text.trim(), allowZero: false);
+        amount = parsed;
+      }
+
       final result = await ref
           .read(salaryActionsProvider.notifier)
           .movement(
@@ -186,12 +198,15 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
         ),
       );
     } on Object catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text(mapErrorToAppException(error).message),
-        ),
-      );
+      // The sheet stays open and says why, instead of a SnackBar the user has
+      // already missed by the time they look up from the form.
+      //
+      // `mounted` is checked because a submit that outlives its sheet is the
+      // normal case here, not an edge case: a queued offline write returns
+      // after the user has swiped the sheet away, and `setState` on a disposed
+      // State throws — replacing the real reason with a confusing framework
+      // error. The `finally` below already had this guard; the catch did not.
+      if (mounted) setState(() => _error = mapErrorToAppException(error).message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -219,10 +234,14 @@ class _AddMovementSheetState extends ConsumerState<_AddMovementSheet> {
               const SizedBox(height: 4),
               Text(
                 '${widget.employeeName} · ${_month.year}/${_month.month.toString().padLeft(2, '0')}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                SheetErrorBanner(_error!),
+              ],
               const SizedBox(height: 20),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,6 +389,8 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String? _method = 'cash';
+  /// Inline failure reason; the sheet stays open until the pay succeeds.
+  String? _error;
   DateTime _date = DateTime.now();
   bool _submitting = false;
 
@@ -378,8 +399,8 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
   @override
   void initState() {
     super.initState();
-    if (entitlement.netDue > 0) {
-      _amountCtrl.text = Money.editable(entitlement.netDue);
+    if (entitlement.currentPayable > 0) {
+      _amountCtrl.text = Money.editable(entitlement.currentPayable);
     }
   }
 
@@ -401,14 +422,40 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
   }
 
   Future<void> _submit() async {
+    // The canonical guard, and the reason it exists (Issue 5).
+    //
+    // `onPressed: _submitting ? null : _submit` disables the BUTTON, which
+    // stops a human tapping twice — but only after a frame is pumped. Two taps
+    // dispatched in the same frame (or any re-entrant dispatch) both enter
+    // `_submit` before either `setState` has rebuilt the button, so the
+    // disabled state never gets a chance to reject the second one. The
+    // resulting write ran twice: a salary paid twice from one tap.
+    //
+    // `_submitting` is only ever set inside this method, so checking it FIRST
+    // is sufficient and needs no timer, no microtask, and no debounce. The
+    // disabled button is kept as well: it is what stops the second tap from
+    // reaching here at all in the common case, and it is what greys the
+    // control for the user.
+    //
+    // The identical guard is added to all four submit paths — payment,
+    // settlement, movement and salary — because they are the same shape and
+    // the double-submit is a property of the shape, not of one screen.
+    if (_submitting) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
     if (!_formKey.currentState!.validate()) return;
-    final paid = priceToAgorot(_amountCtrl.text.trim(), allowZero: false)!;
 
-    setState(() => _submitting = true);
+    // Same rule as the movement sheet: parse inside the try so a malformed
+    // amount is reported in the sheet instead of escaping as a raw
+    // `FormatException` with no UI at all.
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
+      final paid = priceToAgorot(_amountCtrl.text.trim(), allowZero: false)!;
       final result = await ref
           .read(salaryActionsProvider.notifier)
           .pay(
@@ -437,12 +484,10 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
         ),
       );
     } on Object catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.danger,
-          content: Text(mapErrorToAppException(error).message),
-        ),
-      );
+      // `mounted` because an offline write can resolve after the sheet is gone,
+      // and a `setState` on a disposed State replaces the real reason with a
+      // framework error. The `finally` below already had this guard.
+      if (mounted) setState(() => _error = mapErrorToAppException(error).message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -468,11 +513,15 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
             Text('صرف الراتب', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
-              '${widget.employeeName} · صافي المستحقات ${Money.format(entitlement.netDue)}',
+              '${widget.employeeName} · المتبقي للصرف ${Money.format(entitlement.currentPayable)}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              SheetErrorBanner(_error!),
+            ],
             const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,8 +536,8 @@ class _PaySalarySheetState extends ConsumerState<_PaySalarySheet> {
                       if (paid == null || paid <= 0) {
                         return 'أدخل مبلغ صرف صحيحاً';
                       }
-                      if (paid > entitlement.netDue) {
-                        return 'المبلغ أكبر من صافي المستحقات';
+                      if (paid > entitlement.currentPayable) {
+                        return 'المبلغ أكبر من المتبقي للصرف';
                       }
                       return null;
                     },

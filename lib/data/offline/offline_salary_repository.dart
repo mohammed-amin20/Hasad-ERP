@@ -1,4 +1,5 @@
 import '../../core/error/app_exception.dart';
+import '../../domain/salaries/salary_computation.dart';
 import '../../domain/salaries/salary_repository.dart';
 import 'local_database.dart';
 import 'local_store.dart';
@@ -38,8 +39,12 @@ class OfflineSalaryRepository implements SalaryRepository {
   @override
   Future<MovementResult> addMovement(MovementDraft draft) async {
     final c = coordinator;
-    if (c != null) return c.addMovement(draft);
-    return _inner.addMovement(draft);
+    if (c == null) {
+      // No local store (web / unauthenticated): the live RPC, because nothing
+      // can be queued for a later replay.
+      return _inner.addMovement(draft);
+    }
+    return c.addMovement(draft);
   }
 
   @override
@@ -49,16 +54,65 @@ class OfflineSalaryRepository implements SalaryRepository {
     return _inner.pay(draft);
   }
 
+  /// The live entitlement, with this device's own salary rows layered on top.
+  ///
+  /// `_inner.entitlement` already answers "has the SERVER paid this month" —
+  /// it checks the `salaries` table — so the composition is a single `||`
+  /// against the local row. Both halves are needed, and they cover disjoint
+  /// windows: before the drain the server has not seen the payment and only the
+  /// local row knows; after it, only the server does on a device whose mirror
+  /// was cleared or never written.
   @override
   Future<EmployeeEntitlement> entitlement({
     required String employeeId,
     required DateTime month,
   }) async {
+    final target = salaryMonthOf(month);
     try {
-      return await _inner.entitlement(employeeId: employeeId, month: month);
+      final live = await _inner.entitlement(
+        employeeId: employeeId,
+        month: target,
+      );
+      // Checked even though the server answered: a queued payment has not
+      // reached the server yet, so both the RPC's arithmetic and the server's
+      // salaries table still describe the month as UNPAID. Without this the
+      // screen re-enables the pay button in exactly the window between the
+      // offline write and the drain.
+      final localPaid = await _hasLocalSalary(employeeId, target);
+      return live.copyWith(
+        isPaidForMonth: live.isPaidForMonth || localPaid,
+      );
     } on NetworkException {
-      return _localEntitlement(employeeId, month);
+      // Offline: the mirror is the only source, and `_localEntitlement` already
+      // reads the salary rows the figures are computed from — so the paid state
+      // costs no extra query and cannot come from a different snapshot than the
+      // numbers shown beside it.
+      return _localEntitlement(employeeId, target);
     }
+  }
+
+  /// True when this tenant's mirror holds a salary row for [employeeId] +
+  /// [month].
+  ///
+  /// ANY row counts, synced or not. A drained row stays in the mirror — the
+  /// replay marks it synced rather than deleting it — and a synced row is still
+  /// the only evidence that a month was paid on a device that has been offline
+  /// since. Reading `synced == false` only would make a paid month read as
+  /// unpaid again the moment the device lost connectivity, which is the same
+  /// defect in a smaller window.
+  ///
+  /// The key is [salaryMonthKey] — the same function the write guard's duplicate
+  /// check uses — so the read and the write cannot disagree about which month a
+  /// row belongs to.
+  Future<bool> _hasLocalSalary(String employeeId, DateTime month) async {
+    final s = store;
+    final t = tenantId;
+    if (s == null || t == null) return false;
+    final key = salaryMonthKey(month);
+    for (final row in await s.salaries(t, employeeId: employeeId)) {
+      if (row.month == key) return true;
+    }
+    return false;
   }
 
   @override
@@ -102,33 +156,41 @@ class OfflineSalaryRepository implements SalaryRepository {
     final s = store;
     final t = tenantId;
     if (s == null || t == null) throw const NetworkException();
-    final target = firstOfMonth(month);
+    final target = salaryMonthOf(month);
+    final salaryRows = await s.salaries(t, employeeId: employeeId);
+    final targetKey = salaryMonthKey(target);
 
-    var arrears = 0;
-    var entitlements = 0;
-    var deductions = 0;
-    for (final row in await s.salaries(t, employeeId: employeeId)) {
-      final m = _parseMonth(row.month);
-      final diff = employee.baseSalary - row.paid;
-      if (m.isBefore(target) && diff > 0) arrears += diff;
-    }
-    for (final mv in await s.employeeMovements(t, employeeId: employeeId)) {
-      final m = mv.month == null ? null : _parseMonth(mv.month!);
-      if (m != target) continue;
-      if (mv.direction == 'in') {
-        entitlements += mv.amount;
-      } else {
-        deductions += mv.amount;
-      }
-    }
+    // Shared with `paySalary` on purpose: the preview shown before a payment
+    // and the payment that gets queued must not disagree.
+    final computation = computeSalaryComputation(
+      month: target,
+      baseSalary: employee.baseSalary,
+      salaryRows: [
+        for (final row in salaryRows)
+          SalaryPeriodRow(month: _parseMonth(row.month), paid: row.paid),
+      ],
+      movements: [
+        for (final mv in await s.employeeMovements(t, employeeId: employeeId))
+          if (mv.month != null)
+            SalaryMovementInput(
+              month: _parseMonth(mv.month!),
+              direction: mv.direction,
+              amount: mv.amount,
+            ),
+      ],
+    );
     return EmployeeEntitlement(
       employeeId: employeeId,
       month: target,
-      baseSalary: employee.baseSalary,
-      arrears: arrears,
-      entitlements: entitlements,
-      deductions: deductions,
-      netDue: employee.baseSalary + arrears + entitlements - deductions,
+      baseSalary: computation.baseSalary,
+      arrears: computation.arrears,
+      entitlements: computation.entitlements,
+      deductions: computation.deductions,
+      netDue: computation.netDue,
+      // From the SAME rows the figures above came from. A second lookup could
+      // read a different snapshot and render "paid, 0 payable" next to figures
+      // that were computed before the payment landed.
+      isPaidForMonth: salaryRows.any((row) => row.month == targetKey),
     );
   }
 

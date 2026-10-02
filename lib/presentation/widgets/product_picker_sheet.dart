@@ -40,7 +40,13 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final productsAsync = ref.watch(allProductsProvider);
+    // `productsListProvider`, NOT `allProductsProvider`: this sheet's TextField
+    // writes `productSearchProvider`, and this is the only provider that reads
+    // it, so watching the unfiltered list made the search box inert — the sheet
+    // rendered the same catalog whatever the user typed, online and offline.
+    // `products_screen.dart` already used the search-aware provider, so nothing
+    // else in the app changes.
+    final productsAsync = ref.watch(productsListProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: SizedBox(

@@ -331,6 +331,15 @@ class _FakeInvoiceRepository implements InvoiceRepository {
 
   @override
   Future<List<InvoiceItem>> items(String invoiceId) async => const [];
+
+  /// Prefetch API, stubbed to the same empty answer: an empty batch mirrors no
+  /// lines, so this sheet suite never depends on invoice detail.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async =>
+      InvoiceItemsBatch(
+        items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+        failed: const {},
+      );
 }
 
 class _FakeCustomerRepository implements CustomerRepository {

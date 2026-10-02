@@ -11,6 +11,7 @@ import '../../domain/invoices/invoice_sync.dart';
 import '../../domain/products/product.dart';
 import '../providers/auth_providers.dart';
 import '../providers/offline_sync_providers.dart';
+import '../providers/purchases_providers.dart';
 import '../providers/sales_providers.dart';
 import 'payment_sheets.dart';
 import 'record_table.dart';
@@ -151,9 +152,19 @@ class InvoiceDetailSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // Every header/money field below reads `live`, NOT the captured [invoice].
+    // See [_liveInvoice] for why the snapshot alone is wrong.
+    final live = _liveInvoice(ref, invoice);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       child: FutureBuilder<List<InvoiceItem>>(
+        // [invoice], deliberately NOT [live]. `_liveInvoice` resolves a row by
+        // `row.id == captured.id` or returns `captured`, so `live.id` is always
+        // this same string: changing it here would be a no-op. The real fix is
+        // one layer down — `OfflineInvoiceRepository.items()` normalizes EITHER
+        // id space through `id_map` before it reaches the network, because a
+        // captured local uuid is not an id the server ever issued. Normalizing
+        // there also keeps `id_map` knowledge out of the presentation layer.
         future: ref.read(invoiceRepositoryProvider).items(invoice.id),
         builder: (context, snapshot) {
           final items = snapshot.data ?? const <InvoiceItem>[];
@@ -165,19 +176,19 @@ class InvoiceDetailSheet extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'فاتورة ${invoice.no}',
+                      'فاتورة ${live.no}',
                       style: theme.textTheme.titleLarge,
                     ),
                   ),
                   StatusBadge(
-                    label: invoice.status.label,
-                    palette: badgeForStatus(invoice.status),
+                    label: live.status.label,
+                    palette: badgeForStatus(live.status),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                '${invoice.partyName ?? ''} · ${formatInvoiceDate(invoice.date)}',
+                '${live.partyName ?? ''} · ${formatInvoiceDate(live.date)}',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -213,22 +224,22 @@ class InvoiceDetailSheet extends ConsumerWidget {
                   ),
                 ),
               const Divider(height: 32),
-              _TotalRow(label: 'الإجمالي', value: invoice.total),
+              _TotalRow(label: 'الإجمالي', value: live.total),
               const SizedBox(height: 8),
-              _TotalRow(label: 'المدفوع', value: invoice.paid),
+              _TotalRow(label: 'المدفوع', value: live.paid),
               const SizedBox(height: 8),
               _TotalRow(
                 label: 'المتبقي',
-                value: invoice.remaining,
-                emphasized: invoice.remaining > 0,
+                value: live.remaining,
+                emphasized: live.remaining > 0,
               ),
               const SizedBox(height: 20),
-              if (invoice.remaining > 0 &&
-                  invoice.ownership != InvoiceOwnership.consignment &&
+              if (live.remaining > 0 &&
+                  live.ownership != InvoiceOwnership.consignment &&
                   _canPay(ref)) ...[
                 ElevatedButton.icon(
                   onPressed: () =>
-                      showRecordPaymentSheet(context, invoice: invoice),
+                      showRecordPaymentSheet(context, invoice: live),
                   icon: const FaIcon(FontAwesomeIcons.moneyBill),
                   label: const Text('تسجيل دفعة'),
                   style: ElevatedButton.styleFrom(
@@ -242,6 +253,49 @@ class InvoiceDetailSheet extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The row the invoice list currently holds for the invoice this sheet was
+/// opened on, falling back to [captured] while the list is loading, has failed,
+/// or no longer lists it.
+///
+/// ## Why the captured snapshot cannot be the only source
+///
+/// Both invoice screens open this sheet as
+/// `builder: (_) => InvoiceDetailSheet(invoice: invoice)` — a snapshot of the
+/// row as the list held it at tap time. A modal route is not rebuilt when the
+/// widget that opened it rebuilds, and this sheet watched nothing, so it kept
+/// rendering the frozen `paid` / `remaining` / `status`. That is the whole
+/// defect: recording a payment offline restates the figures in the local mirror
+/// and `PaymentActions._refresh()` invalidates the list, but the sheet above the
+/// list never saw it — so the user watched old numbers while the SnackBar the
+/// write raised quoted the new remaining.
+///
+/// Watching the list provider is therefore a *reuse*, not a new read: the
+/// invalidation already rebuilds that exact provider for the list behind the
+/// sheet, so this adds a second subscriber to one in-flight read and no I/O of
+/// its own. It also keeps [_merged] the single authority for local pending money
+/// instead of re-deriving that rule in the UI.
+///
+/// The fallback is a real limitation and is deliberate: a row the active search
+/// or date filter excludes would resolve to the stale snapshot. It was opened
+/// from that same filtered list, and recording a payment changes neither the
+/// invoice's type, number, party nor date, so it cannot leave the filter on its
+/// own.
+Invoice _liveInvoice(WidgetRef ref, Invoice captured) {
+  final rows = ref.watch(
+    captured.type == 'sale'
+        ? saleInvoicesListProvider
+        : purchaseInvoicesListProvider,
+  );
+  final invoices = rows.maybeWhen(
+    data: (v) => v,
+    orElse: () => const <Invoice>[],
+  );
+  for (final row in invoices) {
+    if (row.id == captured.id) return row;
+  }
+  return captured;
 }
 bool _canPay(WidgetRef ref) {
   final user = ref.read(authStateProvider).value;

@@ -158,7 +158,11 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
     EmployeeEntitlement ent,
     List<Employee> employees,
   ) {
-    final canPay = ent.netDue > 0;
+    // `currentPayable`, never `netDue`: the gross figure does not shrink when a
+    // month is paid, so gating the button on it left "صرف الراتب" enabled on an
+    // already-paid month and invited the user to pay it twice. The write-side
+    // duplicate guard was the only thing stopping them.
+    final canPay = ent.currentPayable > 0;
     var name = '';
     for (final e in employees) {
       if (e.id == ent.employeeId) name = e.name;
@@ -185,11 +189,46 @@ class _SalariesScreenState extends ConsumerState<SalariesScreen> {
                   color: AppColors.danger,
                 ),
                 const Divider(height: 24),
+                // Gross, and named for what it is. It was labelled
+                // 'صافي المستحقات' directly above the payable, so the card showed
+                // two different numbers under one idea and the user had no way
+                // to tell which one the button would act on.
                 _EntitlementRow(
-                  label: 'صافي المستحقات',
+                  label: 'استحقاق الشهر',
                   value: ent.netDue,
+                ),
+                const SizedBox(height: 8),
+                _EntitlementRow(
+                  label: 'المتبقي للصرف',
+                  value: ent.currentPayable,
                   emphasized: true,
                 ),
+                if (ent.isPaidForMonth) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const FaIcon(
+                        FontAwesomeIcons.circleCheck,
+                        size: 16,
+                        color: AppColors.success,
+                      ),
+                      const SizedBox(width: 8),
+                      // `Flexible` + ellipsis: a bare text child of a Row is
+                      // handed unbounded main-axis width and overflows the card
+                      // at phone widths.
+                      Flexible(
+                        child: Text(
+                          'تم صرف راتب هذا الشهر',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

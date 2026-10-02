@@ -201,6 +201,21 @@ class LocalInvoices extends Table {
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().nullable()();
 
+  /// Id of the queued money leg that last changed this row's `paid` /
+  /// `remaining` / `status` locally (an offline `record_payment` or
+  /// `settle_supplier` allocation) — null once that leg has replayed.
+  ///
+  /// This is the "has a pending local money mutation" signal the read path
+  /// needs, and it deliberately carries a *single* leg id rather than a
+  /// dirty-flag. A boolean could not express the overlapping-write case
+  /// (payment A still pending, then payment B recorded on the same invoice)
+  /// safely: when A finally drains, clearing a boolean would also discard B's
+  /// claim, and the list would fall back to a server value that knows about
+  /// neither. With a leg id, [LocalStore.clearInvoiceMoneyMarker] matches by
+  /// equality, so replaying A leaves B's marker intact and the row stays
+  /// authoritative until B drains too.
+  TextColumn get pendingMoneyLeg => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -218,8 +233,16 @@ class LocalInvoiceItems extends Table {
   IntColumn get price => integer()();
   IntColumn get total => integer()();
 
+  /// Tenant-qualified since schema 8.
+  ///
+  /// An `id` alone was the same key in every workspace, and `upsertInvoiceItems`
+  /// writes with `insertOrReplace` — so mirroring one workspace's lines for an
+  /// invoice id the other workspace also holds silently REPLACED the other
+  /// workspace's row. This is the documented `{id}`-only trap that
+  /// `local_invoices` and `local_suppliers` still carry; line items do not have
+  /// to. See the `from < 8` migration for why no backfill is needed.
   @override
-  Set<Column> get primaryKey => {id};
+  Set<Column> get primaryKey => {tenantId, id};
 }
 
 @DataClassName('LocalPaymentRow')
@@ -335,6 +358,22 @@ class SyncQueueItems extends Table {
   /// dependent (see `offline_sync.dart`).
   TextColumn get dependsOn => text().nullable()();
 
+  /// JSON array of the invoice ids whose money figures this leg restated
+  /// locally, e.g. `'["?","?"]'`. Null (or `'[]'`) means "no recorded
+  /// attribution" — see [LocalStore.resolveInvoiceMoneyMarker].
+  ///
+  /// A leg's RPC `params` cannot answer this: `record_payment` names
+  /// `p_invoice_id`, but `settle_supplier` names only a supplier because the
+  /// SERVER chooses what to settle, so the invoice set exists nowhere but in
+  /// the local settlement algorithm's `allocations`. Losing that set would let
+  /// a later money leg retiring first clear a marker the settlement still owns.
+  ///
+  /// This is **local-only metadata** and is never part of the RPC body sent to
+  /// Supabase — [params] is the wire payload, this column is not. Written once
+  /// at enqueue, inside the same transaction as the invoice writes, and never
+  /// mutated afterwards: a leg's activity is expressed by [status] alone.
+  TextColumn get affectsInvoiceIds => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -433,7 +472,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -465,6 +504,20 @@ class AppDatabase extends _$AppDatabase {
     // tenant's wipe delete another tenant's mappings. The sentinel is a value
     // no real tenant id can take, and it keeps the data visible for debugging
     // instead of silently dropping mappings the user may still need.
+    // Schema 6 (M13 Phase 2 P1) adds local_invoices.pending_money_leg. Purely
+    // additive and nullable: every pre-v6 row reads back as NULL, which is
+    // exactly the state it was already in (no local money mutation is
+    // outstanding). The column names the queue leg that last changed the row's
+    // paid/remaining/status locally, so an offline payment shows its new
+    // figures in the list before the drain and the server is authoritative
+    // again the moment that leg replays. No mirror, queue, report-cache or
+    // profile row is touched, so nothing can be lost.
+    // Schema 8 (M13 Phase 2 P1.E) moves `tenant_id` into local_invoice_items'
+    // primary key, so a mirrored line set can no longer replace another
+    // workspace's row for the same id. Unlike schema 5 this is a rebuild with
+    // NO sentinel and NO backfill: every pre-v8 row already carries its real,
+    // non-null tenant_id (it is NOT NULL in the table and always has been), so
+    // the rows move across unchanged and none can be misattributed.
     onUpgrade: (Migrator m, int from, int to) async {
       if (from < 2) {
         await m.addColumn(localSuppliers, localSuppliers.synced);
@@ -502,6 +555,63 @@ class AppDatabase extends _$AppDatabase {
                     ),
                 ],
               ));
+        }
+      }
+      if (from < 6) {
+        // Additive: existing invoice rows read back as NULL, which means "no
+        // local money mutation is outstanding" — the state they were already in.
+        await m.addColumn(localInvoices, localInvoices.pendingMoneyLeg);
+      }
+      if (from < 7) {
+        // Additive: every pre-v7 leg reads back as NULL, which resolves to "no
+        // recorded attribution".
+        //
+        // There is deliberately NO backfill from `params` here, even though a
+        // `record_payment` leg's `p_invoice_id` could be copied. A migration
+        // that rewrites user rows to a value a second implementation must then
+        // keep in agreement is strictly worse than leaving the column NULL and
+        // letting the reader fall back at query time (see
+        // `LocalStore._legInvoiceIds`). More importantly a `settle_supplier`
+        // leg's set **cannot** be reconstructed: the server chose the
+        // allocation and the local mirror may have changed since, so any value
+        // written here would be invention rather than evidence. The residual is
+        // therefore narrow and self-healing: a settlement already queued at
+        // upgrade time keeps today's behaviour and is attributed by nothing
+        // until it drains, after which it can never reoccur.
+        //
+        // Mutation-proven both ways by `leg_attribution_migration_test.dart`:
+        // removing this `addColumn` fails the typed write (a *read* would not —
+        // drift's row reader returns null for a missing column), and adding the
+        // `p_invoice_id` backfill above fails the "must not be rewritten"
+        // assertion.
+        await m.addColumn(syncQueueItems, syncQueueItems.affectsInvoiceIds);
+      }
+      if (from < 8) {
+        // Drift cannot change a primary key, so the table is rebuilt — the same
+        // shape as the schema-5 `id_mappings` rebuild above, and deliberately
+        // NOT `migratedTable`, which would be a no-op on a device whose
+        // pre-v8 file has no migration state to read.
+        //
+        // Rows are carried across VERBATIM, with no sentinel and no backfill,
+        // and that is the difference from schema 5: `tenant_id` was already NOT
+        // NULL here and every writer has always set it, so each row's owner is
+        // known. Re-attributing anything here would be invention, and dropping
+        // a row would be silent data loss on a user's offline invoice.
+        //
+        // There is deliberately NO "does this table exist?" guard, unlike a
+        // tolerant migration would have. `local_invoice_items` has existed since
+        // schema 1, so a file without it is corrupt, and skipping the read would
+        // convert that corruption into a silently empty table — the upgrade would
+        // report success and the user would find their invoice lines gone with
+        // nothing logged. Failing here is what routes the device to the repair
+        // screen, which is the honest outcome. (Same rule as the v7 fixture note
+        // in `pending_money_migration_test.dart`: an under-specified fixture gets
+        // corrected, it does not get a migration that hides it.)
+        final old = await m.database.select(localInvoiceItems).get();
+        await m.deleteTable('local_invoice_items');
+        await m.createTable(localInvoiceItems);
+        if (old.isNotEmpty) {
+          await m.database.batch((b) => b.insertAll(localInvoiceItems, old));
         }
       }
     },

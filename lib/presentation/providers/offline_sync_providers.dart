@@ -62,6 +62,29 @@ void _refreshAfterDrain(Ref ref) {
   ref.invalidate(salaryHistoryProvider);
 }
 
+/// Refreshes what a **local invoice write** invalidates, immediately after the
+/// save/enqueue commits and before any drain.
+///
+/// [_refreshAfterDrain] only runs once the queue replays, which left a real gap:
+/// the row appeared at once (the list provider was refreshed by the screen) but
+/// the two providers that read the *queue* were not, so the new invoice rendered
+/// as already-synced — the exact thing Phase 1A.1 added the badge to prevent —
+/// and the pending count stayed at zero while the user's own invoice sat
+/// unsent. Both are `FutureProvider`s that read the queue once and are never
+/// self-polling, so nothing recomputed them until something invalidated them.
+///
+/// Called by both invoice screens, so sales and purchases cannot drift apart
+/// again. This is a refresh trigger only; the list notifiers keep owning how
+/// they load. Takes a [WidgetRef] because the callers are screens — a
+/// `WidgetRef` is not assignable to the provider-side `Ref` that
+/// [_refreshAfterDrain] takes, so the two helpers cannot be merged.
+void refreshAfterLocalInvoiceWrite(WidgetRef ref) {
+  ref.invalidate(pendingSyncCountProvider);
+  ref.invalidate(invoiceSyncStatesProvider);
+  ref.invalidate(saleInvoicesListProvider);
+  ref.invalidate(purchaseInvoicesListProvider);
+}
+
 /// Current signed-in tenant id (falls back to empty string so the flusher
 /// providers stay constructible before auth resolves).
 final Provider<String> currentTenantIdProvider = Provider<String>(

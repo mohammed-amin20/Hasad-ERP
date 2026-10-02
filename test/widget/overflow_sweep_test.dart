@@ -442,4 +442,14 @@ class _FakeInvoiceRepository implements InvoiceRepository {
 
   @override
   Future<List<InvoiceItem>> items(String invoiceId) async => const [];
+
+  /// The prefetch API, stubbed to the same empty answer. This suite measures
+  /// layout; it must not fail on the invoice mirror, and an empty batch mirrors
+  /// nothing while keeping every listed invoice resolvable.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async =>
+      InvoiceItemsBatch(
+        items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+        failed: const {},
+      );
 }

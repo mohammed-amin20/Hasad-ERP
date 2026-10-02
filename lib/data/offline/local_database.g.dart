@@ -2966,6 +2966,17 @@ class $LocalInvoicesTable extends LocalInvoices
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pendingMoneyLegMeta = const VerificationMeta(
+    'pendingMoneyLeg',
+  );
+  @override
+  late final GeneratedColumn<String> pendingMoneyLeg = GeneratedColumn<String>(
+    'pending_money_leg',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2984,6 +2995,7 @@ class $LocalInvoicesTable extends LocalInvoices
     requestId,
     synced,
     createdAt,
+    pendingMoneyLeg,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3111,6 +3123,15 @@ class $LocalInvoicesTable extends LocalInvoices
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('pending_money_leg')) {
+      context.handle(
+        _pendingMoneyLegMeta,
+        pendingMoneyLeg.isAcceptableOrUnknown(
+          data['pending_money_leg']!,
+          _pendingMoneyLegMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3184,6 +3205,10 @@ class $LocalInvoicesTable extends LocalInvoices
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       ),
+      pendingMoneyLeg: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pending_money_leg'],
+      ),
     );
   }
 
@@ -3210,6 +3235,21 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
   final String? requestId;
   final bool synced;
   final DateTime? createdAt;
+
+  /// Id of the queued money leg that last changed this row's `paid` /
+  /// `remaining` / `status` locally (an offline `record_payment` or
+  /// `settle_supplier` allocation) — null once that leg has replayed.
+  ///
+  /// This is the "has a pending local money mutation" signal the read path
+  /// needs, and it deliberately carries a *single* leg id rather than a
+  /// dirty-flag. A boolean could not express the overlapping-write case
+  /// (payment A still pending, then payment B recorded on the same invoice)
+  /// safely: when A finally drains, clearing a boolean would also discard B's
+  /// claim, and the list would fall back to a server value that knows about
+  /// neither. With a leg id, [LocalStore.clearInvoiceMoneyMarker] matches by
+  /// equality, so replaying A leaves B's marker intact and the row stays
+  /// authoritative until B drains too.
+  final String? pendingMoneyLeg;
   const LocalInvoiceRow({
     required this.id,
     required this.tenantId,
@@ -3227,6 +3267,7 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
     this.requestId,
     required this.synced,
     this.createdAt,
+    this.pendingMoneyLeg,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3252,6 +3293,9 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
     map['synced'] = Variable<bool>(synced);
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
+    }
+    if (!nullToAbsent || pendingMoneyLeg != null) {
+      map['pending_money_leg'] = Variable<String>(pendingMoneyLeg);
     }
     return map;
   }
@@ -3280,6 +3324,9 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      pendingMoneyLeg: pendingMoneyLeg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingMoneyLeg),
     );
   }
 
@@ -3305,6 +3352,7 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
       requestId: serializer.fromJson<String?>(json['requestId']),
       synced: serializer.fromJson<bool>(json['synced']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      pendingMoneyLeg: serializer.fromJson<String?>(json['pendingMoneyLeg']),
     );
   }
   @override
@@ -3327,6 +3375,7 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
       'requestId': serializer.toJson<String?>(requestId),
       'synced': serializer.toJson<bool>(synced),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'pendingMoneyLeg': serializer.toJson<String?>(pendingMoneyLeg),
     };
   }
 
@@ -3347,6 +3396,7 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
     Value<String?> requestId = const Value.absent(),
     bool? synced,
     Value<DateTime?> createdAt = const Value.absent(),
+    Value<String?> pendingMoneyLeg = const Value.absent(),
   }) => LocalInvoiceRow(
     id: id ?? this.id,
     tenantId: tenantId ?? this.tenantId,
@@ -3364,6 +3414,9 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
     requestId: requestId.present ? requestId.value : this.requestId,
     synced: synced ?? this.synced,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    pendingMoneyLeg: pendingMoneyLeg.present
+        ? pendingMoneyLeg.value
+        : this.pendingMoneyLeg,
   );
   LocalInvoiceRow copyWithCompanion(LocalInvoicesCompanion data) {
     return LocalInvoiceRow(
@@ -3383,6 +3436,9 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
       requestId: data.requestId.present ? data.requestId.value : this.requestId,
       synced: data.synced.present ? data.synced.value : this.synced,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      pendingMoneyLeg: data.pendingMoneyLeg.present
+          ? data.pendingMoneyLeg.value
+          : this.pendingMoneyLeg,
     );
   }
 
@@ -3404,7 +3460,8 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
           ..write('ownership: $ownership, ')
           ..write('requestId: $requestId, ')
           ..write('synced: $synced, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('pendingMoneyLeg: $pendingMoneyLeg')
           ..write(')'))
         .toString();
   }
@@ -3427,6 +3484,7 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
     requestId,
     synced,
     createdAt,
+    pendingMoneyLeg,
   );
   @override
   bool operator ==(Object other) =>
@@ -3447,7 +3505,8 @@ class LocalInvoiceRow extends DataClass implements Insertable<LocalInvoiceRow> {
           other.ownership == this.ownership &&
           other.requestId == this.requestId &&
           other.synced == this.synced &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.pendingMoneyLeg == this.pendingMoneyLeg);
 }
 
 class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
@@ -3467,6 +3526,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
   final Value<String?> requestId;
   final Value<bool> synced;
   final Value<DateTime?> createdAt;
+  final Value<String?> pendingMoneyLeg;
   final Value<int> rowid;
   const LocalInvoicesCompanion({
     this.id = const Value.absent(),
@@ -3485,6 +3545,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
     this.requestId = const Value.absent(),
     this.synced = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.pendingMoneyLeg = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalInvoicesCompanion.insert({
@@ -3504,6 +3565,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
     this.requestId = const Value.absent(),
     this.synced = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.pendingMoneyLeg = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tenantId = Value(tenantId),
@@ -3534,6 +3596,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
     Expression<String>? requestId,
     Expression<bool>? synced,
     Expression<DateTime>? createdAt,
+    Expression<String>? pendingMoneyLeg,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3553,6 +3616,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
       if (requestId != null) 'request_id': requestId,
       if (synced != null) 'synced': synced,
       if (createdAt != null) 'created_at': createdAt,
+      if (pendingMoneyLeg != null) 'pending_money_leg': pendingMoneyLeg,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3574,6 +3638,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
     Value<String?>? requestId,
     Value<bool>? synced,
     Value<DateTime?>? createdAt,
+    Value<String?>? pendingMoneyLeg,
     Value<int>? rowid,
   }) {
     return LocalInvoicesCompanion(
@@ -3593,6 +3658,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
       requestId: requestId ?? this.requestId,
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
+      pendingMoneyLeg: pendingMoneyLeg ?? this.pendingMoneyLeg,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3648,6 +3714,9 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (pendingMoneyLeg.present) {
+      map['pending_money_leg'] = Variable<String>(pendingMoneyLeg.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3673,6 +3742,7 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoiceRow> {
           ..write('requestId: $requestId, ')
           ..write('synced: $synced, ')
           ..write('createdAt: $createdAt, ')
+          ..write('pendingMoneyLeg: $pendingMoneyLeg, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3894,7 +3964,7 @@ class $LocalInvoiceItemsTable extends LocalInvoiceItems
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {id};
+  Set<GeneratedColumn> get $primaryKey => {tenantId, id};
   @override
   LocalInvoiceItemRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
@@ -7515,6 +7585,18 @@ class $SyncQueueItemsTable extends SyncQueueItems
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _affectsInvoiceIdsMeta = const VerificationMeta(
+    'affectsInvoiceIds',
+  );
+  @override
+  late final GeneratedColumn<String> affectsInvoiceIds =
+      GeneratedColumn<String>(
+        'affects_invoice_ids',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -7553,6 +7635,7 @@ class $SyncQueueItemsTable extends SyncQueueItems
     attempts,
     lastError,
     dependsOn,
+    affectsInvoiceIds,
     createdAt,
     updatedAt,
   ];
@@ -7642,6 +7725,15 @@ class $SyncQueueItemsTable extends SyncQueueItems
         dependsOn.isAcceptableOrUnknown(data['depends_on']!, _dependsOnMeta),
       );
     }
+    if (data.containsKey('affects_invoice_ids')) {
+      context.handle(
+        _affectsInvoiceIdsMeta,
+        affectsInvoiceIds.isAcceptableOrUnknown(
+          data['affects_invoice_ids']!,
+          _affectsInvoiceIdsMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -7711,6 +7803,10 @@ class $SyncQueueItemsTable extends SyncQueueItems
         DriftSqlType.string,
         data['${effectivePrefix}depends_on'],
       ),
+      affectsInvoiceIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}affects_invoice_ids'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -7750,6 +7846,22 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
   /// not-yet-created parent. A `failed` prerequisite permanently blocks the
   /// dependent (see `offline_sync.dart`).
   final String? dependsOn;
+
+  /// JSON array of the invoice ids whose money figures this leg restated
+  /// locally, e.g. `'["?","?"]'`. Null (or `'[]'`) means "no recorded
+  /// attribution" — see [LocalStore.resolveInvoiceMoneyMarker].
+  ///
+  /// A leg's RPC `params` cannot answer this: `record_payment` names
+  /// `p_invoice_id`, but `settle_supplier` names only a supplier because the
+  /// SERVER chooses what to settle, so the invoice set exists nowhere but in
+  /// the local settlement algorithm's `allocations`. Losing that set would let
+  /// a later money leg retiring first clear a marker the settlement still owns.
+  ///
+  /// This is **local-only metadata** and is never part of the RPC body sent to
+  /// Supabase — [params] is the wire payload, this column is not. Written once
+  /// at enqueue, inside the same transaction as the invoice writes, and never
+  /// mutated afterwards: a leg's activity is expressed by [status] alone.
+  final String? affectsInvoiceIds;
   final DateTime createdAt;
   final DateTime updatedAt;
   const SyncQueueRow({
@@ -7765,6 +7877,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     required this.attempts,
     this.lastError,
     this.dependsOn,
+    this.affectsInvoiceIds,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -7792,6 +7905,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     }
     if (!nullToAbsent || dependsOn != null) {
       map['depends_on'] = Variable<String>(dependsOn);
+    }
+    if (!nullToAbsent || affectsInvoiceIds != null) {
+      map['affects_invoice_ids'] = Variable<String>(affectsInvoiceIds);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -7822,6 +7938,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       dependsOn: dependsOn == null && nullToAbsent
           ? const Value.absent()
           : Value(dependsOn),
+      affectsInvoiceIds: affectsInvoiceIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(affectsInvoiceIds),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -7845,6 +7964,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       attempts: serializer.fromJson<int>(json['attempts']),
       lastError: serializer.fromJson<String?>(json['lastError']),
       dependsOn: serializer.fromJson<String?>(json['dependsOn']),
+      affectsInvoiceIds: serializer.fromJson<String?>(
+        json['affectsInvoiceIds'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -7865,6 +7987,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       'attempts': serializer.toJson<int>(attempts),
       'lastError': serializer.toJson<String?>(lastError),
       'dependsOn': serializer.toJson<String?>(dependsOn),
+      'affectsInvoiceIds': serializer.toJson<String?>(affectsInvoiceIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -7883,6 +8006,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     int? attempts,
     Value<String?> lastError = const Value.absent(),
     Value<String?> dependsOn = const Value.absent(),
+    Value<String?> affectsInvoiceIds = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => SyncQueueRow(
@@ -7898,6 +8022,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     attempts: attempts ?? this.attempts,
     lastError: lastError.present ? lastError.value : this.lastError,
     dependsOn: dependsOn.present ? dependsOn.value : this.dependsOn,
+    affectsInvoiceIds: affectsInvoiceIds.present
+        ? affectsInvoiceIds.value
+        : this.affectsInvoiceIds,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -7915,6 +8042,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
       dependsOn: data.dependsOn.present ? data.dependsOn.value : this.dependsOn,
+      affectsInvoiceIds: data.affectsInvoiceIds.present
+          ? data.affectsInvoiceIds.value
+          : this.affectsInvoiceIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -7935,6 +8065,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           ..write('attempts: $attempts, ')
           ..write('lastError: $lastError, ')
           ..write('dependsOn: $dependsOn, ')
+          ..write('affectsInvoiceIds: $affectsInvoiceIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -7955,6 +8086,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     attempts,
     lastError,
     dependsOn,
+    affectsInvoiceIds,
     createdAt,
     updatedAt,
   );
@@ -7974,6 +8106,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           other.attempts == this.attempts &&
           other.lastError == this.lastError &&
           other.dependsOn == this.dependsOn &&
+          other.affectsInvoiceIds == this.affectsInvoiceIds &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -7991,6 +8124,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
   final Value<int> attempts;
   final Value<String?> lastError;
   final Value<String?> dependsOn;
+  final Value<String?> affectsInvoiceIds;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -8007,6 +8141,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
     this.dependsOn = const Value.absent(),
+    this.affectsInvoiceIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8024,6 +8159,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.attempts = const Value.absent(),
     this.lastError = const Value.absent(),
     this.dependsOn = const Value.absent(),
+    this.affectsInvoiceIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8044,6 +8180,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Expression<int>? attempts,
     Expression<String>? lastError,
     Expression<String>? dependsOn,
+    Expression<String>? affectsInvoiceIds,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -8061,6 +8198,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       if (attempts != null) 'attempts': attempts,
       if (lastError != null) 'last_error': lastError,
       if (dependsOn != null) 'depends_on': dependsOn,
+      if (affectsInvoiceIds != null) 'affects_invoice_ids': affectsInvoiceIds,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -8080,6 +8218,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Value<int>? attempts,
     Value<String?>? lastError,
     Value<String?>? dependsOn,
+    Value<String?>? affectsInvoiceIds,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -8097,6 +8236,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       attempts: attempts ?? this.attempts,
       lastError: lastError ?? this.lastError,
       dependsOn: dependsOn ?? this.dependsOn,
+      affectsInvoiceIds: affectsInvoiceIds ?? this.affectsInvoiceIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -8142,6 +8282,9 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     if (dependsOn.present) {
       map['depends_on'] = Variable<String>(dependsOn.value);
     }
+    if (affectsInvoiceIds.present) {
+      map['affects_invoice_ids'] = Variable<String>(affectsInvoiceIds.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -8169,6 +8312,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
           ..write('attempts: $attempts, ')
           ..write('lastError: $lastError, ')
           ..write('dependsOn: $dependsOn, ')
+          ..write('affectsInvoiceIds: $affectsInvoiceIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -11232,6 +11376,7 @@ typedef $$LocalInvoicesTableCreateCompanionBuilder =
       Value<String?> requestId,
       Value<bool> synced,
       Value<DateTime?> createdAt,
+      Value<String?> pendingMoneyLeg,
       Value<int> rowid,
     });
 typedef $$LocalInvoicesTableUpdateCompanionBuilder =
@@ -11252,6 +11397,7 @@ typedef $$LocalInvoicesTableUpdateCompanionBuilder =
       Value<String?> requestId,
       Value<bool> synced,
       Value<DateTime?> createdAt,
+      Value<String?> pendingMoneyLeg,
       Value<int> rowid,
     });
 
@@ -11341,6 +11487,11 @@ class $$LocalInvoicesTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pendingMoneyLeg => $composableBuilder(
+    column: $table.pendingMoneyLeg,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11433,6 +11584,11 @@ class $$LocalInvoicesTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get pendingMoneyLeg => $composableBuilder(
+    column: $table.pendingMoneyLeg,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalInvoicesTableAnnotationComposer
@@ -11491,6 +11647,11 @@ class $$LocalInvoicesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pendingMoneyLeg => $composableBuilder(
+    column: $table.pendingMoneyLeg,
+    builder: (column) => column,
+  );
 }
 
 class $$LocalInvoicesTableTableManager
@@ -11540,6 +11701,7 @@ class $$LocalInvoicesTableTableManager
                 Value<String?> requestId = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<String?> pendingMoneyLeg = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalInvoicesCompanion(
                 id: id,
@@ -11558,6 +11720,7 @@ class $$LocalInvoicesTableTableManager
                 requestId: requestId,
                 synced: synced,
                 createdAt: createdAt,
+                pendingMoneyLeg: pendingMoneyLeg,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -11578,6 +11741,7 @@ class $$LocalInvoicesTableTableManager
                 Value<String?> requestId = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
+                Value<String?> pendingMoneyLeg = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalInvoicesCompanion.insert(
                 id: id,
@@ -11596,6 +11760,7 @@ class $$LocalInvoicesTableTableManager
                 requestId: requestId,
                 synced: synced,
                 createdAt: createdAt,
+                pendingMoneyLeg: pendingMoneyLeg,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13576,6 +13741,7 @@ typedef $$SyncQueueItemsTableCreateCompanionBuilder =
       Value<int> attempts,
       Value<String?> lastError,
       Value<String?> dependsOn,
+      Value<String?> affectsInvoiceIds,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -13594,6 +13760,7 @@ typedef $$SyncQueueItemsTableUpdateCompanionBuilder =
       Value<int> attempts,
       Value<String?> lastError,
       Value<String?> dependsOn,
+      Value<String?> affectsInvoiceIds,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -13665,6 +13832,11 @@ class $$SyncQueueItemsTableFilterComposer
 
   ColumnFilters<String> get dependsOn => $composableBuilder(
     column: $table.dependsOn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get affectsInvoiceIds => $composableBuilder(
+    column: $table.affectsInvoiceIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13748,6 +13920,11 @@ class $$SyncQueueItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get affectsInvoiceIds => $composableBuilder(
+    column: $table.affectsInvoiceIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -13804,6 +13981,11 @@ class $$SyncQueueItemsTableAnnotationComposer
   GeneratedColumn<String> get dependsOn =>
       $composableBuilder(column: $table.dependsOn, builder: (column) => column);
 
+  GeneratedColumn<String> get affectsInvoiceIds => $composableBuilder(
+    column: $table.affectsInvoiceIds,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -13856,6 +14038,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<String?> dependsOn = const Value.absent(),
+                Value<String?> affectsInvoiceIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13872,6 +14055,7 @@ class $$SyncQueueItemsTableTableManager
                 attempts: attempts,
                 lastError: lastError,
                 dependsOn: dependsOn,
+                affectsInvoiceIds: affectsInvoiceIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -13890,6 +14074,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<String?> dependsOn = const Value.absent(),
+                Value<String?> affectsInvoiceIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13906,6 +14091,7 @@ class $$SyncQueueItemsTableTableManager
                 attempts: attempts,
                 lastError: lastError,
                 dependsOn: dependsOn,
+                affectsInvoiceIds: affectsInvoiceIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

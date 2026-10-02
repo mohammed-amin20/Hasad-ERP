@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/error/app_exception.dart';
+import '../../domain/salaries/salary_computation.dart';
 import '../../domain/salaries/salary_repository.dart';
 
 /// [SalaryRepository] backed by the `get_employee_entitlement` /
@@ -11,6 +12,14 @@ class SupabaseSalaryRepository implements SalaryRepository {
 
   final SupabaseClient _client;
 
+  /// The COMPLETE read model for one employee-month: the RPC's gross figures
+  /// plus whether the month has actually been paid.
+  ///
+  /// The paid state is part of this contract rather than a second method because
+  /// a caller that wants "what is this employee owed" and does not also get
+  /// "have they had it" will render a pay button for a salary already paid — the
+  /// exact defect the split would invite. Composing it here also means the
+  /// offline wrapper has exactly one contract to combine with its local row.
   @override
   Future<EmployeeEntitlement> entitlement({
     required String employeeId,
@@ -21,11 +30,26 @@ class SupabaseSalaryRepository implements SalaryRepository {
         'get_employee_entitlement',
         params: {
           'p_employee_id': employeeId,
-          'p_month':
-              '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}-01',
+          'p_month': salaryMonthDate(month),
         },
       );
-      return EmployeeEntitlement.fromJson(result as Map<String, dynamic>);
+      final gross = EmployeeEntitlement.fromJson(result as Map<String, dynamic>);
+      // `get_employee_entitlement` is arithmetic only, so it cannot say whether
+      // the month was paid. This asks the existing RLS-covered `salaries` table
+      // the narrowest question that answers it: is there a row for THIS employee
+      // and THIS month? No new RPC, no migration.
+      //
+      // Narrow existence rather than `salaryHistory()`, which fetches every
+      // salary row in the tenant — this runs on every entitlement read (the
+      // salary screen, and again after every movement and payment) to answer a
+      // one-row question.
+      final paid = await _client
+          .from('salaries')
+          .select('id')
+          .eq('employee_id', employeeId)
+          .eq('month', salaryMonthDate(month))
+          .limit(1);
+      return gross.copyWith(isPaidForMonth: paid.isNotEmpty);
     } on Object catch (error) {
       throw mapErrorToAppException(error);
     }

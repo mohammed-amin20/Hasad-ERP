@@ -310,23 +310,59 @@ final class EmployeeStatementFamily extends $Family
 
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The salary sheets
+/// reach this notifier with `ref.read(salaryActionsProvider.notifier)` and hold
+/// it across `await movement(...)` / `await pay(...)`, so the notifier's own
+/// `ref` is used again in `_refresh()` *after* the await. An auto-dispose
+/// provider nothing `watch`es is disposed at the end of the first frame after
+/// the read, and the post-await `ref.invalidate` then throws
+/// `UnmountedRefException`, which `mapErrorToAppException` degrades to the
+/// generic `حدث خطأ غير متوقع` banner while the write itself may well have
+/// landed — the movement sheet failing for no visible reason. This is the same
+/// defect `PaymentActions` had; it was found through the payment path first.
+/// Holds no state (`build() => null`), so nothing leaks.
 
 @ProviderFor(SalaryActions)
 final salaryActionsProvider = SalaryActionsProvider._();
 
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The salary sheets
+/// reach this notifier with `ref.read(salaryActionsProvider.notifier)` and hold
+/// it across `await movement(...)` / `await pay(...)`, so the notifier's own
+/// `ref` is used again in `_refresh()` *after* the await. An auto-dispose
+/// provider nothing `watch`es is disposed at the end of the first frame after
+/// the read, and the post-await `ref.invalidate` then throws
+/// `UnmountedRefException`, which `mapErrorToAppException` degrades to the
+/// generic `حدث خطأ غير متوقع` banner while the write itself may well have
+/// landed — the movement sheet failing for no visible reason. This is the same
+/// defect `PaymentActions` had; it was found through the payment path first.
+/// Holds no state (`build() => null`), so nothing leaks.
 final class SalaryActionsProvider
     extends $NotifierProvider<SalaryActions, Object?> {
   /// Executes movement/salary actions, then refreshes the entitlement preview
   /// and any inventory-dependent lists (a `product` deduction moves stock).
+  ///
+  /// **`keepAlive: true` is load-bearing, not an optimisation.** The salary sheets
+  /// reach this notifier with `ref.read(salaryActionsProvider.notifier)` and hold
+  /// it across `await movement(...)` / `await pay(...)`, so the notifier's own
+  /// `ref` is used again in `_refresh()` *after* the await. An auto-dispose
+  /// provider nothing `watch`es is disposed at the end of the first frame after
+  /// the read, and the post-await `ref.invalidate` then throws
+  /// `UnmountedRefException`, which `mapErrorToAppException` degrades to the
+  /// generic `حدث خطأ غير متوقع` banner while the write itself may well have
+  /// landed — the movement sheet failing for no visible reason. This is the same
+  /// defect `PaymentActions` had; it was found through the payment path first.
+  /// Holds no state (`build() => null`), so nothing leaks.
   SalaryActionsProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'salaryActionsProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -347,10 +383,22 @@ final class SalaryActionsProvider
   }
 }
 
-String _$salaryActionsHash() => r'036c441e0da85164559944137d7c703320442038';
+String _$salaryActionsHash() => r'66122631e8d81d92a22760cef0088f671467f43a';
 
 /// Executes movement/salary actions, then refreshes the entitlement preview
 /// and any inventory-dependent lists (a `product` deduction moves stock).
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The salary sheets
+/// reach this notifier with `ref.read(salaryActionsProvider.notifier)` and hold
+/// it across `await movement(...)` / `await pay(...)`, so the notifier's own
+/// `ref` is used again in `_refresh()` *after* the await. An auto-dispose
+/// provider nothing `watch`es is disposed at the end of the first frame after
+/// the read, and the post-await `ref.invalidate` then throws
+/// `UnmountedRefException`, which `mapErrorToAppException` degrades to the
+/// generic `حدث خطأ غير متوقع` banner while the write itself may well have
+/// landed — the movement sheet failing for no visible reason. This is the same
+/// defect `PaymentActions` had; it was found through the payment path first.
+/// Holds no state (`build() => null`), so nothing leaks.
 
 abstract class _$SalaryActions extends $Notifier<Object?> {
   Object? build();

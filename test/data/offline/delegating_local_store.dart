@@ -94,15 +94,43 @@ class DelegatingLocalStore implements LocalStore {
   Future<void> upsertInvoice(LocalInvoiceRow row) => inner.upsertInvoice(row);
 
   @override
-  Future<void> deleteInvoice(String id) => inner.deleteInvoice(id);
+  Future<void> deleteInvoice(String tenantId, String id) =>
+      inner.deleteInvoice(tenantId, id);
 
   @override
-  Future<List<LocalInvoiceItemRow>> invoiceItems(String invoiceId) =>
-      inner.invoiceItems(invoiceId);
+  Future<LocalInvoiceRow?> invoice(String tenantId, String id) =>
+      inner.invoice(tenantId, id);
+
+  @override
+  Future<void> mirrorInvoices(String tenantId, List<LocalInvoiceRow> rows) =>
+      inner.mirrorInvoices(tenantId, rows);
+
+  @override
+  Future<void> clearInvoiceMoneyMarker(String tenantId, String legId) =>
+      inner.clearInvoiceMoneyMarker(tenantId, legId);
+
+  @override
+  Future<void> resolveInvoiceMoneyMarker(String tenantId, String legId) =>
+      inner.resolveInvoiceMoneyMarker(tenantId, legId);
+
+  @override
+  Future<List<LocalInvoiceItemRow>> invoiceItems(
+    String tenantId,
+    String invoiceId,
+  ) =>
+      inner.invoiceItems(tenantId, invoiceId);
 
   @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) =>
       inner.upsertInvoiceItems(rows);
+
+  @override
+  Future<void> mirrorInvoiceItems(
+    String tenantId,
+    String invoiceId,
+    List<LocalInvoiceItemRow> rows,
+  ) =>
+      inner.mirrorInvoiceItems(tenantId, invoiceId, rows);
 
   @override
   Future<void> upsertPayment(LocalPaymentRow row) => inner.upsertPayment(row);
@@ -180,6 +208,13 @@ class DelegatingLocalStore implements LocalStore {
     String entity,
     List<String> ids,
   ) => inner.removeMirrorRows(tenantId, entity, ids);
+
+  @override
+  Future<Set<String>> invoiceIdsWithDurableItems(
+    String tenantId,
+    List<String> invoiceIds,
+  ) =>
+      inner.invoiceIdsWithDurableItems(tenantId, invoiceIds);
 
   @override
   Future<T> transaction<T>(Future<T> Function(LocalStore store) action) =>

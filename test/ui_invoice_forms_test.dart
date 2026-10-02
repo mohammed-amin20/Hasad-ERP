@@ -156,6 +156,17 @@ class _FakeInvoiceRepository implements InvoiceRepository {
   Future<List<InvoiceItem>> items(String invoiceId) async {
     return <InvoiceItem>[];
   }
+
+  /// Prefetch API. The form suite drives the WRITE path, so the list-time
+  /// hydration is irrelevant here — but an empty batch still keeps every listed
+  /// invoice resolvable, so nothing downstream changes.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async {
+    return InvoiceItemsBatch(
+      items: {for (final id in invoiceIds) id: <InvoiceItem>[]},
+      failed: const {},
+    );
+  }
 }
 
 class _FakeCustomerRepository implements CustomerRepository {

@@ -520,6 +520,15 @@ class _FakeInvoiceRepository implements InvoiceRepository {
 
   @override
   Future<List<InvoiceItem>> items(String invoiceId) async => const [];
+
+  /// Prefetch API, stubbed to the same empty answer: the suite pins field
+  /// geometry, and the list-time hydration is not what it is measuring.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async =>
+      InvoiceItemsBatch(
+        items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+        failed: const {},
+      );
 }
 
 class _FakeCustomerRepository implements CustomerRepository {

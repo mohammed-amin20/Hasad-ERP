@@ -420,6 +420,15 @@ class _FakeInvoiceRepository implements InvoiceRepository {
 
   @override
   Future<List<InvoiceItem>> items(String invoiceId) async => const [];
+
+  /// Prefetch API, stubbed to the same empty answer. The suite measures icon
+  /// geometry on the invoice form, so the form's data layer must not fail here.
+  @override
+  Future<InvoiceItemsBatch> itemsForInvoices(List<String> invoiceIds) async =>
+      InvoiceItemsBatch(
+        items: {for (final id in invoiceIds) id: const <InvoiceItem>[]},
+        failed: const {},
+      );
 }
 
 class _FakeCustomerRepository implements CustomerRepository {
