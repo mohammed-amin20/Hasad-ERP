@@ -23,6 +23,7 @@ logged in Appendix A instead.
 | **M13 Phase 1A.1** | Invoice rows show their sync state; lists refresh after a drain | ✅ Complete |
 | **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ✅ Complete |
 | **M13 Phase 2** | Device-reliability issues (6 reported real-device bugs) — **P0: issue 6 done** (cold-start data blackout); **P1: issues 3/4/5 done**; **P1.1: settlement attribution done**; **P2: issues 1/2 done**; **P1.C: corrective slice done** (invoice mirror authority, double-submit, action-provider lifecycle) | ✅ Complete — **issue 4 awaits a physical-device trace** |
+| **M14** | Products CRUD offline-first — local-first create/update/delete, queue + replay, tenant-safe local-FK delete rule | ✅ Complete — automated GREEN (**922/922**) + **physical-device PASS** (6/6 checks) |
 
 ---
 
@@ -1589,10 +1590,131 @@ than it is:
 
 ---
 
+## ✅ M14 — Products CRUD offline-first
+
+**Scope.** Product writes only — create, update and hard-delete made local-first
+with queue + replay, copying the customers/suppliers/employees master-CRUD
+template. Product **offline search / catalog reads** already shipped and are
+committed at `3cdac5b`; M14 does not revisit them. No server call is a second
+source of truth for a product write.
+
+**Delivered**
+
+- **One transaction or nothing.** `OfflineWriteCoordinator.writeProduct` /
+  `updateProduct` / `deleteProduct` each run inside a single
+  `_store.transaction`: mirror row upsert/flip + the `table_crud` queue leg
+  commit together, and a throw in the final enqueue rolls the mirror back
+  (rollback-proven with the shared `_ThrowOnEnqueueStore`).
+- **Dependency-aware replay.** Every product write takes
+  `dependsOn: _pendingLegIdsFor([id])` computed **before** the transaction, so a
+  product edit/create/delete queued after another still-queued leg for the same
+  id drains in order. `writeProduct` mints the local id first, mirrors under it,
+  and enqueues a `table_crud` leg with `localId:` = that id.
+- **Same-ID create contract, and it holds through replay.**
+  `SupabaseSyncTarget.tableUpsert` forces `{...row, 'id': localId}`, so the
+  server row's id **is** the client uuid. The create leg carries no `id` key in
+  `params`; the replay target injects it. A test pins that the replayed row is
+  mirrored as a single row under the same id (no local→server remap), and that
+  a replayed `table_crud` leg is idempotent.
+- **Update preserves non-editable fields.** `updateProduct` reads the existing
+  mirror row and preserves `createdAt`, `qty`, `supplierId`, consignment/unit
+  metadata and any other field not present in `ProductDraft`
+  (`ProductDraft.toJson()` carries no `id`).
+- **Delete = server hard-delete, surfaced offline.** `deleteProduct` validates
+  existence (`'المنتج غير موجود محلياً'` when absent), flips the kept mirror row
+  `synced: false` (never physically deletes
+  it at write time), and enqueues a delete-shape `table_crud` leg
+  (`{'id': id}`, no `row`). `pendingDeleteIds` (local_store.dart:1527) reads
+  `status == 'pending'` delete-shape legs and hides the id from reads; on
+  replay success the flusher's delete branch calls `removeMirrorRows` and
+  returns **before** `markReplaySynced`; on failure/`failed` the leg no longer
+  suppresses, so the row becomes visible again and the next flush retries.
+  This is the failed-delete visibility contract.
+- **Local-FK delete rule (Arabic `ValidationException`).** Before queueing,
+  `deleteProduct` rejects with
+  `'لا يمكن حذف المنتج لأنه مرتبط بفواتير أو عمولات موجودة'` when any
+  `local_invoice_items.productId` or `local_commission_dues.productId` equals
+  the id, and enqueues nothing. New `LocalStore.invoiceItemsReferenceProduct`
+  (`NullLocalStore` → false, `DriftLocalStore` tenant-scoped) backs the
+  invoice-items half; `commissionDues` was already available.
+  **Documented limitation:** `stock_moves` products are **not** mirrored, so a
+  server-only FK rejection (e.g. a mirrored invoice line the device never saw)
+  falls through to the failed-delete visibility path rather than the local rule
+  — the rule is only as complete as the mirrored data, and a rejection can
+  still surface from the server leg (never silent data loss).
+- **Repository routing.** `OfflineProductRepository` gained an optional
+  `OfflineWriteCoordinator? coordinator:` and a `writesAreLocalFirst` getter;
+  create/update/delete route to the coordinator when present, else the inner
+  repository. `_readAll`/by-id reads subtract `pendingDeleteIds` so a
+  pending-deleted row disappears from the list immediately. `products_providers
+  .dart` builds the coordinator when the store + tenant resolve (else Supabase)
+  and exposes codegen'd `productWritesLocalFirstProvider`.
+- **Search state is never reset on a write.** `productSearchProvider` is QUERY
+  state and is deliberately not invalidated by a product write — the catalog
+  filter survives a create/update/delete.
+- **UI refresh helper (import-direction constraint).** `products_providers.dart`
+  must not import `offline_sync_providers.dart` (cycle), so the pending-count
+  refresh lives at the screen boundary as
+  `refreshAfterLocalProductWrite(WidgetRef ref)` in `offline_sync_providers.dart`
+  — it invalidates `pendingSyncCountProvider`, the product list,
+  `allProductsProvider`, and `inventoryProductsProvider`. `products_screen.dart`
+  calls it after each write and branches SnackBars on
+  `productWritesLocalFirstProvider`:
+  - create `'تم حفظ المنتج محليًا وستتم مزامنته عند عودة الاتصال'`
+  - update `'تم حفظ تعديلات المنتج محليًا وستتم مزامنتها عند عودة الاتصال'`
+  - delete `'تم حذف المنتج محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'`
+
+**No server-side change.** Product `table_crud` legs replay against
+`.from('products')`; migration `0017`'s `set_master_tenant()` trigger stamps
+`tenant_id` on direct inserts, and no product RPC was touched. Drift schema
+unchanged.
+
+**Out of scope (deliberate).** Standalone Inventory Adjustment; product sync
+badge (same `queueLegsFor(entity: 'products')` approach as invoices);
+`stock_moves` product mirroring.
+
+**Evidence.** New `test/data/offline/offline_product_repository_test.dart` and
+`test/data/offline/products_offline_crud_test.dart`; a `products table_crud
+lifecycle` group in `test/data/offline/offline_sync_flush_test.dart` (create
+replays before a referencing sale, create→update→delete drains and deletes the
+mirror, failed delete keeps + un-suppresses the row, refresh never resurrects a
+pending delete, refresh does not revert a pending edit, replayed legs
+idempotent); a strengthened failed-delete assertion in `offline_write_test.dart`;
+and `test/widget/products_offline_write_test.dart` (offline create/update/delete
+pending SnackBars + online create message). `flutter analyze` clean,
+`flutter test --no-pub` **922/922**, `flutter build web --release
+--dart-define=use_arabic=true` green, `flutter build apk --debug` green.
+
+**Device verification — M14 checkpoint.** Run by the user on the **physical
+Android device**, not simulated. The automated suite proves the contract; this
+proves the wiring.
+
+| Checked on device | Result |
+|---|---|
+| Offline Product create — immediate list visibility and search, then offline restart | **PASS** |
+| Offline Product update — immediate visibility, then force-close + offline restart | **PASS** |
+| Offline delete of an **unreferenced** Product, then restart durability | **PASS** |
+| Local FK guard for a **referenced** Product — Arabic validation, delete refused | **PASS** |
+| Product picker sees the pending/offline Product correctly | **PASS** |
+| Reconnect → queue drain → final persistence | **PASS** |
+
+**Honest limits of that table:** check 4 is the **local** FK guard (the mirrored
+reference set). The remote-only case — an unmirrored `stock_moves`/history
+reference the device never saw, so the **server** rejects the delete and the leg
+parks through the failed-delete visibility path — is **automated evidence only**
+and was **not** exercised on the device. The create form's required fields are
+**name, unit, sale price and purchase price**, not "name only".
+
+**Status.** Automated GREEN (**922/922**) **and physical-device PASS**
+(2026-10-02).
+
+---
+
 ## Appendix A — Implementation Log
 
 | Slice | Commit | DB objects | Tests | Deviations |
 |---|---|---|---|---|
+| M14 — products CRUD offline-first | `feat: make product CRUD offline-first` *(this commit)* | drift: none (schema unchanged) | 891 → 922 | First product **write** slice (offline search/catalog shipped at `3cdac5b`). Local-first create/update/hard-delete via `table_crud` legs, each one transaction with `dependsOn: _pendingLegIdsFor([id])`; **same-ID create contract** holds through replay (`tableUpsert` forces `{...row,'id':localId}`, no `id` in `params`); per-row pending-delete authority (`pendingDeleteIds` hides, `removeMirrorRows` deletes on replay, flusher returns before `markReplaySynced`); failed/parked delete un-suppresses the kept `synced:false` row; **local-FK rule** rejects with Arabic `ValidationException` when `local_invoice_items.productId` or `local_commission_dues.productId` reference the id (new `LocalStore.invoiceItemsReferenceProduct`), `stock_moves` products deliberately unmirrored → server reject falls through to failed-delete visibility (never silent loss); update preserves `createdAt`/qty/supplier/consignment; `productSearchProvider` query state never reset; `productWritesLocalFirstProvider` drives pending SnackBars; `refreshAfterLocalProductWrite(WidgetRef)` crosses the provider-import cycle at the screen boundary; **no new migration/RPC** (`0017` trigger stamps tenant); product sync badge + standalone Inventory Adjustment out of scope |
 | Phase 0 — offline cold start | *(this checkpoint 1/3)* | drift `local_user_profiles` (schema 3) | 432 → 462 | `authRepositoryProvider` became a `FutureProvider`; call sites must `await .future` |
 | Phase 1A — queued sales writes | *(this checkpoint 2/3)* | drift `depends_on` (4), `id_mappings.tenant_id` (5), migration `0025` | 462 → 499 → 513 | `0025` adds a parameter with a default, so it **must** `drop function` the old signature first or PostgREST fails with "not unique" |
 | Phase 1A.1 — invoice sync badge | *(this checkpoint 3/3)* | none | 513 → 541 | Badge is text-only and absent when synced; `syncing` deliberately not rendered |

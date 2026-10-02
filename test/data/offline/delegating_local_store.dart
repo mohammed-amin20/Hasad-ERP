@@ -121,6 +121,13 @@ class DelegatingLocalStore implements LocalStore {
       inner.invoiceItems(tenantId, invoiceId);
 
   @override
+  Future<bool> invoiceItemsReferenceProduct(
+    String tenantId,
+    String productId,
+  ) =>
+      inner.invoiceItemsReferenceProduct(tenantId, productId);
+
+  @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) =>
       inner.upsertInvoiceItems(rows);
 

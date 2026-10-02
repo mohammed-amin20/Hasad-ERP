@@ -8,12 +8,16 @@ part of 'products_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Concrete product repository — offline-first.
+/// Concrete product repository — offline-first. Writes route through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else fall back to Supabase.
 
 @ProviderFor(productRepository)
 final productRepositoryProvider = ProductRepositoryProvider._();
 
-/// Concrete product repository — offline-first.
+/// Concrete product repository — offline-first. Writes route through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else fall back to Supabase.
 
 final class ProductRepositoryProvider
     extends
@@ -23,7 +27,9 @@ final class ProductRepositoryProvider
           ProductRepository
         >
     with $Provider<ProductRepository> {
-  /// Concrete product repository — offline-first.
+  /// Concrete product repository — offline-first. Writes route through an
+  /// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+  /// queued for replay), else fall back to Supabase.
   ProductRepositoryProvider._()
     : super(
         from: null,
@@ -58,7 +64,60 @@ final class ProductRepositoryProvider
   }
 }
 
-String _$productRepositoryHash() => r'df05a4c58789629aac08bb205a4768e051c3219b';
+String _$productRepositoryHash() => r'ed7dc96af321d184a980ff5d0aa98866d33fcccf';
+
+/// True when product writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+@ProviderFor(productWritesLocalFirst)
+final productWritesLocalFirstProvider = ProductWritesLocalFirstProvider._();
+
+/// True when product writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+
+final class ProductWritesLocalFirstProvider
+    extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// True when product writes are local-first (a local store + tenant exist, so
+  /// create/update/delete are mirrored and queued). The UI reads this to show
+  /// offline pending messages instead of online confirmations.
+  ProductWritesLocalFirstProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'productWritesLocalFirstProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$productWritesLocalFirstHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return productWritesLocalFirst(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$productWritesLocalFirstHash() =>
+    r'86290606cb68d5121e98d237602725e86a620291';
 
 /// Current search term for the product list (reactive).
 

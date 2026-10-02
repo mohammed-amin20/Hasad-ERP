@@ -1292,7 +1292,16 @@ class OfflineWriteCoordinator {
       });
 
   /// Mirrors a product create locally (synced:false) and enqueues a
-  /// `table_crud` upsert for replay. Returns the product directly.
+  /// `table_crud` upsert for replay, in ONE [LocalStore.transaction]. Returns
+  /// the product directly.
+  ///
+  /// The leg carries `localId = product.id`, so a later `writeSale` /
+  /// `writePurchase` on the same product resolves it as a server-side
+  /// prerequisite via `_pendingLegIdsFor` — the sale/purchase leg replays only
+  /// after the product row exists on the server. The same id also becomes the
+  /// server's product id: the flush target echoes the leg's `localId` back as
+  /// the row `id` (`onConflict: 'id'`), so a sale line that referenced the
+  /// client uuid keeps resolving after the drain.
   Future<Product> writeProduct(ProductDraft draft) => _guard(() async {
         final requestId = _uuid.v4();
         final product = Product(
@@ -1308,76 +1317,139 @@ class OfflineWriteCoordinator {
           supplierId: draft.supplierId,
           commissionRate: draft.commissionRate,
         );
-        await _store.upsertProduct(
-          LocalProductRow(
-            id: product.id,
-            tenantId: _tenantId,
-            name: product.name,
-            barcode: product.barcode,
-            unit: product.unit,
-            unitType: product.unitType.dbValue,
-            salePrice: product.salePrice,
-            purchasePrice: product.purchasePrice,
-            qty: product.qty,
-            reorderLevel: product.reorderLevel,
-            supplierId: product.supplierId,
-            commissionRate: product.commissionRate,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:products',
-          params: draft.toJson(),
-          requestId: requestId,
-          entity: 'products',
-          localId: requestId,
-          op: 'table_crud',
-        );
+        await _store.transaction((tx) async {
+          await tx.upsertProduct(
+            LocalProductRow(
+              id: product.id,
+              tenantId: _tenantId,
+              name: product.name,
+              barcode: product.barcode,
+              unit: product.unit,
+              unitType: product.unitType.dbValue,
+              salePrice: product.salePrice,
+              purchasePrice: product.purchasePrice,
+              qty: product.qty,
+              reorderLevel: product.reorderLevel,
+              supplierId: product.supplierId,
+              commissionRate: product.commissionRate,
+              synced: false,
+              createdAt: DateTime.now(),
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:products',
+            params: draft.toJson(),
+            requestId: requestId,
+            entity: 'products',
+            localId: requestId,
+            op: 'table_crud',
+            store: tx,
+          );
+        });
         return product;
       });
 
-  /// Rewires product update through the coordinator.
+  /// Rewires product update through the coordinator: reuses the existing
+  /// mirror row's `createdAt` (an update must never stamp a new creation date),
+  /// and enqueues a `table_crud` update that replays only after any pending
+  /// create/update on the same product — atomically with the updated mirror row.
   Future<void> updateProduct(String id, ProductDraft draft) =>
       _guard(() async {
-        await _store.upsertProduct(
-          LocalProductRow(
-            id: id,
-            tenantId: _tenantId,
-            name: draft.name,
-            barcode: draft.barcode,
-            unit: draft.unit,
-            unitType: draft.unitType.dbValue,
-            salePrice: draft.salePrice,
-            purchasePrice: draft.purchasePrice,
-            qty: draft.qty,
-            reorderLevel: draft.reorderLevel,
-            supplierId: draft.supplierId,
-            commissionRate: draft.commissionRate,
-            synced: false,
-            createdAt: DateTime.now(),
-          ),
-        );
-        await _enqueueWrite(
-          rpc: 'table:products',
-          params: {'id': id, 'row': draft.toJson()},
-          requestId: _uuid.v4(),
-          entity: 'products',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _productRow(id);
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertProduct(
+            LocalProductRow(
+              id: id,
+              tenantId: _tenantId,
+              name: draft.name,
+              barcode: draft.barcode,
+              unit: draft.unit,
+              unitType: draft.unitType.dbValue,
+              salePrice: draft.salePrice,
+              purchasePrice: draft.purchasePrice,
+              qty: draft.qty,
+              reorderLevel: draft.reorderLevel,
+              supplierId: draft.supplierId,
+              commissionRate: draft.commissionRate,
+              synced: false,
+              createdAt: existing?.createdAt ?? DateTime.now(),
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:products',
+            params: {'id': id, 'row': draft.toJson()},
+            requestId: _uuid.v4(),
+            entity: 'products',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
-  /// Rewires product delete through the coordinator.
+  /// Rewires product delete through the coordinator: keeps the mirror row
+  /// (flipped `synced:false` so a background refresh can never resurrect a
+  /// server row the delete has not drained yet), hides it from local reads via
+  /// the queue-leg-derived [LocalStore.pendingDeleteIds], and enqueues a
+  /// `table_crud` delete that replays only after any pending create/update on
+  /// the same product.
+  ///
+  /// The delete mirrors the server's FK rule: the server will reject the row
+  /// while `invoice_items.product_id` (NOT NULL) or `commission_dues.product_id`
+  /// (NOT NULL) reference it (FK NO ACTION), so the same check runs against the
+  /// LOCAL mirrors before anything is enqueued. Validation is only as complete
+  /// as the mirrored data — `stock_moves`/`employee_movements` product
+  /// references are never mirrored, so if the server rejects on one of those
+  /// the existing failed-delete path makes the product locally visible again
+  /// rather than silently losing the operation.
   Future<void> deleteProduct(String id) => _guard(() async {
-        await _enqueueWrite(
-          rpc: 'table:products',
-          params: {'id': id},
-          requestId: _uuid.v4(),
-          entity: 'products',
-          localId: id,
-          op: 'table_crud',
-        );
+        final existing = await _productRow(id);
+        if (existing == null) {
+          throw ValidationException('المنتج غير موجود محلياً');
+        }
+        final referencedByInvoices =
+            await _store.invoiceItemsReferenceProduct(_tenantId, id);
+        final referencedByDues = (await _store
+                .commissionDues(_tenantId))
+            .any((d) => d.productId == id);
+        if (referencedByInvoices || referencedByDues) {
+          throw ValidationException(
+            'لا يمكن حذف المنتج لأنه مرتبط بفواتير أو عمولات موجودة',
+          );
+        }
+        final pendingLegs = await _pendingLegIdsFor([id]);
+        await _store.transaction((tx) async {
+          await tx.upsertProduct(
+            LocalProductRow(
+              id: id,
+              tenantId: _tenantId,
+              name: existing.name,
+              barcode: existing.barcode,
+              unit: existing.unit,
+              unitType: existing.unitType,
+              salePrice: existing.salePrice,
+              purchasePrice: existing.purchasePrice,
+              qty: existing.qty,
+              reorderLevel: existing.reorderLevel,
+              supplierId: existing.supplierId,
+              commissionRate: existing.commissionRate,
+              synced: false,
+              createdAt: existing.createdAt,
+            ),
+          );
+          await _enqueueWrite(
+            rpc: 'table:products',
+            params: {'id': id},
+            requestId: _uuid.v4(),
+            entity: 'products',
+            localId: id,
+            op: 'table_crud',
+            dependsOn: pendingLegs,
+            store: tx,
+          );
+        });
       });
 
   /// Mirrors an employee create locally (synced:false) and enqueues a

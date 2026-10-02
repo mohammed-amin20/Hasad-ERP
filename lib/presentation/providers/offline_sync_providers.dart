@@ -85,6 +85,21 @@ void refreshAfterLocalInvoiceWrite(WidgetRef ref) {
   ref.invalidate(purchaseInvoicesListProvider);
 }
 
+/// Refreshes what a **local product write** (create/update/delete) invalidates,
+/// immediately after the mutation and queue enqueue commit.
+///
+/// Same write-time gap as [refreshAfterLocalInvoiceWrite]: the products list
+/// provider is rebuilt by its own notifier, but the queue-derived pending count
+/// and the dependent catalog/inventory reads are not, so the count can read
+/// zero while a product is still queued and the inventory screen can lag the
+/// new stock. Trigger only — the notifiers keep owning how they load.
+void refreshAfterLocalProductWrite(WidgetRef ref) {
+  ref.invalidate(pendingSyncCountProvider);
+  ref.invalidate(productsListProvider);
+  ref.invalidate(allProductsProvider);
+  ref.invalidate(inventoryProductsProvider);
+}
+
 /// Current signed-in tenant id (falls back to empty string so the flusher
 /// providers stay constructible before auth resolves).
 final Provider<String> currentTenantIdProvider = Provider<String>(

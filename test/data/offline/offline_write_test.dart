@@ -1448,14 +1448,24 @@ void main() {
     test('deleteProduct enqueues a table_crud delete without a store delete',
         () async {
       await seed();
+      // Seed p1 as an already-synced mirror row so the delete's authority flip
+      // (synced:true -> synced:false) is observable and not vacuous.
+      await store.upsertProduct(LocalProductRow(
+        id: 'p1', tenantId: tenant, name: 'سلعة مباشرة', barcode: null,
+        unit: 'قطعة', unitType: 'count', salePrice: 10000, purchasePrice: 6000,
+        qty: 100, reorderLevel: 10, supplierId: 's1', commissionRate: null,
+        createdAt: DateTime(2026, 1, 1), synced: true,
+      ));
+
       await writer.deleteProduct('p1');
 
       // No soft-delete exists on LocalStore; the mirror row stays put until
-      // the queue is flushed and the server delete is replayed.
-      expect(
-        (await store.products(tenant)).any((r) => r.id == 'p1'),
-        isTrue,
-      );
+      // the queue is flushed and the server delete is replayed — but it must
+      // lose authority so a refresh cannot resurrect it.
+      final row =
+          (await store.products(tenant)).firstWhere((r) => r.id == 'p1');
+      expect(row.synced, isFalse,
+          reason: 'a pending delete owns the local row until it replays');
       final queued = (await store.pendingSync(tenant)).single;
       expect(queued.rpc, 'table:products');
       expect(queued.op, 'table_crud');

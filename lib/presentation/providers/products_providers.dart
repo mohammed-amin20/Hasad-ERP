@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/offline/local_store.dart';
 import '../../data/offline/offline_product_repository.dart';
+import '../../data/offline/offline_write.dart';
 import '../../data/products/supabase_product_repository.dart';
 import '../../data/supabase_client.dart';
 import '../../domain/products/product.dart';
@@ -11,13 +12,32 @@ import 'auth_providers.dart';
 
 part 'products_providers.g.dart';
 
-/// Concrete product repository — offline-first.
+/// Concrete product repository — offline-first. Writes route through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else fall back to Supabase.
 @riverpod
-ProductRepository productRepository(Ref ref) => OfflineProductRepository(
-      SupabaseProductRepository(ref.watch(supabaseClientProvider)),
-      store: ref.watch(localStoreProvider).value,
-      tenantId: ref.watch(authStateProvider).value?.tenantId,
-    );
+ProductRepository productRepository(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return OfflineProductRepository(
+    SupabaseProductRepository(ref.watch(supabaseClientProvider)),
+    store: store,
+    tenantId: tenantId,
+    coordinator: (store == null || tenantId == null)
+        ? null
+        : OfflineWriteCoordinator(store, tenantId),
+  );
+}
+
+/// True when product writes are local-first (a local store + tenant exist, so
+/// create/update/delete are mirrored and queued). The UI reads this to show
+/// offline pending messages instead of online confirmations.
+@riverpod
+bool productWritesLocalFirst(Ref ref) {
+  final store = ref.watch(localStoreProvider).value;
+  final tenantId = ref.watch(authStateProvider).value?.tenantId;
+  return store != null && tenantId != null;
+}
 
 /// Current search term for the product list (reactive).
 @riverpod

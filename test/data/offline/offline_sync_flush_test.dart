@@ -7,6 +7,7 @@ import 'package:hasad_erp/data/offline/local_database.dart';
 import 'package:hasad_erp/data/offline/local_store.dart';
 import 'package:hasad_erp/data/offline/offline_customer_repository.dart';
 import 'package:hasad_erp/data/offline/offline_employee_repository.dart';
+import 'package:hasad_erp/data/offline/offline_product_repository.dart';
 import 'package:hasad_erp/data/offline/offline_supplier_repository.dart';
 import 'package:hasad_erp/data/offline/offline_sync.dart';
 import 'package:hasad_erp/data/offline/offline_write.dart';
@@ -18,6 +19,9 @@ import 'package:hasad_erp/domain/employees/employee_draft.dart';
 import 'package:hasad_erp/domain/employees/employee_repository.dart';
 import 'package:hasad_erp/domain/journal/manual_journal_draft.dart';
 import 'package:hasad_erp/domain/payments/payment_repository.dart';
+import 'package:hasad_erp/domain/products/product.dart';
+import 'package:hasad_erp/domain/products/product_draft.dart';
+import 'package:hasad_erp/domain/products/product_repository.dart';
 import 'package:hasad_erp/domain/purchases/purchase_invoice_draft.dart';
 import 'package:hasad_erp/domain/salaries/salary_repository.dart';
 import 'package:hasad_erp/domain/sales/sale_invoice_draft.dart';
@@ -1652,6 +1656,315 @@ void main() {
     });
   });
 
+  group('products table_crud lifecycle', () {
+    late AppDatabase db;
+    late DriftLocalStore store;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      store = DriftLocalStore(db);
+      await _seedMasterData(store, tenantId);
+    });
+
+    tearDown(() => db.close());
+
+    test('a product create replays before the sale that references it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة جديدة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 12000,
+        purchasePrice: 7000,
+        qty: 20,
+        reorderLevel: 2,
+      ));
+      final sale = await writer.writeSale(SaleInvoiceDraft(
+        customerId: 'c1',
+        lines: [SaleLineDraft(productId: product.id, qty: 2, price: 12000)],
+        date: DateTime.utc(2026, 9, 9),
+        paid: 24000,
+        paymentMethod: 'cash',
+      ));
+      expect(sale.pending, isTrue);
+      expect(await store.pendingCount(tenantId), 2);
+
+      final productLeg =
+          (await store.queueLegsFor(tenantId, entity: 'products'))
+              .firstWhere((l) => l.params.contains('name'));
+      expect(productLeg.localId, product.id);
+      final saleLegs = await store.queueLegsFor(tenantId, entity: 'invoices');
+      expect(jsonDecode(saleLegs.single.dependsOn!), [productLeg.id],
+          reason: 'the sale must depend on the product leg, not its id');
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 2);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+
+      final productAt =
+          target.calls.indexOf('tableUpsert:products:${product.id}');
+      expect(productAt, isNot(-1));
+      final saleAt = target.calls.indexOf('rpc:create_sale_invoice');
+      expect(saleAt, greaterThan(productAt),
+          reason: 'the sale must replay only after its product leg drained');
+      final mirrored = (await store.products(tenantId))
+          .firstWhere((r) => r.id == product.id);
+      expect(mirrored.synced, isTrue,
+          reason: 'the server echoes the client uuid back as the row id');
+    });
+
+    test('a create-update-delete series drains in order and deletes the mirror',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 100,
+        purchasePrice: 60,
+        qty: 5,
+        reorderLevel: 1,
+      ));
+      await writer.updateProduct(
+        product.id,
+        const ProductDraft(
+          name: 'سلعة محدثة',
+          unit: 'قطعة',
+          unitType: ProductUnitType.count,
+          salePrice: 120,
+          purchasePrice: 70,
+          qty: 6,
+          reorderLevel: 1,
+        ),
+      );
+      await writer.deleteProduct(product.id);
+      expect(await store.pendingCount(tenantId), 3);
+
+      final target = _RecordingSyncTarget();
+      final summary = await SyncFlusher(store, tenantId, target).flush();
+
+      expect(summary.synced, 3);
+      expect(summary.failed, 0);
+      expect(summary.remaining, 0);
+      expect(await store.pendingCount(tenantId), 0);
+      expect(target.calls, contains('tableDelete:products:${product.id}'));
+      expect(
+        (await store.products(tenantId)).where((r) => r.id == product.id),
+        isEmpty,
+        reason: 'the replayed delete removes the mirror row',
+      );
+      expect(await store.pendingDeleteIds(tenantId, 'products'), isEmpty);
+    });
+
+    test('a failed delete keeps the row locally and un-suppresses it',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 100,
+        purchasePrice: 60,
+        qty: 5,
+        reorderLevel: 1,
+      ));
+      await writer.deleteProduct(product.id);
+      expect(
+        await store.pendingDeleteIds(tenantId, 'products'),
+        {product.id},
+      );
+
+      // Park the delete on its next failure so a single flush both replays the
+      // create and parks the delete as failed.
+      final delLeg = (await store.pendingSync(tenantId)).last;
+      await store.requeueRetry(delLeg.id, 'server refused the delete', 4);
+
+      final summary =
+          await SyncFlusher(store, tenantId, _ThrowingDeleteSyncTarget())
+              .flush();
+      expect(summary.failed, 1);
+
+      expect(await store.pendingDeleteIds(tenantId, 'products'), isEmpty,
+          reason: 'a FAILED delete must not suppress the row');
+      final repo = OfflineProductRepository(
+        _NoProductsRepository(),
+        store: store,
+        tenantId: tenantId,
+      );
+      final visible = await repo.listAll();
+      expect(visible.map((p) => p.id), contains(product.id),
+          reason: 'the product is locally visible again');
+    });
+
+    test('a refresh never resurrects a row whose delete is still pending',
+        () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 100,
+        purchasePrice: 60,
+        qty: 5,
+        reorderLevel: 1,
+      ));
+      await writer.deleteProduct(product.id);
+
+      await store.mirrorProducts(tenantId, [
+        LocalProductRow(
+          id: product.id,
+          tenantId: tenantId,
+          name: 'سلعة',
+          barcode: null,
+          unit: 'قطعة',
+          unitType: 'count',
+          salePrice: 100,
+          purchasePrice: 60,
+          qty: 5,
+          reorderLevel: 1,
+          supplierId: null,
+          commissionRate: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      expect(await store.pendingDeleteIds(tenantId, 'products'), {product.id},
+          reason: 'the delete leg survives the refresh');
+      expect(
+        (await store.products(tenantId)).map((r) => r.id),
+        contains(product.id),
+        reason: 'the refresh must not undo the pending delete',
+      );
+    });
+
+    test('a refresh does not revert a pending edit', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 100,
+        purchasePrice: 60,
+        qty: 5,
+        reorderLevel: 1,
+      ));
+      await writer.updateProduct(
+        product.id,
+        const ProductDraft(
+          name: 'محدث',
+          unit: 'قطعة',
+          unitType: ProductUnitType.count,
+          salePrice: 100,
+          purchasePrice: 60,
+          qty: 5,
+          reorderLevel: 1,
+        ),
+      );
+
+      await store.mirrorProducts(tenantId, [
+        LocalProductRow(
+          id: product.id,
+          tenantId: tenantId,
+          name: 'الاسم القديم من الخادم',
+          barcode: null,
+          unit: 'قطعة',
+          unitType: 'count',
+          salePrice: 100,
+          purchasePrice: 60,
+          qty: 5,
+          reorderLevel: 1,
+          supplierId: null,
+          commissionRate: null,
+          createdAt: DateTime.utc(2026, 1, 1),
+          synced: true,
+        ),
+      ]);
+
+      final mine = (await store.products(tenantId))
+          .singleWhere((r) => r.id == product.id);
+      expect(mine.name, 'محدث',
+          reason: 'a stale server copy must not revert the pending edit');
+    });
+
+    test('replayed table_crud legs are idempotent on the mirror', () async {
+      final writer = OfflineWriteCoordinator(store, tenantId);
+      final product = await writer.writeProduct(const ProductDraft(
+        name: 'سلعة',
+        unit: 'قطعة',
+        unitType: ProductUnitType.count,
+        salePrice: 100,
+        purchasePrice: 60,
+        qty: 5,
+        reorderLevel: 1,
+      ));
+      final flusher = SyncFlusher(store, tenantId, _RecordingSyncTarget());
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.products(tenantId)).where((r) => r.id == product.id),
+        hasLength(1),
+        reason: 'the create leg keeps exactly one mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'again',
+        tenantId: tenantId,
+        rpc: 'table:products',
+        op: 'table_crud',
+        params: jsonEncode({'name': 'سلعة', 'qty': 5}),
+        requestId: 'req-again',
+        entity: 'products',
+        localId: product.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 2),
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.products(tenantId)).where((r) => r.id == product.id),
+        hasLength(1),
+        reason: 'a replayed upsert must not duplicate the mirror row',
+      );
+
+      await writer.deleteProduct(product.id);
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.products(tenantId)).where((r) => r.id == product.id),
+        isEmpty,
+        reason: 'the replayed delete removes the mirror row',
+      );
+
+      await store.enqueue(SyncQueueRow(
+        id: 'del-again',
+        tenantId: tenantId,
+        rpc: 'table:products',
+        op: 'table_crud',
+        params: jsonEncode({'id': product.id}),
+        requestId: 'req-del-again',
+        entity: 'products',
+        localId: product.id,
+        status: 'pending',
+        attempts: 0,
+        lastError: null,
+        createdAt: DateTime.utc(2026, 1, 3),
+        updatedAt: DateTime.utc(2026, 1, 3),
+      ));
+      expect((await flusher.flush()).synced, 1);
+      expect(
+        (await store.products(tenantId)).where((r) => r.id == product.id),
+        isEmpty,
+        reason: 'a replayed delete is still a no-op on the mirror',
+      );
+    });
+  });
+
   group('employees table_crud lifecycle', () {
     late AppDatabase db;
     late DriftLocalStore store;
@@ -2382,6 +2695,38 @@ class _NoSuppliersRepository implements SupplierRepository {
   Future<void> update({
     required String id,
     required SupplierDraft draft,
+  }) async {}
+
+  @override
+  Future<void> delete(String id) async {}
+}
+
+class _NoProductsRepository implements ProductRepository {
+  @override
+  Future<List<Product>> listAll({String? search}) async => const [];
+
+  @override
+  Future<Product?> getById(String id) async => null;
+
+  @override
+  Future<Product> create(ProductDraft draft) async => Product(
+        id: 'unused',
+        name: draft.name,
+        barcode: draft.barcode,
+        unit: draft.unit,
+        unitType: draft.unitType,
+        salePrice: draft.salePrice,
+        purchasePrice: draft.purchasePrice,
+        qty: draft.qty,
+        reorderLevel: draft.reorderLevel,
+        supplierId: draft.supplierId,
+        commissionRate: draft.commissionRate,
+      );
+
+  @override
+  Future<void> update({
+    required String id,
+    required ProductDraft draft,
   }) async {}
 
   @override

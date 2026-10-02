@@ -14,6 +14,7 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../domain/products/product.dart';
 import '../../../domain/products/product_draft.dart';
 import '../../../domain/suppliers/supplier.dart';
+import '../../providers/offline_sync_providers.dart';
 import '../../providers/products_providers.dart';
 import '../../providers/suppliers_providers.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -202,11 +203,17 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
             } else {
               await notifier.updateProduct(id: product.id, draft: draft);
             }
+            refreshAfterLocalProductWrite(ref);
             if (context.mounted) Navigator.of(context).pop();
+            final offline = ref.read(productWritesLocalFirstProvider);
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  product == null ? 'تمت إضافة المنتج' : 'تم تعديل المنتج',
+                  offline
+                      ? (product == null
+                          ? 'تم حفظ المنتج محليًا وستتم مزامنته عند عودة الاتصال'
+                          : 'تم حفظ تعديلات المنتج محليًا وستتم مزامنتها عند عودة الاتصال')
+                      : (product == null ? 'تمت إضافة المنتج' : 'تم تعديل المنتج'),
                 ),
               ),
             );
@@ -235,7 +242,17 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(productsListProvider.notifier).delete(product.id);
-      messenger.showSnackBar(const SnackBar(content: Text('تم حذف المنتج')));
+      refreshAfterLocalProductWrite(ref);
+      final offline = ref.read(productWritesLocalFirstProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            offline
+                ? 'تم حذف المنتج محليًا وستتم مزامنته مع الخادم عند عودة الاتصال'
+                : 'تم حذف المنتج',
+          ),
+        ),
+      );
     } on Object catch (error) {
       messenger.showSnackBar(
         SnackBar(

@@ -5,15 +5,29 @@ import '../../domain/products/product_repository.dart';
 import 'local_database.dart';
 import 'local_store.dart';
 import 'offline_reads.dart';
+import 'offline_write.dart';
 
 /// [ProductRepository] that serves the live Supabase repository while online
 /// (mirroring every read into the local store) and reads the mirror offline.
+///
+/// When a [coordinator] is wired, create/update/delete are **local-first** —
+/// mirrored as `synced:false` and queued for replay — instead of calling the
+/// server. Without one (web / no tenant) writes fall back to [_inner].
 class OfflineProductRepository implements ProductRepository {
-  OfflineProductRepository(this._inner, {required this.store, required this.tenantId});
+  OfflineProductRepository(
+    this._inner, {
+    required this.store,
+    required this.tenantId,
+    this.coordinator,
+  });
 
   final ProductRepository _inner;
   final LocalStore? store;
   final String? tenantId;
+  final OfflineWriteCoordinator? coordinator;
+
+  /// True when writes are mirrored + queued locally rather than sent now.
+  bool get writesAreLocalFirst => coordinator != null;
 
   @override
   Future<List<Product>> listAll({String? search}) async {
@@ -54,17 +68,26 @@ class OfflineProductRepository implements ProductRepository {
 
   @override
   Future<Product> create(ProductDraft draft) async {
+    final c = coordinator;
+    if (c != null) return c.writeProduct(draft);
     final product = await _inner.create(draft);
     await _upsertLocal(product);
     return product;
   }
 
   @override
-  Future<void> update({required String id, required ProductDraft draft}) =>
-      _inner.update(id: id, draft: draft);
+  Future<void> update({required String id, required ProductDraft draft}) {
+    final c = coordinator;
+    if (c != null) return c.updateProduct(id, draft);
+    return _inner.update(id: id, draft: draft);
+  }
 
   @override
-  Future<void> delete(String id) => _inner.delete(id);
+  Future<void> delete(String id) {
+    final c = coordinator;
+    if (c != null) return c.deleteProduct(id);
+    return _inner.delete(id);
+  }
 
   Future<void> _mirrorList(List<Product> products) async {
     final s = store;
@@ -77,7 +100,11 @@ class OfflineProductRepository implements ProductRepository {
     final s = store;
     final t = tenantId;
     if (s == null || t == null) throw const NetworkException();
-    return [for (final r in await s.products(t)) _fromRow(r)];
+    final hidden = await s.pendingDeleteIds(t, 'products');
+    return [
+      for (final r in await s.products(t))
+        if (!hidden.contains(r.id)) _fromRow(r),
+    ];
   }
 
   Future<void> _upsertLocal(Product product) async {

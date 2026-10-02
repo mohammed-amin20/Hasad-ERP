@@ -191,6 +191,21 @@ abstract class LocalStore {
     String invoiceId,
   );
 
+  /// Whether any durable `local_invoice_items` row of [tenantId] references
+  /// [productId]. Used by the product delete rule to mirror the server's FK
+  /// (`invoice_items.product_id` is NOT NULL, NO ACTION): deleting a product
+  /// that a mirrored invoice still references would be refused by the server,
+  /// so it is refused locally first with an Arabic validation message.
+  ///
+  /// Tenant-scoped — a foreign workspace's lines can never block a delete here.
+  /// The answer is only as complete as the mirrored data: an invoice this
+  /// device has never opened is invisible, and a server-side reject is then
+  /// handled by the existing failed-delete path (row stays visible, retried).
+  Future<bool> invoiceItemsReferenceProduct(
+    String tenantId,
+    String productId,
+  );
+
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows);
 
   /// Replaces one invoice's mirrored line set wholesale (P1.E).
@@ -594,6 +609,13 @@ class NullLocalStore implements LocalStore {
     String tenantId,
     String invoiceId,
   ) async => const [];
+
+  @override
+  Future<bool> invoiceItemsReferenceProduct(
+    String tenantId,
+    String productId,
+  ) async =>
+      false;
 
   @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) async {}
@@ -1333,6 +1355,22 @@ class DriftLocalStore implements LocalStore {
             )
             ..orderBy([(r) => OrderingTerm.asc(r.id)]))
           .get();
+
+  @override
+  Future<bool> invoiceItemsReferenceProduct(
+    String tenantId,
+    String productId,
+  ) async {
+    final rows =
+        await (_db.select(_db.localInvoiceItems)
+              ..where(
+                (r) =>
+                    r.tenantId.equals(tenantId) & r.productId.equals(productId),
+              )
+              ..limit(1))
+            .get();
+    return rows.isNotEmpty;
+  }
 
   @override
   Future<void> upsertInvoiceItems(List<LocalInvoiceItemRow> rows) async {
