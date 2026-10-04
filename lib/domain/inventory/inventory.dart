@@ -12,7 +12,13 @@ class StockAdjustDraft {
   final String? reason;
   final DateTime? date;
 
-  Map<String, dynamic> toJson() => {
+  /// Builds the `adjust_inventory` RPC payload.
+  ///
+  /// [requestId] is the offline queue's stable idempotency key: a queued count
+  /// leg stores these exact params, so every retry replays the SAME
+  /// `p_request_id` and the server (0025) recognises the replay instead of
+  /// applying the delta twice.
+  Map<String, dynamic> toJson({String? requestId}) => {
     'p_product_id': productId,
     'p_counted_qty': countedQty,
     if (reason != null && reason!.trim().isNotEmpty) 'p_reason': reason,
@@ -22,8 +28,8 @@ class StockAdjustDraft {
                 '${date!.month.toString().padLeft(2, '0')}-'
                 '${date!.day.toString().padLeft(2, '0')}'
           : null,
-  };
-}
+    'p_request_id': ?requestId,
+  };}
 
 /// Result envelope returned by the `adjust_inventory` RPC.
 class StockAdjustResult {

@@ -7597,6 +7597,18 @@ class $SyncQueueItemsTable extends SyncQueueItems
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _affectsProductIdsMeta = const VerificationMeta(
+    'affectsProductIds',
+  );
+  @override
+  late final GeneratedColumn<String> affectsProductIds =
+      GeneratedColumn<String>(
+        'affects_product_ids',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -7636,6 +7648,7 @@ class $SyncQueueItemsTable extends SyncQueueItems
     lastError,
     dependsOn,
     affectsInvoiceIds,
+    affectsProductIds,
     createdAt,
     updatedAt,
   ];
@@ -7734,6 +7747,15 @@ class $SyncQueueItemsTable extends SyncQueueItems
         ),
       );
     }
+    if (data.containsKey('affects_product_ids')) {
+      context.handle(
+        _affectsProductIdsMeta,
+        affectsProductIds.isAcceptableOrUnknown(
+          data['affects_product_ids']!,
+          _affectsProductIdsMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -7807,6 +7829,10 @@ class $SyncQueueItemsTable extends SyncQueueItems
         DriftSqlType.string,
         data['${effectivePrefix}affects_invoice_ids'],
       ),
+      affectsProductIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}affects_product_ids'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -7862,6 +7888,21 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
   /// at enqueue, inside the same transaction as the invoice writes, and never
   /// mutated afterwards: a leg's activity is expressed by [status] alone.
   final String? affectsInvoiceIds;
+
+  /// JSON array of the product ids whose stock figures this leg restated
+  /// locally, e.g. `'["?","?"]'`. Null (or `'[]'`) means "no recorded
+  /// attribution" — see [LocalStore.affectedProductIdsOf].
+  ///
+  /// A leg's RPC `params` cannot answer this for every leg: `add_employee_movement`
+  /// names `p_product_id` only when the movement deducts stock, a
+  /// `create_purchase_invoice` may create products inline, and a historical
+  /// `table_crud` product upsert changes qty in its stored row. The affected
+  /// product set therefore exists in the local write algorithm, not in the
+  /// wire payload.
+  ///
+  /// Local-only metadata: never part of the RPC body. Written once at enqueue,
+  /// inside the same transaction as the write, and never mutated afterwards.
+  final String? affectsProductIds;
   final DateTime createdAt;
   final DateTime updatedAt;
   const SyncQueueRow({
@@ -7878,6 +7919,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     this.lastError,
     this.dependsOn,
     this.affectsInvoiceIds,
+    this.affectsProductIds,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -7908,6 +7950,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     }
     if (!nullToAbsent || affectsInvoiceIds != null) {
       map['affects_invoice_ids'] = Variable<String>(affectsInvoiceIds);
+    }
+    if (!nullToAbsent || affectsProductIds != null) {
+      map['affects_product_ids'] = Variable<String>(affectsProductIds);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -7941,6 +7986,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       affectsInvoiceIds: affectsInvoiceIds == null && nullToAbsent
           ? const Value.absent()
           : Value(affectsInvoiceIds),
+      affectsProductIds: affectsProductIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(affectsProductIds),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -7967,6 +8015,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       affectsInvoiceIds: serializer.fromJson<String?>(
         json['affectsInvoiceIds'],
       ),
+      affectsProductIds: serializer.fromJson<String?>(
+        json['affectsProductIds'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -7988,6 +8039,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       'lastError': serializer.toJson<String?>(lastError),
       'dependsOn': serializer.toJson<String?>(dependsOn),
       'affectsInvoiceIds': serializer.toJson<String?>(affectsInvoiceIds),
+      'affectsProductIds': serializer.toJson<String?>(affectsProductIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -8007,6 +8059,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     Value<String?> lastError = const Value.absent(),
     Value<String?> dependsOn = const Value.absent(),
     Value<String?> affectsInvoiceIds = const Value.absent(),
+    Value<String?> affectsProductIds = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => SyncQueueRow(
@@ -8025,6 +8078,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     affectsInvoiceIds: affectsInvoiceIds.present
         ? affectsInvoiceIds.value
         : this.affectsInvoiceIds,
+    affectsProductIds: affectsProductIds.present
+        ? affectsProductIds.value
+        : this.affectsProductIds,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -8045,6 +8101,9 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
       affectsInvoiceIds: data.affectsInvoiceIds.present
           ? data.affectsInvoiceIds.value
           : this.affectsInvoiceIds,
+      affectsProductIds: data.affectsProductIds.present
+          ? data.affectsProductIds.value
+          : this.affectsProductIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -8066,6 +8125,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           ..write('lastError: $lastError, ')
           ..write('dependsOn: $dependsOn, ')
           ..write('affectsInvoiceIds: $affectsInvoiceIds, ')
+          ..write('affectsProductIds: $affectsProductIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -8087,6 +8147,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
     lastError,
     dependsOn,
     affectsInvoiceIds,
+    affectsProductIds,
     createdAt,
     updatedAt,
   );
@@ -8107,6 +8168,7 @@ class SyncQueueRow extends DataClass implements Insertable<SyncQueueRow> {
           other.lastError == this.lastError &&
           other.dependsOn == this.dependsOn &&
           other.affectsInvoiceIds == this.affectsInvoiceIds &&
+          other.affectsProductIds == this.affectsProductIds &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -8125,6 +8187,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
   final Value<String?> lastError;
   final Value<String?> dependsOn;
   final Value<String?> affectsInvoiceIds;
+  final Value<String?> affectsProductIds;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -8142,6 +8205,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.lastError = const Value.absent(),
     this.dependsOn = const Value.absent(),
     this.affectsInvoiceIds = const Value.absent(),
+    this.affectsProductIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8160,6 +8224,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     this.lastError = const Value.absent(),
     this.dependsOn = const Value.absent(),
     this.affectsInvoiceIds = const Value.absent(),
+    this.affectsProductIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -8181,6 +8246,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Expression<String>? lastError,
     Expression<String>? dependsOn,
     Expression<String>? affectsInvoiceIds,
+    Expression<String>? affectsProductIds,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -8199,6 +8265,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       if (lastError != null) 'last_error': lastError,
       if (dependsOn != null) 'depends_on': dependsOn,
       if (affectsInvoiceIds != null) 'affects_invoice_ids': affectsInvoiceIds,
+      if (affectsProductIds != null) 'affects_product_ids': affectsProductIds,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -8219,6 +8286,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     Value<String?>? lastError,
     Value<String?>? dependsOn,
     Value<String?>? affectsInvoiceIds,
+    Value<String?>? affectsProductIds,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -8237,6 +8305,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
       lastError: lastError ?? this.lastError,
       dependsOn: dependsOn ?? this.dependsOn,
       affectsInvoiceIds: affectsInvoiceIds ?? this.affectsInvoiceIds,
+      affectsProductIds: affectsProductIds ?? this.affectsProductIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -8285,6 +8354,9 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
     if (affectsInvoiceIds.present) {
       map['affects_invoice_ids'] = Variable<String>(affectsInvoiceIds.value);
     }
+    if (affectsProductIds.present) {
+      map['affects_product_ids'] = Variable<String>(affectsProductIds.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -8313,6 +8385,7 @@ class SyncQueueItemsCompanion extends UpdateCompanion<SyncQueueRow> {
           ..write('lastError: $lastError, ')
           ..write('dependsOn: $dependsOn, ')
           ..write('affectsInvoiceIds: $affectsInvoiceIds, ')
+          ..write('affectsProductIds: $affectsProductIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -13742,6 +13815,7 @@ typedef $$SyncQueueItemsTableCreateCompanionBuilder =
       Value<String?> lastError,
       Value<String?> dependsOn,
       Value<String?> affectsInvoiceIds,
+      Value<String?> affectsProductIds,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -13761,6 +13835,7 @@ typedef $$SyncQueueItemsTableUpdateCompanionBuilder =
       Value<String?> lastError,
       Value<String?> dependsOn,
       Value<String?> affectsInvoiceIds,
+      Value<String?> affectsProductIds,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -13837,6 +13912,11 @@ class $$SyncQueueItemsTableFilterComposer
 
   ColumnFilters<String> get affectsInvoiceIds => $composableBuilder(
     column: $table.affectsInvoiceIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get affectsProductIds => $composableBuilder(
+    column: $table.affectsProductIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13925,6 +14005,11 @@ class $$SyncQueueItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get affectsProductIds => $composableBuilder(
+    column: $table.affectsProductIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -13986,6 +14071,11 @@ class $$SyncQueueItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get affectsProductIds => $composableBuilder(
+    column: $table.affectsProductIds,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -14039,6 +14129,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<String?> lastError = const Value.absent(),
                 Value<String?> dependsOn = const Value.absent(),
                 Value<String?> affectsInvoiceIds = const Value.absent(),
+                Value<String?> affectsProductIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14056,6 +14147,7 @@ class $$SyncQueueItemsTableTableManager
                 lastError: lastError,
                 dependsOn: dependsOn,
                 affectsInvoiceIds: affectsInvoiceIds,
+                affectsProductIds: affectsProductIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -14075,6 +14167,7 @@ class $$SyncQueueItemsTableTableManager
                 Value<String?> lastError = const Value.absent(),
                 Value<String?> dependsOn = const Value.absent(),
                 Value<String?> affectsInvoiceIds = const Value.absent(),
+                Value<String?> affectsProductIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14092,6 +14185,7 @@ class $$SyncQueueItemsTableTableManager
                 lastError: lastError,
                 dependsOn: dependsOn,
                 affectsInvoiceIds: affectsInvoiceIds,
+                affectsProductIds: affectsProductIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

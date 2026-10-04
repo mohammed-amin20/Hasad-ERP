@@ -374,6 +374,21 @@ class SyncQueueItems extends Table {
   /// mutated afterwards: a leg's activity is expressed by [status] alone.
   TextColumn get affectsInvoiceIds => text().nullable()();
 
+  /// JSON array of the product ids whose stock figures this leg restated
+  /// locally, e.g. `'["?","?"]'`. Null (or `'[]'`) means "no recorded
+  /// attribution" — see [LocalStore.affectedProductIdsOf].
+  ///
+  /// A leg's RPC `params` cannot answer this for every leg: `add_employee_movement`
+  /// names `p_product_id` only when the movement deducts stock, a
+  /// `create_purchase_invoice` may create products inline, and a historical
+  /// `table_crud` product upsert changes qty in its stored row. The affected
+  /// product set therefore exists in the local write algorithm, not in the
+  /// wire payload.
+  ///
+  /// Local-only metadata: never part of the RPC body. Written once at enqueue,
+  /// inside the same transaction as the write, and never mutated afterwards.
+  TextColumn get affectsProductIds => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -472,7 +487,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -518,6 +533,15 @@ class AppDatabase extends _$AppDatabase {
     // NO sentinel and NO backfill: every pre-v8 row already carries its real,
     // non-null tenant_id (it is NOT NULL in the table and always has been), so
     // the rows move across unchanged and none can be misattributed.
+    // Schema 9 (Standalone Inventory Adjustment) adds
+    // sync_queue_items.affects_product_ids. Purely additive and nullable: every
+    // pre-v9 leg reads back as NULL, which resolves to "no recorded product
+    // attribution". This records the product set a stock-affecting leg mutated
+    // so an offline stock refresh can protect exactly those products' local
+    // quantities while the leg is still pending. No backfill: a pre-v9 leg's
+    // product set is reconstructable only narrowly from `params`, and rewriting
+    // user rows would create a second source of truth that must stay in
+    // agreement with the reader's fallback (same rule as schema 7).
     onUpgrade: (Migrator m, int from, int to) async {
       if (from < 2) {
         await m.addColumn(localSuppliers, localSuppliers.synced);
@@ -613,6 +637,13 @@ class AppDatabase extends _$AppDatabase {
         if (old.isNotEmpty) {
           await m.database.batch((b) => b.insertAll(localInvoiceItems, old));
         }
+      }
+      if (from < 9) {
+        // Additive: every pre-v9 leg reads back as NULL, which resolves to "no
+        // recorded product attribution" — the state it was already in. The
+        // reader falls back to the narrow `params` shapes at query time
+        // (`LocalStore.affectedProductIdsOf`), so no user row is rewritten.
+        await m.addColumn(syncQueueItems, syncQueueItems.affectsProductIds);
       }
     },
   );

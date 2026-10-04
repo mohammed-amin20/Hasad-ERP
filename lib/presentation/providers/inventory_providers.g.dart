@@ -8,9 +8,22 @@ part of 'inventory_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Inventory repository — offline-first. A count routes through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else falls back to Supabase.
+///
+/// The coordinator needs no chart seed here: `adjust_inventory` does not post a
+/// journal, so [OfflineWriteCoordinator.adjustInventory] never reads the chart.
 
 @ProviderFor(inventoryRepository)
 final inventoryRepositoryProvider = InventoryRepositoryProvider._();
+
+/// Inventory repository — offline-first. A count routes through an
+/// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+/// queued for replay), else falls back to Supabase.
+///
+/// The coordinator needs no chart seed here: `adjust_inventory` does not post a
+/// journal, so [OfflineWriteCoordinator.adjustInventory] never reads the chart.
 
 final class InventoryRepositoryProvider
     extends
@@ -20,6 +33,12 @@ final class InventoryRepositoryProvider
           InventoryRepository
         >
     with $Provider<InventoryRepository> {
+  /// Inventory repository — offline-first. A count routes through an
+  /// [OfflineWriteCoordinator] when a local store + tenant exist (local-first,
+  /// queued for replay), else falls back to Supabase.
+  ///
+  /// The coordinator needs no chart seed here: `adjust_inventory` does not post a
+  /// journal, so [OfflineWriteCoordinator.adjustInventory] never reads the chart.
   InventoryRepositoryProvider._()
     : super(
         from: null,
@@ -55,7 +74,60 @@ final class InventoryRepositoryProvider
 }
 
 String _$inventoryRepositoryHash() =>
-    r'b8564fb7166a9e14fbfd189fa163ba905897bcd5';
+    r'36bac17e4cb91e0321d6f393ce09a6b522e4e42f';
+
+/// True when counts are local-first (a local store + tenant exist, so an
+/// adjustment moves the mirror and queues). The UI reads this to show the
+/// offline pending message instead of the online confirmation.
+
+@ProviderFor(inventoryWritesLocalFirst)
+final inventoryWritesLocalFirstProvider = InventoryWritesLocalFirstProvider._();
+
+/// True when counts are local-first (a local store + tenant exist, so an
+/// adjustment moves the mirror and queues). The UI reads this to show the
+/// offline pending message instead of the online confirmation.
+
+final class InventoryWritesLocalFirstProvider
+    extends $FunctionalProvider<bool, bool, bool>
+    with $Provider<bool> {
+  /// True when counts are local-first (a local store + tenant exist, so an
+  /// adjustment moves the mirror and queues). The UI reads this to show the
+  /// offline pending message instead of the online confirmation.
+  InventoryWritesLocalFirstProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'inventoryWritesLocalFirstProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$inventoryWritesLocalFirstHash();
+
+  @$internal
+  @override
+  $ProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  bool create(Ref ref) {
+    return inventoryWritesLocalFirst(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$inventoryWritesLocalFirstHash() =>
+    r'9ba695918464456d11cc4171ce47eae2336c9c85';
 
 /// All products with their live quantities (no search filter), for the
 /// inventory screen.
@@ -105,21 +177,51 @@ final class InventoryProductsProvider
 String _$inventoryProductsHash() => r'2c242cd6773316ed27917d4a873b638aab3c9a63';
 
 /// The most recent physical-count result, null until a count is submitted.
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The count sheet
+/// reaches this provider with `ref.read`, so nothing ever listens to it; an
+/// auto-dispose provider with no listener is disposed as soon as the read
+/// returns. The local-first write is a real drift transaction, and the device
+/// store runs on a background isolate, so by the time `await repo.adjust`
+/// completes the provider has been disposed — and `state = result` then throws
+/// `UnmountedRefException`. That is an unmapped `Object`, so a count that had
+/// already committed locally and queued its leg reported «حدث خطأ غير متوقع».
+/// Same rule as [PaymentActions] / [SalaryActions].
 
 @ProviderFor(LastAdjust)
 final lastAdjustProvider = LastAdjustProvider._();
 
 /// The most recent physical-count result, null until a count is submitted.
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The count sheet
+/// reaches this provider with `ref.read`, so nothing ever listens to it; an
+/// auto-dispose provider with no listener is disposed as soon as the read
+/// returns. The local-first write is a real drift transaction, and the device
+/// store runs on a background isolate, so by the time `await repo.adjust`
+/// completes the provider has been disposed — and `state = result` then throws
+/// `UnmountedRefException`. That is an unmapped `Object`, so a count that had
+/// already committed locally and queued its leg reported «حدث خطأ غير متوقع».
+/// Same rule as [PaymentActions] / [SalaryActions].
 final class LastAdjustProvider
     extends $NotifierProvider<LastAdjust, StockAdjustResult?> {
   /// The most recent physical-count result, null until a count is submitted.
+  ///
+  /// **`keepAlive: true` is load-bearing, not an optimisation.** The count sheet
+  /// reaches this provider with `ref.read`, so nothing ever listens to it; an
+  /// auto-dispose provider with no listener is disposed as soon as the read
+  /// returns. The local-first write is a real drift transaction, and the device
+  /// store runs on a background isolate, so by the time `await repo.adjust`
+  /// completes the provider has been disposed — and `state = result` then throws
+  /// `UnmountedRefException`. That is an unmapped `Object`, so a count that had
+  /// already committed locally and queued its leg reported «حدث خطأ غير متوقع».
+  /// Same rule as [PaymentActions] / [SalaryActions].
   LastAdjustProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'lastAdjustProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -140,9 +242,19 @@ final class LastAdjustProvider
   }
 }
 
-String _$lastAdjustHash() => r'e4b11a6897566d6e6efcd394fb7b8287e6b7a377';
+String _$lastAdjustHash() => r'c3b9d13fb24a3436b8c5a1e201a81b7984bb06a5';
 
 /// The most recent physical-count result, null until a count is submitted.
+///
+/// **`keepAlive: true` is load-bearing, not an optimisation.** The count sheet
+/// reaches this provider with `ref.read`, so nothing ever listens to it; an
+/// auto-dispose provider with no listener is disposed as soon as the read
+/// returns. The local-first write is a real drift transaction, and the device
+/// store runs on a background isolate, so by the time `await repo.adjust`
+/// completes the provider has been disposed — and `state = result` then throws
+/// `UnmountedRefException`. That is an unmapped `Object`, so a count that had
+/// already committed locally and queued its leg reported «حدث خطأ غير متوقع».
+/// Same rule as [PaymentActions] / [SalaryActions].
 
 abstract class _$LastAdjust extends $Notifier<StockAdjustResult?> {
   StockAdjustResult? build();

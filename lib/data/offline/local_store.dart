@@ -408,6 +408,100 @@ abstract class LocalStore {
     }
   }
 
+  /// Ids of the product rows whose stock figures
+  /// [SyncQueueItem.affectsProductIds] records this leg as restating, parsed from
+  /// its JSON array. Returns an empty list for a null/empty/malformed value.
+  ///
+  /// Degrades to "no recorded attribution" rather than throwing, mirroring
+  /// [parseInvoiceAttribution]: a corrupt column must not be able to crash a
+  /// stock refresh. The caller falls back to the narrow `params` shapes in
+  /// [affectedProductIdsOf].
+  static List<String> parseProductAttribution(String? json) {
+    if (json == null || json.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! List) return const [];
+      return [
+        for (final v in decoded)
+          if (v is String && v.isNotEmpty) v,
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Every product id a stock-affecting leg restates locally, from its durable
+  /// attribution first and its RPC/stored-row shape only as a legacy fallback.
+  ///
+  /// The fallback exists for pre-v9 legs, whose column is NULL. It is exact for
+  /// the three leg shapes that touched product stock before the column existed —
+  /// see [_legacyProductIds] — and empty otherwise. It never fabricates
+  /// attribution: a legacy purchase `new_product` row whose `product_id` cannot
+  /// be derived is attributed to no product rather than to a guessed one.
+  static Set<String> affectedProductIdsOf(SyncQueueRow leg) {
+    final recorded = parseProductAttribution(leg.affectsProductIds);
+    if (recorded.isNotEmpty) return recorded.toSet();
+    return _legacyProductIds(leg.rpc, leg.op, leg.localId, leg.params);
+  }
+
+  /// The pre-v9 product attribution derived from a leg's wire shape.
+  ///
+  /// Exactly three shapes can be recovered, and only these:
+  ///
+  ///  * `create_sale_invoice` / `create_purchase_invoice` — every
+  ///    `p_items[*].product_id`. New-product items carry their generated
+  ///    `product_id`, so an offline-created product is covered too.
+  ///  * `add_employee_movement` — `p_product_id`, but only when present; a
+  ///    cash-only movement deducts no stock and has no product.
+  ///  * a `table:products` `table_crud` leg whose stored row contains `qty` —
+  ///    a product CREATE (or a pre-DECISION-2 EDIT that still carried qty).
+  ///    An EDIT whose replay payload omits `qty` is correctly not a stock leg.
+  ///
+  /// Anything else returns empty. No generic recursive scanner: a nested
+  /// `product_id` in an unrelated field would be a plausible-looking but wrong
+  /// attribution, and a wrong attribution freezes a product's local quantity.
+  static Set<String> _legacyProductIds(
+    String rpc,
+    String op,
+    String? localId,
+    String paramsJson,
+  ) {
+    if (paramsJson.trim().isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(paramsJson);
+      if (decoded is! Map) return const {};
+
+      if (op == 'table_crud') {
+        if (rpc == 'table:products' && decoded.containsKey('qty')) {
+          final id = decoded['id'] ?? localId;
+          return id is String && id.isNotEmpty ? {id} : const {};
+        }
+        return const {};
+      }
+
+      switch (rpc) {
+        case 'create_sale_invoice':
+        case 'create_purchase_invoice':
+          final items = decoded['p_items'];
+          if (items is! List) return const {};
+          return {
+            for (final it in items)
+              if (it is Map &&
+                  it['product_id'] is String &&
+                  (it['product_id'] as String).isNotEmpty)
+                it['product_id'] as String,
+          };
+        case 'add_employee_movement':
+          final id = decoded['p_product_id'];
+          return id is String && id.isNotEmpty ? {id} : const {};
+        default:
+          return const {};
+      }
+    } on FormatException {
+      return const {};
+    }
+  }
+
   /// Runs [action] inside ONE database transaction, handing it a store bound to
   /// that transaction. Every write inside [action] therefore commits together
   /// or rolls back together — this is what makes a multi-table offline write
@@ -905,24 +999,79 @@ class DriftLocalStore implements LocalStore {
 
   @override
   Future<void> mirrorProducts(String tenantId, List<LocalProductRow> rows) =>
-      _mirrorPreservingUnsynced<LocalProductRow>(
-        serverRows: rows,
-        idOf: (r) => r.id,
-        readPendingIds: () async => {
-          for (final r
-              in await (_db.select(_db.localProducts)..where(
-                    (r) => r.tenantId.equals(tenantId) & r.synced.equals(false),
-                  ))
-                  .get())
-            r.id,
-        },
-        deleteSynced: () =>
-            (_db.delete(_db.localProducts)..where(
-                  (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
-                ))
-                .go(),
-        insertAll: (rs) => _db.batch((b) => b.insertAll(_db.localProducts, rs)),
-      );
+      _mirrorProductsWithQtyAuthority(tenantId, rows);
+
+  /// Product mirror with **per-product quantity authority** layered on top of
+  /// the pending-master rule.
+  ///
+  /// A product's master fields (name/price/supplier…) and its quantity have
+  /// separate owners, and only quantity needs protecting:
+  ///
+  ///  * a `synced: false` local row is pending master CRUD, so the whole row is
+  ///    kept and an incoming copy is skipped — the M14 rule, unchanged;
+  ///  * a **pending stock leg** (identified by
+  ///    [LocalStore.affectedProductIdsOf]) owns the quantity even when the row
+  ///    itself is `synced: true` — an offline sale/purchase/movement on a
+  ///    server product mutates `qty` while leaving `synced` true. For that id
+  ///    the server's master fields are accepted, but the local quantity is
+  ///    preserved so a background refresh cannot erase the user's stock change
+  ///    before the leg replays;
+  ///  * otherwise the server copy is authoritative for everything, quantity
+  ///    included.
+  ///
+  /// Authority is per-row and only `status == 'pending'` legs count, so the
+  /// freeze is exactly the products some un-replayed stock mutation names — a
+  /// terminal `failed` leg is diagnostic and does not freeze quantity, and an
+  /// unrelated product B is never affected by a pending leg on A.
+  Future<void> _mirrorProductsWithQtyAuthority(
+    String tenantId,
+    List<LocalProductRow> rows,
+  ) async {
+    await _db.transaction(() async {
+      final local = {
+        for (final r in await products(tenantId)) r.id: r,
+      };
+      final pendingMasterIds = {
+        for (final e in local.entries)
+          if (!e.value.synced) e.key,
+      };
+      final pendingStockIds = await _pendingStockProductIds(tenantId);
+
+      // Replace this tenant's server-owned rows; pending master rows are not
+      // matched by `synced == true`, so they survive untouched.
+      await (_db.delete(_db.localProducts)..where(
+            (r) => r.tenantId.equals(tenantId) & r.synced.equals(true),
+          ))
+          .go();
+
+      final incoming = <LocalProductRow>[];
+      for (final r in rows) {
+        if (pendingMasterIds.contains(r.id)) continue;
+        final localRow = local[r.id];
+        if (localRow != null && pendingStockIds.contains(r.id)) {
+          incoming.add(r.copyWith(qty: localRow.qty));
+        } else {
+          incoming.add(r);
+        }
+      }
+      if (incoming.isNotEmpty) {
+        await _db.batch((b) => b.insertAll(_db.localProducts, incoming));
+      }
+    });
+  }
+
+  /// Product ids a still-pending stock leg names, across every pending leg for
+  /// [tenantId]. Terminal `failed`/`synced` legs are excluded: only a leg that
+  /// has not yet reached the server owns the local quantity.
+  Future<Set<String>> _pendingStockProductIds(String tenantId) async {
+    final legs = await (_db.select(_db.syncQueueItems)..where(
+          (r) => r.tenantId.equals(tenantId) & r.status.equals('pending'),
+        ))
+        .get();
+    return {
+      for (final leg in legs) ...LocalStore.affectedProductIdsOf(leg),
+    };
+  }
 
   @override
   Future<void> upsertProduct(LocalProductRow row) =>

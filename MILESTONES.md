@@ -24,6 +24,7 @@ logged in Appendix A instead.
 | **M13 Phase 1B** | Offline writes for the remaining domains (payments, products, customers, suppliers, employees, journal, salaries) | ✅ Complete |
 | **M13 Phase 2** | Device-reliability issues (6 reported real-device bugs) — **P0: issue 6 done** (cold-start data blackout); **P1: issues 3/4/5 done**; **P1.1: settlement attribution done**; **P2: issues 1/2 done**; **P1.C: corrective slice done** (invoice mirror authority, double-submit, action-provider lifecycle) | ✅ Complete — **issue 4 awaits a physical-device trace** |
 | **M14** | Products CRUD offline-first — local-first create/update/delete, queue + replay, tenant-safe local-FK delete rule | ✅ Complete — automated GREEN (**922/922**) + **physical-device PASS** (6/6 checks) |
+| **M15** | Standalone Inventory Adjustment offline-first — counted-qty stock leg (entity-less `adjust_inventory` RPC), durable product attribution, qty-authority mirror, delete/adjust mutual exclusion, no-op guard | ✅ Automated GREEN (**961/961**) ✅ **physical-device PASS (8/8)** |
 
 ---
 
@@ -1710,6 +1711,162 @@ and was **not** exercised on the device. The create form's required fields are
 
 ---
 
+## ✅ M15 — Standalone Inventory Adjustment offline-first
+
+**Scope.** A standalone "جرد" (stock-count) action that sets a product's counted
+quantity local-first and replays to the server, plus the attribution,
+dependency, mirror-authority and delete-exclusion rules it needs. Product CRUD
+(M14) already carried an initial `qty`; M15 adds the *correction* path and makes
+quantity a first-class, per-row mirrored value. No server call is a second source
+of truth for a queued count.
+
+**Delivered**
+
+- **Counted qty is a stock leg with durable attribution.** `adjustInventory`
+  enqueues a single `op:'rpc'` leg — `rpc:'adjust_inventory'`, `entity:null`,
+  `localId:productId`, `affectsProductIds:[productId]` — so an entity-less leg
+  still participates in the dependency graph and the mirror. Params are
+  `p_product_id`, `p_counted_qty`, `p_reason?`, `p_date?`, `p_request_id`, and a
+  retry re-sends the **stored** params, so the request id never changes.
+- **Dependency contract.** Every new stock leg (Product CREATE, Sale, Purchase,
+  Movement deduction, Adjustment) stamps exactly the Product set it mutates and,
+  before enqueue, depends on existing **pending** stock legs whose affected set
+  intersects — union/deduped with the product-master deps. Ordering never relies
+  on `createdAt`/`localId`/insertion order.
+- **Qty-authority mirror (separate from master authority).** A mirrored row can
+  carry master-CRUD authority (M14), qty authority (a pending stock leg), both or
+  neither, per row. While a product has a pending stock leg the server's master
+  fields are accepted but the **local qty is preserved**; without one the server
+  qty is authoritative. Unrelated products and other tenants are never frozen.
+- **Delete ⇄ adjust mutual exclusion.** A product with a pending stock leg cannot
+  be deleted (`لا يمكن حذف المنتج لوجود عملية مخزون معلّقة عليه`); a product queued
+  for delete cannot be counted (`لا يمكن جرد منتج قيد الحذف`). A terminal
+  `failed` leg is **not** a blocker. The product's own pending master create leg
+  is excluded from the delete guard (it is ordered before the delete leg), which
+  is what keeps M14's offline create→update→delete working.
+- **No-op guard.** `countedQty == product.qty` returns `changed:false` with no
+  queue leg, RPC, stock move or exception — it never routes through
+  `DoubleEntryEngine.adjustInventory` (which throws on a zero delta).
+- **Product UPDATE never stomps qty.** Update preserves live local qty
+  (`existing?.qty ?? draft.qty`) and strips `qty` from the replay payload
+  (`{...draft.toJson()}..remove('qty')`); the edit form's qty field is disabled
+  with the hint `تُعدّل الكمية من شاشة الجرد` and editable only on create.
+- **Terminal-failure lifecycle.** Protection is `status == 'pending'` **only**:
+  retryable attempts keep authority, a terminal `failed`/parked leg releases qty
+  authority and is **not** a dependency; the failed leg is kept for diagnostics
+  and is never auto-deleted or auto-requeued (no Retry/Discard UI this
+  milestone). `_refreshAfterDrain` runs unconditionally after each flush pass.
+
+**Schema 9.** `sync_queue_items.affects_product_ids TEXT NULL`; `schemaVersion`
+→ 9 with an additive `if (from < 9) addColumn`. No backfill — attribution for
+pre-v9 legs falls back at read time (legacy `p_items[*].product_id`,
+`p_product_id`, or a historical `table_crud` products upsert that carries `qty`).
+A file-backed 8→9 migration test pins the upgrade.
+
+**No server-side change.** `adjust_inventory` was already made idempotent with a
+trailing `p_request_id` and a `processed_requests` replay in migration `0025`;
+`SupabaseSyncTarget` routes `op:'rpc'` params verbatim and needed no edit. Live
+`0025` idempotency (`supabase/tests/0025_idempotency.ps1`) is **unconfirmed** —
+not run here for lack of credentials.
+
+**Evidence.** New `test/data/offline/inventory_adjustment_test.dart` (**24
+tests**) and `test/data/offline/inventory_adjustment_migration_test.dart`; two
+added cases in `test/domain/inventory_test.dart`; and the M15.1 regression
+`test/presentation/last_adjust_local_first_test.dart` (**3**). `flutter analyze`
+clean, `flutter test --no-pub` **961/961**, `flutter build web --release
+--dart-define=use_arabic=true` green, `flutter build apk --debug` green; Arabic
+encoding audit clean (no U+FFFD).
+
+**Mutation proofs (14 sited, 11 caught).** Byte-exact backup/restore harness.
+CAUGHT: sale/purchase/movement attribution → null; adjust deps → null; mirror
+qty-authority `if/else` collapsed; `_pendingStockProductIds` tenant filter
+dropped; adjust pending-delete guard; delete pending-stock guard; adjust no-op
+branch; `_pendingStockProductIds` counting `failed`; `updateProduct`
+`..remove('qty')`. NOT caught / not run: dropping `masterDeps` from `writeSale`
+is non-observable (the sale→product-create edge is doubly enforced by the
+product-create stock leg's own deps — behaviour pinned by the flush ordering
+test); request-id regeneration on retry is structurally impossible (retry reuses
+stored params — pinned by the request-id test); count coalescing is a negative
+design property with no branch to mutate.
+
+**Device verification — M15 checkpoint.** Run by the user on the **physical
+Android device**, not simulated. The automated suite proves the contract; this
+proves the wiring.
+
+| Checked on device | Result |
+|---|---|
+| App cold start / schema 8 to 9 upgrade **without Clear Data** | **PASS** |
+| Offline count (جرد) — local save succeeds, no generic error, qty changes immediately | **PASS** |
+| Force-close / offline persistence of the counted quantity | **PASS** |
+| Count below current qty (deduction) reflects immediately | **PASS** |
+| Two counts on the same Product preserve order; final qty follows the latest count | **PASS** |
+| Product EDIT does **not** change qty (field read-only/disabled; the count sheet is the stock-edit path) | **PASS** |
+| Deleting a product with a pending count is refused in Arabic | **PASS** |
+| Counting a product queued for delete is refused in Arabic | **PASS** |
+| Count equal to current qty is a silent no-op (queue non-creation pinned by automated coverage) | **PASS** |
+| Final reconnect → queue drain → force-close persistence | **PASS** |
+
+**Badge note.** The device UI did not expose a clearly visible pending-sync
+badge during the manual run. That is **not** an M15 failure and no UI scope was
+added for it: queue behaviour is covered by automated coverage and the
+reconnect/drain behaviour passed physically.
+
+**Status.** Automated GREEN (**961/961**) **and physical-device PASS (8/8)** —
+M15 and M15.1 are closed (2026-10-04).
+
+### M15.1 — the first count on the device committed, then reported a generic error
+
+**Symptom.** With internet reported ON, the first Inventory Adjustment showed
+`حدث خطأ غير متوقع` — the `UnknownException` default in `app_exception.dart:38`,
+which only a raw unmapped Dart error produces. No Supabase, drift, or contract
+defect was involved.
+
+**Root cause (reproduced deterministically, not inferred).** The count sheet
+reaches the action provider with `ref.read(lastAdjustProvider.notifier)` and
+nothing ever *watches* `lastAdjustProvider`. It was declared `@riverpod`
+(autoDispose), so it was disposed as soon as that read returned.
+`LastAdjust.adjust` then awaited the local-first write and assigned
+`state = result` on the dead provider, which throws `UnmountedRefException`
+(`Ref._throwIfInvalidUsage` -> `AnyNotifier.state=`). The write had **already
+committed** — the drift transaction moved the mirror quantity and enqueued the
+`adjust_inventory` leg — so a count that succeeded locally and reported a
+failure. This is exactly the M13 Phase 2 P1.C rule (*action providers invoked
+imperatively across an `await` must be `@Riverpod(keepAlive: true)`*); `LastAdjust`
+simply missed it, while `PaymentActions` / `SalaryActions` carried it.
+
+**Fix.** One annotation: `@Riverpod(keepAlive: true)` on `LastAdjust`. No schema,
+no migration, no RPC, no queue-shape change, and no change to what is written —
+only whether the post-write bookkeeping survives the await.
+
+**The test-harness trap that hid this, and cost the first regression version.**
+`NativeDatabase.memory()` answers in **microtasks**, so an auto-dispose
+teardown never gets scheduled and the provider survives; the regression passed
+against the *broken* code. `NativeDatabase.createInBackground(file)` — what
+`openAppDatabase` actually builds on a device — crosses a real event-loop turn
+per query, which is what makes the defect appear. **A defect that only exists
+across a real `await` cannot be reproduced by an in-memory drift test.** The
+regression uses a temp-dir background-isolate database for that reason.
+
+**Regression** (`test/presentation/last_adjust_local_first_test.dart`, 3 cases,
+all mutation-proven against the reverted annotation): the count runs the
+**local-first** coordinator rather than the Supabase fallback (which also pins
+*which repository the device was on*); the count commits the local quantity and
+returns its result, with one `pending` `adjust_inventory` leg carrying
+`entity: null`, `localId`, `affectsProductIds` and a `p_request_id` equal to the
+leg's stored `requestId`; two counts in a row both commit.
+
+**Verification.** `flutter analyze` clean; **961/961** (958 + 3); focused
+inventory suites 37/37; web release + Arabic and debug APK green; U+FFFD/BOM
+audit clean; `git diff --check` exit 0.
+
+**Device retest: PASS.** After the fix, the same physical run that failed now
+passes end to end — the offline count saves with no generic error and the
+quantity changes immediately, force-close/offline persistence holds, two counts
+on one Product keep order after reconnect, and the final drain persists. This is
+what closed M15.1; the M15.1 fix is the only production change in this commit.
+
+---
+
 ## Appendix A — Implementation Log
 
 | Slice | Commit | DB objects | Tests | Deviations |
@@ -1739,3 +1896,4 @@ and was **not** exercised on the device. The create form's required fields are
 | Phase 2 P1.E — corrective slice (invoice lines not durable, ordered, or tenant-safe) | uncommitted | drift: `local_invoice_items` PK → `{tenantId, id}` (schema **8**, table rebuild, **no backfill**) | 819 → 849 | P1.C made the header authoritative and P1.D made listed invoices resolvable; the **lines** were left behind by both. `local_invoice_items` carried the same `{id}`-only key as `local_invoices` while every writer used `insertOrReplace`, so mirroring one workspace's lines for a shared invoice id silently replaced the other workspace's rows — schema 8 moves `tenant_id` into the key (`local_invoices`/`local_suppliers` deliberately unchanged; no schema-wide invariant exists). `LocalStore.invoiceLineId` mints positional ids **zero-padded to 4 digits** used by both pending writers — load-bearing, since unpadded `ORDER BY id` sorts `:10` before `:2`, invisible at 9 lines and wrong at 10. `mirrorInvoiceItems` replaces the whole set in one transaction (so an empty `[]` refresh clears), refuses to sweep an **unsynced** header, and is tenant-scoped on delete and read. `items()` resolves the server id through `localIdFor` first (P1.D's rule applied to lines); an unsynced draft bypasses `cacheLast`, a synced invoice follows the final network/cache value, and a cached `[]` is a legitimate wipe. Legacy bare-uuid line ids stay readable and are **never rewritten** — the original ordinal was never recorded, so original order is unrecoverable for pre-v8 rows and is documented, not faked. **The migration has no missing-table guard**, matching P1.1's fixture rule: the table has existed since schema 1, so a file without it is corrupt, and a guard would turn corruption into a *successful* upgrade with an empty table — two existing fixtures omitted the table and **the fixtures were corrected instead**. New `test/data/offline/invoice_items_key_migration_test.dart` (4) reads each fixture's own DDL back out of `sqlite_master` to pin the shape it upgrades from, and is **mutation-proven both ways**: dropping the re-insert fails row survival; making the rebuild a no-op fails with `UNIQUE constraint failed: local_invoice_items.id`, i.e. the defect itself. No Supabase-side change |
 | Phase 2 P1.F — list-time line hydration, mapped-row money authority, search, validation order | uncommitted | drift: none; Supabase: none (stays schema 8) | 849 → 880 | **P1.E made the lines durable only for the invoice the user OPENED** — `mirrorInvoiceItems` is written by `items(id)`, so a device that listed twenty invoices and opened none had headers and no lines, which is the state a list actually leaves behind. `OfflineInvoiceRepository.list` now ends with `_prefetchDetails(merged)` after `_mirrorHeaders` (the header write is what makes the lines keyable, and `mirrorInvoiceItems` refuses to sweep an unsynced header). **The obvious fix is the forbidden one:** a loop of `items(id)` is N+1, fails halfway, and — because `items(id)` cache-lasts per invoice — would re-ask for everything on EVERY refresh including offline ones. Candidates are narrowed by **one** bulk local query, `LocalStore.invoiceIdsWithDurableItems` (single `selectOnly` + `groupBy`, tenant-scoped), and the 100-id chunking lives **inside** `InvoiceRepository`, never in the caller. **`InvoiceItemsBatch` exists because "answered with nothing" ≠ "not answered":** a present `[]` key is authoritative and may clear a synced invoice's lines; a `failed` id leaves its durable rows untouched — collapsing the two makes every failed read erase its lines. The prefetch resolves the id space on **both** sides: `invoiceIdsWithDurableItems` maps candidates internally (one `isIn` read, then one grouped scan) so a replayed invoice whose lines are already durable is not re-requested on every refresh, and each successful answer is re-keyed through `localIdFor` so it cannot get a **second** line set beside the local one. Resolving it at the call site instead would have been one extra query per invoice — the N+1 relocated, not removed. A `NetworkException` is swallowed (the header list must not depend on optional hydration); the drift lookup and mirror stay outside the `try` for P1.D's reason. **A mapped row's money AND marker were both being overwritten:** `mirrorInvoices` filtered **server** ids against a set of **local** ids, so a row this device minted never compared equal, fell through to the update branch, and had the server's pre-payment money written over the local correction with the marker cleared in the same statement; every incoming id is now resolved to its effective local id up front and both the filter and the update consume it. **The product picker's search box was inert** — it is the only writer of `productSearchProvider` and it watched the provider that never reads it; now watches `productsListProvider` (reopen works because it is `autoDispose`). **No `excludeIds`** in either direction; duplicate selection stays characterized. **`writeSale`'s honest Arabic refusal was dead code** — the unknown-product check sat after the comprehension that dereferences `products[id]!` for the default price, so the `!` threw first; validation now runs first over `draft.lines`, with **no broadened `TypeError` mapping**, and `writePurchase` is marked as the reference shape it already was. **Two test defects, both "green suite over broken code":** `sheet_inline_error_test.dart` stubbed `allProductsProvider`, which the picker stopped reading (it now stubs `productRepositoryProvider`), and A3's `singleInvoiceCalls`-empty assertion would pass for a loop of `itemsForInvoices([id])`, so the **exact id set of each call** is asserted. **A7/A7b then pinned the cost side nobody had covered:** A7 seeds the real replayed shape (synced header under a local uuid, lines under that same local id, a `local → server` mapping) and asserts the batch asks only for the two invoices with nothing durable; A7b lists twice and asserts the second refresh issues **zero** detail requests, offline. Before them an implementation that re-fetched every invoice forever still passed the whole suite. **Mutation results:** M1 (raw server id in `mirrorInvoices`) was killed by **C7**, not C3/C5 — the over-protection guard is what catches the id-space slip, the opposite of the prediction; M2 killed B1 **and** B1.3; M3 killed A1/A2/A3; M4 (N single reads) killed A1/A2/A3; M5 killed B4.3 with a raw `TypeError`; M6 (mapping resolved to itself in the durable check) killed **A7 only**, leaving A7b green — the two cost cases fail independently. All reverted before the final run. **Zero-line invoices are re-asked on a later list** — no completeness metadata, accepted and documented. Verification: analyze clean, `flutter test --no-pub` **880/880**, `flutter build web --dart-define=use_arabic=true` green, `flutter build apk --debug` green, byte-level UTF-8 scan clean across `lib/` and `test/`. **Device check **PASSED** on the physical device (2026-10-01): the hydrated detail body, the picker search (online and offline), the Arabic unknown-product validation, payment durability across refresh/restart, and reconnect→drain→restart with no duplicate. The one thing that device pass did **not** cover was the money shown immediately after a payment — that is the P1.F.1 defect below, fixed and automated, and **confirmed on the device by the follow-up pass (2026-10-02)**: the already-mounted detail sheet showed the new paid/remaining figures with no reopen and no manual invalidate |
 | Phase 2 P1.D — corrective slice (cached invoice not resolvable; paid month read as payable) | uncommitted | drift: none; Supabase: none | 785 → 819 | **A cached invoice was visible but unwritable.** `cacheLast` has no success/failure signal, so it cannot be the thing that hydrates and the generic helper was left alone; `OfflineInvoiceRepository` ends the cached path with `_mirrorHeaders(merged)` on the **final merged list** (the invoice-specific `mirror:` callback only runs on the network branch, which is the path that already worked). **The wider half of the defect was a mapped id:** `markReplaySynced` keeps the *local* uuid (the badge joins on the leg's `localId`) and records local→server in `id_map`, so a replayed invoice is stored under one id, served under another, and `_invoice` resolved only by exact local id — every money write against it was refused. Now falls back to the tenant/entity-scoped `localIdFor`; `settleSupplier` needed nothing because it resolves invoices by `partyId`, never by id. **The P1.C collision rule was reversed deliberately:** a cross-tenant same-id collision is now **skipped and its safe siblings written**, not raised — raising rolls the whole transaction back, so one colliding uuid would leave nineteen siblings unhydrated, i.e. the original defect one level down. It is the one documented exception to "anything `list()` returns is resolvable". Hydration errors are **not** wrapped in `try/catch`; a genuine drift failure must not be reported as a successful read whose invoices silently do not resolve. **A paid month read as payable:** `netDue` is the month's entitlement and must not shrink (zeroing it also corrupts the arrears base), so `EmployeeEntitlement` gained a **required** `isPaidForMonth` and a derived `currentPayable`; the screen's gross is relabelled `استحقاق الشهر`, the payable is `المتبقي للصرف`, `canPay` gates on `currentPayable`, and the pay sheet defaults/caps on it. `OfflineSalaryRepository` composes `serverPaid \|\| localPaid` (disjoint windows: pre-drain only the local row knows, post-drain only the server does on a cleared device) and reads the paid state from **the same rows** the figures came from. `SupabaseSalaryRepository` adds a narrow `salaries` existence query — no new RPC. Month formats are now `salaryMonthKey` (`yyyy-MM`, local) / `salaryMonthDate` (`yyyy-MM-01`, server); `offline_write._monthKey` was building a third copy. **`SalaryActions.pay` re-reads the live entitlement**: the coordinator's dup-month guard is device-local (`local_salaries`), so on a cleared or offline device it would queue a second payout for a month the server already holds. **Three test defects found and fixed, all of the "green suite over broken code" kind:** the tenant-isolation case asserted an **unreachable** state (it asked tenant A for tenant B's employee, but `LocalEmployees` is keyed `{id}` alone, so the read correctly *throws*); the post-pay case asserted `find.text('5000')`, which matches **twice** before a payout and still matches the gross alone after the relabel, so it passed against a half-fix; and the dynamic `(ent as dynamic).isPaidForMonth` probes swallowed a missing member into "unpaid", indistinguishable from the bug being pinned. **Mutation-proven seven ways, each failing a distinct assertion:** hydration removed (→ 10 invoice cases), `localIdFor` fallback → `null` (→ C1b), unsynced/money protection dropped (→ D1 **and** D2), foreign-id partition emptied (→ D4a/b/c), local paid → `false` (→ S2a/S2c/S4a/S5a/S7a), server half of the `\|\|` dropped (→ S3a **only**), `canPay` → `netDue` (→ the widget case **only**). The stale-sheet guard needed a **new** test to have teeth: the existing race and inline-error suites stayed green with it removed, because both drive a repository whose `entitlement` never changes — the fake now carries a mutable paid flag so the state can move while the sheet is open. Verification: analyze clean, `flutter test --no-pub` **819/819**, web build green (167.7s), `flutter build apk --debug` green (131.6s), byte-level encoding check clean on all 14 touched files. **Device smoke PASSED** (2026-10-02) for the salary path: recording and paying ran on the physical device. Note the scope honestly — this is a functional smoke, so the paid-month card's Cairo-font rendering still has no human visual audit |
+| M15 — standalone Inventory Adjustment offline-first | `feat: make inventory adjustments offline-first` *(this commit)* | drift: `sync_queue_items.affects_product_ids` (schema **9**, additive `< 9` migration, **no backfill**) | 922 → 961 | Standalone stock-count is a **stock leg**: `adjustInventory` enqueues `op:'rpc'`/`rpc:'adjust_inventory'`/`entity:null`/`localId:productId`/`affectsProductIds:[productId]`, params `p_product_id`,`p_counted_qty`,`p_reason?`,`p_date?`,`p_request_id`, retries reuse stored params → stable request id. **Dependency contract** widened to stamp the exact mutated Product set on every stock leg (Product CREATE, Sale, Purchase, Movement, Adjustment) and depend on intersecting pending stock legs (union with product-master deps); never `createdAt`/`localId`/FIFO. **Qty authority is per-row and separate from master authority**: pending stock leg → accept server master fields but preserve local qty; else server qty wins; unrelated products/tenants never frozen (schema-9 `affects_product_ids`, read-time legacy fallback only). **Delete/adjust mutual exclusion** in Arabic (pending stock → no delete; pending delete → no count); product's **own** pending master create leg is excluded from the delete guard (fixes an M14 offline create→update→delete regression found by the full run: `+943 -6` → fixed via `_pendingStockLegIds(..., excludeMasterProductId: id)`). **Terminal `failed` leg is not a blocker and not a dependency**; kept for diagnostics, never auto-requeued. **No-op** `countedQty == product.qty` returns `changed:false`, no leg/RPC/stock move, never routed through `DoubleEntryEngine.adjustInventory` (throws on zero delta). **Product UPDATE preserves live qty** (`existing?.qty ?? draft.qty`) and strips `qty` from replay (`..remove('qty')`, no affects stamp); edit-form qty disabled (`تُعدّل الكمية من شاشة الجرد`). **No server change**: `0025` already adds trailing `p_request_id` + `processed_requests` replay; client routes params verbatim; live 0025 check unconfirmed. Mutation proofs 11/14 caught (M5 redundant masterDeps edge, M8 structurally unmutatable retry, M11 negative property — all documented). `flutter analyze` clean; **961/961**; web release + debug APK green; U+FFFD audit clean; **physical-device PASS (8/8)** after the M15.1 fix below. **M15.1** — the first count on the device committed locally and then showed the generic error: `lastAdjustProvider` was auto-disposed because it is reached only via `ref.read` and crossed a real async/event-loop boundary on the physical Drift database, so `state = result` threw `UnmountedRefException` *after* the transaction had committed (a raw `Object`, hence `UnknownException`). Fixed by `@Riverpod(keepAlive: true)` on `LastAdjust`; regression `test/presentation/last_adjust_local_first_test.dart` runs a real file-backed background-isolate Drift database because `NativeDatabase.memory()` answers in microtasks and hides the defect. |

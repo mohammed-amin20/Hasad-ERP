@@ -602,6 +602,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                       ctrl: _qtyCtrl,
                       label: 'الكمية',
                       hint: _isWeight ? 'مثلاً 1.250' : 'مثلاً 10',
+                      enabled: !_isEditing,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -726,9 +727,11 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     required TextEditingController ctrl,
     required String label,
     required String hint,
+    bool enabled = true,
   }) {
     return TextFormField(
       controller: ctrl,
+      enabled: enabled,
       textInputAction: TextInputAction.next,
       keyboardType: TextInputType.numberWithOptions(decimal: _isWeight),
       inputFormatters: [
@@ -740,6 +743,10 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
         labelText: label,
         hintText: hint,
         prefixIcon: const FieldIcon.fa(FontAwesomeIcons.hashtag),
+        // An edit cannot restate the quantity: stock moves through the count
+        // screen, and the write path strips `qty` from the update payload. The
+        // helper stays visible because a disabled field hides its hint.
+        helperText: enabled ? null : 'تُعدّل الكمية من شاشة الجرد',
       ),
       validator: _validateQuantity,
     );

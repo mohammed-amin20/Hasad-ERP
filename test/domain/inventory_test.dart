@@ -37,6 +37,20 @@ void main() {
       );
       expect(draft.toJson().containsKey('p_reason'), isFalse);
     });
+
+    test('omits the idempotency key when no request id is supplied', () {
+      final json = const StockAdjustDraft(productId: 'p', countedQty: 1).toJson();
+      expect(json.containsKey('p_request_id'), isFalse);
+    });
+
+    test('carries the stable request id verbatim when supplied', () {
+      // Retries replay the stored params, so the same request id must come back
+      // out of the payload on every attempt (0025 dedupes on it).
+      final json = const StockAdjustDraft(productId: 'p', countedQty: 7)
+          .toJson(requestId: 'req-stable');
+      expect(json['p_request_id'], 'req-stable');
+      expect(json['p_counted_qty'], 7);
+    });
   });
 
   group('StockAdjustResult', () {

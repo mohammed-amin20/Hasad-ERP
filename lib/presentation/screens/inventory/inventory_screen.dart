@@ -12,6 +12,7 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../domain/inventory/inventory.dart';
 import '../../../domain/products/product.dart';
 import '../../providers/inventory_providers.dart';
+import '../../providers/offline_sync_providers.dart';
 import '../../widgets/field_icon.dart';
 import '../../widgets/filter_bar.dart';
 import '../../widgets/record_table.dart';
@@ -156,17 +157,26 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         product: product,
         onSave: (draft) async {
           final messenger = ScaffoldMessenger.of(context);
+          final localFirst = ref.read(inventoryWritesLocalFirstProvider);
           try {
-            await ref.read(lastAdjustProvider.notifier).adjust(draft);
+            final result = await ref
+                .read(lastAdjustProvider.notifier)
+                .adjust(draft);
             if (mounted) Navigator.of(context).pop();
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(
-                  'تم تحديث المخزون: '
-                  '${formatQty(draft.countedQty, product.unitType)} ${product.unit}',
-                ),
-              ),
-            );
+            if (localFirst && result.changed) {
+              // The count moved the local mirror and queued a leg; refresh the
+              // queue-derived pending count and the product/inventory reads now,
+              // not on the next drain. (No-op counts queued nothing.)
+              refreshAfterLocalProductWrite(ref);
+            }
+            final message = !result.changed
+                ? 'الكمية مطابقة للمخزون الحالي'
+                : localFirst
+                ? 'تم حفظ الجرد محليًا وستتم مزامنته عند عودة الاتصال'
+                : 'تم تحديث المخزون: '
+                      '${formatQty(draft.countedQty, product.unitType)} '
+                      '${product.unit}';
+            messenger.showSnackBar(SnackBar(content: Text(message)));
           } on Object catch (error) {
             messenger.showSnackBar(
               SnackBar(

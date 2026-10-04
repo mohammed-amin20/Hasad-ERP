@@ -16,6 +16,7 @@ import '../../domain/customers/customer.dart';
 import '../../domain/customers/customer_draft.dart';
 import '../../domain/employees/employee.dart';
 import '../../domain/employees/employee_draft.dart';
+import '../../domain/inventory/inventory.dart';
 import '../../domain/invoices/invoice.dart';
 import '../../domain/journal/journal_repository.dart' show JournalEntryResult;
 import '../../domain/journal/manual_journal_draft.dart';
@@ -126,6 +127,14 @@ class OfflineWriteCoordinator {
           result.updatedEntities,
           localIds: [customer.id, ...engineLines.map((l) => l.productId)],
         );
+        // The sale deducts stock from every line's product, so it must replay
+        // after any still-pending stock leg on those products (an offline
+        // purchase/movement/adjustment) — otherwise the sale's server-side
+        // delta is applied against a quantity the server has not yet reached.
+        final stockDeps = await _pendingStockLegIds(
+          engineLines.map((l) => l.productId),
+        );
+        final deps = _mergeDeps(masterDeps, stockDeps);
 
         // ATOMIC: the invoice, its lines, the stock/commission effects, the
         // double-entry journal row and the queue leg are ONE commit. Before
@@ -213,7 +222,10 @@ class OfflineWriteCoordinator {
             // The invoice names the local product/customer rows it was priced
             // from, so a product created offline in the same session is
             // created on the server BEFORE this leg is replayed.
-            dependsOn: masterDeps == null ? null : jsonEncode(masterDeps),
+            dependsOn: deps == null ? null : jsonEncode(deps),
+            affectsProductIds: jsonEncode(
+              {for (final l in engineLines) l.productId}.toList(),
+            ),
           ));
         });
 
@@ -337,6 +349,14 @@ class OfflineWriteCoordinator {
           result.updatedEntities,
           localIds: [supplier.id, ...engineLines.map((l) => l.productId!)],
         );
+        // The receipt adds stock to every line's product, including the inline
+        // new ones, so it replays after any still-pending stock leg on those
+        // products (an offline sale/movement/adjustment) — otherwise the
+        // receipt's delta lands against a quantity the server has not reached.
+        final stockDeps = await _pendingStockLegIds(
+          engineLines.map((l) => l.productId!),
+        );
+        final deps = _mergeDeps(masterDeps, stockDeps);
 
         // ATOMIC: invoice + lines + stock + journal + every queue leg commit
         // together. See [writeSale].
@@ -424,6 +444,10 @@ class OfflineWriteCoordinator {
               entity: 'products',
               localId: entry.value,
               op: 'table_crud',
+              // The inline product's mirror row is created with qty 0 and then
+              // carries the received quantity, so it is a stock leg for itself:
+              // a refresh while it is pending must not overwrite that quantity.
+              affectsProductIds: [entry.value],
               store: tx,
             );
           }
@@ -437,7 +461,10 @@ class OfflineWriteCoordinator {
             requestId: requestId,
             entity: 'invoices',
             localId: invoiceId,
-            dependsOn: [...?masterDeps, ...productLegIds],
+            dependsOn: [...?deps, ...productLegIds],
+            affectsProductIds: [
+              for (final l in engineLines) l.productId!,
+            ],
             store: tx,
           );
         });
@@ -771,10 +798,16 @@ class OfflineWriteCoordinator {
         // Resolved BEFORE the transaction (a read, and the leg is written
         // inside it): a movement on an employee/product created offline waits
         // for their `table_crud` legs to create the rows on the server first.
-        final deps = await _pendingLegIdsFor([
+        final masterDeps = await _pendingLegIdsFor([
           employee.id,
           if (product != null) product.id,
         ]);
+        // A product-deducting movement changes stock, so it also replays after
+        // any still-pending stock leg on that product.
+        final stockDeps = product == null
+            ? null
+            : await _pendingStockLegIds([product.id]);
+        final deps = _mergeDeps(masterDeps, stockDeps);
 
         await _store.transaction((tx) async {
           await tx.upsertEmployeeMovement(
@@ -802,6 +835,7 @@ class OfflineWriteCoordinator {
             entity: 'employee_movements',
             localId: movementId,
             dependsOn: deps,
+            affectsProductIds: product == null ? null : [product.id],
             store: tx,
           );
         });
@@ -810,6 +844,87 @@ class OfflineWriteCoordinator {
           movementId: movementId,
           amount: result.amount ?? 0,
           pending: true,
+        );
+      });
+
+  /// Queues a physical-count adjustment mirroring `adjust_inventory`.
+  ///
+  /// `adjust_inventory` does **not** post a journal — it writes a `stock_moves`
+  /// row and sets `products.qty` to the counted value — so the offline mirror
+  /// only moves the local product quantity and queues the RPC. The leg is its
+  /// own stock authority for the product (`affectsProductIds: [productId]`) and
+  /// depends on every earlier pending mutation of that product, so the server
+  /// applies the count after them and a background refresh cannot erase the
+  /// counted value before it replays.
+  ///
+  /// A count equal to the effective local quantity is a **no-op**: it returns
+  /// `changed: false` without queueing a leg or touching the mirror. This is
+  /// deliberately not routed through [DoubleEntryEngine.adjustInventory], which
+  /// throws on the zero-delta path, whereas `0014` returns `changed: false`.
+  Future<StockAdjustResult> adjustInventory(StockAdjustDraft draft) =>
+      _guard(() async {
+        final product = await _product(draft.productId);
+
+        // A product queued for deletion must not be counted: its delete leg is
+        // still outstanding, so replaying a count would race the delete and
+        // could mutate a row the user removed.
+        final pendingDeletes = await _store.pendingDeleteIds(
+          _tenantId,
+          'products',
+        );
+        if (pendingDeletes.contains(draft.productId)) {
+          throw const ValidationException('لا يمكن جرد منتج قيد الحذف');
+        }
+
+        final counted = draft.countedQty;
+        if (counted < 0) {
+          throw const ValidationException('الكمية المقروءة غير صحيحة');
+        }
+        if (counted == product.qty) {
+          return StockAdjustResult(
+            productId: product.id,
+            productName: product.name,
+            oldQty: product.qty,
+            newQty: product.qty,
+            delta: 0,
+            changed: false,
+          );
+        }
+
+        final requestId = _uuid.v4();
+        // Order after every earlier pending mutation of this product: another
+        // stock leg (offline sale/purchase/movement/adjustment) whose affected
+        // set names it, or the product's own pending create/update (`localId`).
+        // A product not yet on the server must be created before its count.
+        final stockDeps = await _pendingStockLegIds([draft.productId]);
+        final masterDeps = await _pendingLegIdsFor([draft.productId]);
+        final deps = _mergeDeps(stockDeps, masterDeps);
+
+        await _store.transaction((tx) async {
+          await _applyProducts({
+            'products': {draft.productId: counted},
+          }, tx);
+          await _enqueueRpc(
+            rpc: 'adjust_inventory',
+            params: draft.toJson(requestId: requestId),
+            requestId: requestId,
+            // `entity: null` keeps `_writeBackReplay` from flipping a mirror
+            // row `synced`; the count owns no entity to mark.
+            entity: null,
+            localId: draft.productId,
+            dependsOn: deps,
+            affectsProductIds: [draft.productId],
+            store: tx,
+          );
+        });
+
+        return StockAdjustResult(
+          productId: product.id,
+          productName: product.name,
+          oldQty: product.qty,
+          newQty: counted,
+          delta: counted - product.qty,
+          changed: true,
         );
       });
 
@@ -1343,6 +1458,10 @@ class OfflineWriteCoordinator {
             entity: 'products',
             localId: requestId,
             op: 'table_crud',
+            // A product CREATE carries its initial quantity, so it is a stock
+            // leg for itself: a refresh while it is pending must not overwrite
+            // the locally-authored quantity.
+            affectsProductIds: [product.id],
             store: tx,
           );
         });
@@ -1353,6 +1472,16 @@ class OfflineWriteCoordinator {
   /// mirror row's `createdAt` (an update must never stamp a new creation date),
   /// and enqueues a `table_crud` update that replays only after any pending
   /// create/update on the same product — atomically with the updated mirror row.
+  ///
+  /// **Quantity is deliberately excluded from an EDIT.** The edit form disables
+  /// the qty field (stock is moved through the inventory-adjustment flow), but a
+  /// stale/racing form could still carry a value, and more importantly a replay
+  /// of an edit that happened to carry the qty the user last saw must not
+  /// overwrite a newer server quantity that a sale/purchase applied in the
+  /// meantime. So the local row PRESERVES the current local qty
+  /// (`existing?.qty`) and the replay payload has `qty` REMOVED. The product is
+  /// therefore NOT a stock leg and does not stamp `affectsProductIds`; the
+  /// pending stock legs that actually own the quantity keep protecting it.
   Future<void> updateProduct(String id, ProductDraft draft) =>
       _guard(() async {
         final existing = await _productRow(id);
@@ -1368,7 +1497,8 @@ class OfflineWriteCoordinator {
               unitType: draft.unitType.dbValue,
               salePrice: draft.salePrice,
               purchasePrice: draft.purchasePrice,
-              qty: draft.qty,
+              // Preserve the live local quantity; never let an edit restate it.
+              qty: existing?.qty ?? draft.qty,
               reorderLevel: draft.reorderLevel,
               supplierId: draft.supplierId,
               commissionRate: draft.commissionRate,
@@ -1378,7 +1508,7 @@ class OfflineWriteCoordinator {
           );
           await _enqueueWrite(
             rpc: 'table:products',
-            params: {'id': id, 'row': draft.toJson()},
+            params: {'id': id, 'row': {...draft.toJson()}..remove('qty')},
             requestId: _uuid.v4(),
             entity: 'products',
             localId: id,
@@ -1417,6 +1547,20 @@ class OfflineWriteCoordinator {
         if (referencedByInvoices || referencedByDues) {
           throw ValidationException(
             'لا يمكن حذف المنتج لأنه مرتبط بفواتير أو عمولات موجودة',
+          );
+        }
+        // Stock and delete are mutually exclusive: while a *competing* stock
+        // leg is still pending on this product (a queued sale/purchase/movement
+        // /adjustment), deleting it would race that mutation. The product's own
+        // pending create/edit is excluded — the delete already replays after it
+        // — so an offline create→edit→delete series stays possible. A terminal
+        // `failed` leg is diagnostic and does not block (`_pendingStockLegIds`
+        // matches `pending` only).
+        final pendingStockLegs =
+            await _pendingStockLegIds([id], excludeMasterProductId: id);
+        if (pendingStockLegs != null) {
+          throw ValidationException(
+            'لا يمكن حذف المنتج لوجود عملية مخزون معلّقة عليه',
           );
         }
         final pendingLegs = await _pendingLegIdsFor([id]);
@@ -1614,6 +1758,7 @@ class OfflineWriteCoordinator {
     String? localId,
     List<String>? dependsOn,
     List<String>? affectsInvoiceIds,
+    List<String>? affectsProductIds,
     LocalStore? store,
   }) async {
     await (store ?? _store).enqueue(
@@ -1638,6 +1783,10 @@ class OfflineWriteCoordinator {
                 affectsInvoiceIds.isEmpty
             ? null
             : jsonEncode(affectsInvoiceIds),
+        affectsProductIds: affectsProductIds == null ||
+                affectsProductIds.isEmpty
+            ? null
+            : jsonEncode(affectsProductIds),
       ),
     );
   }
@@ -1670,6 +1819,7 @@ class OfflineWriteCoordinator {
     required String op,
     List<String>? dependsOn,
     List<String>? affectsInvoiceIds,
+    List<String>? affectsProductIds,
     LocalStore? store,
   }) async {
     await (store ?? _store).enqueue(
@@ -1694,6 +1844,10 @@ class OfflineWriteCoordinator {
                 affectsInvoiceIds.isEmpty
             ? null
             : jsonEncode(affectsInvoiceIds),
+        affectsProductIds: affectsProductIds == null ||
+                affectsProductIds.isEmpty
+            ? null
+            : jsonEncode(affectsProductIds),
       ),
     );
   }
@@ -1804,6 +1958,57 @@ class OfflineWriteCoordinator {
           leg.id,
     };
     return ids.isEmpty ? null : ids.toList();
+  }
+
+  /// Queue ids of the **pending stock legs** whose affected product set
+  /// intersects [productIds].
+  ///
+  /// This is the ordering half of the product-attribution contract: a stock
+  /// mutation must replay after every earlier mutation of the same product, so
+  /// the server applies its delta to the right quantity. The affected set is
+  /// read from [LocalStore.affectedProductIdsOf] (durable attribution first,
+  /// pre-v9 wire shape as a fallback), never from FIFO order or `localId`
+  /// matching alone.
+  ///
+  /// Only `status == 'pending'` legs are prerequisites. A terminal `failed` leg
+  /// is diagnostic and must NOT block a new write forever, and a `synced` leg is
+  /// already on the server.
+  Future<List<String>?> _pendingStockLegIds(
+    Iterable<String> productIds, {
+    String? excludeLegId,
+    String? excludeMasterProductId,
+  }) async {
+    final wanted = {
+      for (final id in productIds)
+        if (id.isNotEmpty) id,
+    };
+    if (wanted.isEmpty) return null;
+    final pending = await _store.pendingSync(_tenantId);
+    final ids = <String>{
+      for (final leg in pending)
+        if (leg.status == 'pending' &&
+            leg.id != excludeLegId &&
+            // A product's OWN pending master create/update is not a competing
+            // stock mutation: the delete leg already depends on it (via
+            // `_pendingLegIdsFor`) and the queue replays create→update→delete in
+            // order. Excluding it here is what keeps an offline
+            // create→edit→delete series possible; a pending SALE/PURCHASE/
+            // MOVEMENT/ADJUSTMENT leg on the product is still a blocker.
+            !(excludeMasterProductId != null &&
+                leg.op == 'table_crud' &&
+                leg.entity == 'products' &&
+                leg.localId == excludeMasterProductId) &&
+            LocalStore.affectedProductIdsOf(leg).any(wanted.contains))
+          leg.id,
+    };
+    return ids.isEmpty ? null : ids.toList();
+  }
+
+  /// Union of two dependency id lists, deduped, with `null` when empty so the
+  /// `depends_on` column stays absent for a leg with no prerequisites.
+  List<String>? _mergeDeps(List<String>? a, List<String>? b) {
+    final merged = <String>{...?a, ...?b};
+    return merged.isEmpty ? null : merged.toList();
   }
 
   Future<Map<String, acc.Account>> _chart() async {
